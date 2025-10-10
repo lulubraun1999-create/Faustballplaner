@@ -21,6 +21,7 @@ import {
   SidebarTrigger,
 } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
+import React from 'react';
 
 const navItems = [
   { href: '/', label: 'News Feed', icon: Newspaper },
