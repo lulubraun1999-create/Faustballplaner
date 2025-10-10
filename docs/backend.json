@@ -1,0 +1,121 @@
+
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "type": "object",
+      "description": "Represents a user of the application.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The user's display name."
+        },
+        "email": {
+          "type": "string",
+          "description": "The user's email address.",
+          "format": "email"
+        },
+        "vorname": { "type": "string", "description": "User's first name" },
+        "nachname": { "type": "string", "description": "User's last name" },
+        "telefon": { "type": "string", "description": "User's phone number" },
+        "wohnort": { "type": "string", "description": "User's city of residence" },
+        "geschlecht": { "type": "string", "description": "User's gender" },
+        "position": { "type": "array", "items": { "type": "string" }, "description": "User's position(s) in the team" },
+        "geburtstag": { "type": "string", "format": "date-time", "description": "User's birthdate" },
+        "rolle": { "type": "string", "description": "User's role (e.g., Trainer, Spieler)" },
+        "adminRechte": { "type": "boolean", "description": "User's admin rights" },
+        "groupIds": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "An array of group IDs the user belongs to."
+        }
+      },
+      "required": ["name", "email"]
+    },
+    "Member": {
+      "title": "Member",
+      "type": "object",
+      "description": "A public-facing member profile, copied from the user document.",
+      "properties": {
+         "name": {
+          "type": "string",
+          "description": "The user's display name."
+        },
+        "email": {
+          "type": "string",
+          "description": "The user's email address.",
+          "format": "email"
+        },
+        "vorname": { "type": "string", "description": "User's first name" },
+        "nachname": { "type": "string", "description": "User's last name" },
+        "telefon": { "type": "string", "description": "User's phone number" },
+        "wohnort": { "type": "string", "description": "User's city of residence" },
+        "geschlecht": { "type": "string", "description": "User's gender" },
+        "position": { "type": "array", "items": { "type": "string" }, "description": "User's position(s) in the team" },
+        "geburtstag": { "type": "string", "format": "date-time", "description": "User's birthdate" },
+        "rolle": { "type": "string", "description": "User's role (e.g., Trainer, Spieler)" },
+        "adminRechte": { "type": "boolean", "description": "User's admin rights" },
+        "groupIds": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "An array of group IDs the user belongs to."
+        }
+      },
+      "required": ["name", "email"]
+    },
+    "Group": {
+      "title": "Group",
+      "type": "object",
+      "description": "Represents a group or subgroup.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the group."
+        },
+        "parentGroupId": {
+          "type": "string",
+          "description": "The ID of the parent group, if this is a subgroup."
+        }
+      },
+      "required": ["name"]
+    },
+    "NewsArticle": {
+      "title": "News Article",
+      "type": "object",
+      "description": "Represents a news article.",
+      "properties": {
+        "title": { "type": "string", "description": "The title of the article." },
+        "content": { "type": "string", "description": "The main content of the article." },
+        "imageUrls": { "type": "array", "items": { "type": "string", "format": "uri" }, "description": "A list of URLs for the article images." },
+        "imageKeywords": { "type": "string", "description": "Keywords for AI to describe the image." },
+        "publicAuthor": { "type": "string", "description": "The publicly displayed author name, e.g., 'TSV Bayer Leverkusen'." },
+        "authorId": { "type": "string", "description": "The UID of the user who created the article." },
+        "authorName": { "type": "string", "description": "The name of the user who created the article." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "The timestamp when the article was created." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "The timestamp when the article was last updated." }
+      },
+      "required": ["title", "content", "publicAuthor", "authorId", "authorName", "createdAt"]
+    }
+  },
+  "auth": {
+    "providers": ["password"]
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/backend/entities/User" },
+      "description": "Stores private information for each user, editable only by the user."
+    },
+     "/members/{memberId}": {
+      "schema": { "$ref": "#/backend/entities/Member" },
+      "description": "Stores public-readable member profiles, for admin views."
+    },
+    "/groups/{groupId}": {
+      "schema": { "$ref": "#/backend/entities/Group" },
+      "description": "Stores all groups and subgroups."
+    },
+    "/news/{newsId}": {
+      "schema": { "$ref": "#/backend/entities/NewsArticle" },
+      "description": "Stores news articles for the app."
+    }
+  }
+}

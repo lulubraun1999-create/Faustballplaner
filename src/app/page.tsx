@@ -1,43 +1,61 @@
-import Image from 'next/image';
-import { newsData } from '@/lib/data';
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Calendar } from 'lucide-react';
+
+"use client";
+
+import { useUser, useAuth } from '@/firebase';
+import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
+import { useToast } from '@/hooks/use-toast';
+import { Button } from '@/components/ui/button';
 
 export default function Home() {
-  return (
-    <div className="p-4 md:p-8">
-      <header className="mb-8">
-        <h1 className="text-4xl font-bold tracking-tight text-primary">Latest News</h1>
-        <p className="text-muted-foreground mt-2">All the latest updates from the Werkself camp.</p>
-      </header>
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {newsData.map((item) => (
-          <Card key={item.id} className="flex flex-col overflow-hidden transition-transform duration-300 ease-in-out hover:scale-[1.02] hover:shadow-lg">
-            <CardHeader className="p-0">
-              <Image
-                src={item.image.imageUrl}
-                alt={item.image.description}
-                data-ai-hint={item.image.imageHint}
-                width={800}
-                height={600}
-                className="w-full h-48 object-cover"
-              />
-            </CardHeader>
-            <CardContent className="p-4 flex-grow">
-              <div>
-                <CardTitle className="text-xl leading-tight mb-2">{item.title}</CardTitle>
-                <p className="text-muted-foreground text-sm line-clamp-3">{item.summary}</p>
-              </div>
-            </CardContent>
-            <CardFooter className="p-4 pt-0">
-              <div className="flex items-center text-xs text-muted-foreground">
-                <Calendar className="mr-1.5 h-4 w-4" />
-                <span>{new Date(item.date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
-              </div>
-            </CardFooter>
-          </Card>
-        ))}
+  const { user, isUserLoading } = useUser();
+  const router = useRouter();
+  const auth = useAuth();
+  const { toast } = useToast();
+
+  useEffect(() => {
+    if (!isUserLoading) {
+      if (!user) {
+        router.push('/login');
+      } else if (!user.emailVerified) {
+        auth.signOut();
+        toast({
+          variant: 'destructive',
+          title: 'E-Mail nicht verifiziert',
+          description: 'Bitte bestätigen Sie Ihre E-Mail-Adresse, um sich anzumelden.',
+        });
+        router.push('/login');
+      }
+    }
+  }, [user, isUserLoading, router, auth, toast]);
+
+  const handleLogout = async () => {
+    await auth.signOut();
+    toast({
+      title: "Abgemeldet",
+      description: "Sie wurden erfolgreich abgemeldet.",
+    });
+    router.push('/login');
+  };
+
+  if (isUserLoading || !user || !user.emailVerified) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center">
+        <div className="h-16 w-16 animate-spin rounded-full border-4 border-dashed border-primary"></div>
+        <p className="mt-4 text-muted-foreground">Loading...</p>
       </div>
+    );
+  }
+
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center">
+      <main className="flex flex-1 flex-col items-center justify-center p-8 text-center">
+        <h1 className="text-4xl font-bold mb-4">Willkommen!</h1>
+        <p className="text-lg text-muted-foreground mb-8">
+          Sie sind erfolgreich angemeldet.
+        </p>
+        <Button onClick={handleLogout}>Abmelden</Button>
+      </main>
     </div>
   );
 }
