@@ -1,7 +1,10 @@
 
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -23,42 +26,15 @@ import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 
-// Mock useForm for compatibility with the Form component structure
-const useForm = <T extends Record<string, any>>(defaultValues: T) => {
-  const [values, setValues] = useState(defaultValues.defaultValues);
-  const [errors, setErrors] = useState<Record<string, { message: string }>>({});
-
-  const setValue = (key: keyof T, value: any) => {
-    setValues((prev: T) => ({ ...prev, [key]: value }));
-  };
-
-  return {
-    control: {
-      _fields: {},
-      _formValues: values,
-      _defaultValues: defaultValues.defaultValues
-    },
-    handleSubmit: (fn: (values: T) => void) => (e: React.FormEvent) => {
-      e.preventDefault();
-      const newErrors: Record<string, { message: string }> = {};
-      if (!values.vorname || values.vorname.length < 2) newErrors.vorname = { message: "Vorname muss mindestens 2 Zeichen lang sein." };
-      if (!values.nachname || values.nachname.length < 2) newErrors.nachname = { message: "Nachname muss mindestens 2 Zeichen lang sein." };
-      if (!values.email || !/^\S+@\S+\.\S+$/.test(values.email)) newErrors.email = { message: "Ungültige E-Mail-Adresse." };
-      if (!values.password || values.password.length < 6) newErrors.password = { message: "Das Passwort muss mindestens 6 Zeichen lang sein." };
-      if (values.registrationCode !== "Ellaisttoll") newErrors.registrationCode = { message: "Ungültiger Registrierungscode." };
-      
-      setErrors(newErrors);
-
-      if (Object.keys(newErrors).length === 0) {
-        fn(values);
-      }
-    },
-    watch: (key: keyof T) => values[key],
-    formState: { errors },
-    setValue,
-  };
-};
-
+const formSchema = z.object({
+  vorname: z.string().min(2, { message: "Vorname muss mindestens 2 Zeichen lang sein." }),
+  nachname: z.string().min(2, { message: "Nachname muss mindestens 2 Zeichen lang sein." }),
+  email: z.string().email({ message: "Ungültige E-Mail-Adresse." }),
+  password: z.string().min(6, { message: "Das Passwort muss mindestens 6 Zeichen lang sein." }),
+  registrationCode: z.string().refine(code => code === "Ellaisttoll", {
+    message: "Ungültiger Registrierungscode.",
+  }),
+});
 
 export function SignUpForm() {
   const auth = useAuth();
@@ -67,7 +43,8 @@ export function SignUpForm() {
   const { toast } = useToast();
   const [isPending, startTransition] = React.useTransition();
 
-  const form = useForm({
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
     defaultValues: {
       vorname: "",
       nachname: "",
@@ -77,7 +54,7 @@ export function SignUpForm() {
     },
   });
 
-  const onSubmit = (values: any) => {
+  const onSubmit = (values: z.infer<typeof formSchema>) => {
     startTransition(async () => {
       try {
         const userCredential = await createUserWithEmailAndPassword(
@@ -133,71 +110,70 @@ export function SignUpForm() {
   };
 
   return (
-    // @ts-ignore
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4">
         <FormField
           control={form.control}
           name="vorname"
-          render={({ field }: any) => (
+          render={({ field }) => (
             <FormItem>
               <FormLabel>Vorname</FormLabel>
               <FormControl>
-                <Input placeholder="Max" {...field} onChange={(e) => form.setValue('vorname', e.target.value)} />
+                <Input placeholder="Max" {...field} />
               </FormControl>
-              <FormMessage>{form.formState.errors.vorname?.message}</FormMessage>
+              <FormMessage />
             </FormItem>
           )}
         />
         <FormField
           control={form.control}
           name="nachname"
-          render={({ field }: any) => (
+          render={({ field }) => (
             <FormItem>
               <FormLabel>Nachname</FormLabel>
               <FormControl>
-                <Input placeholder="Mustermann" {...field} onChange={(e) => form.setValue('nachname', e.target.value)} />
+                <Input placeholder="Mustermann" {...field} />
               </FormControl>
-              <FormMessage>{form.formState.errors.nachname?.message}</FormMessage>
+              <FormMessage />
             </FormItem>
           )}
         />
         <FormField
           control={form.control}
           name="email"
-          render={({ field }: any) => (
+          render={({ field }) => (
             <FormItem>
               <FormLabel>Email</FormLabel>
               <FormControl>
-                <Input placeholder="name@beispiel.de" {...field} onChange={(e) => form.setValue('email', e.target.value)} />
+                <Input placeholder="name@beispiel.de" {...field} />
               </FormControl>
-              <FormMessage>{form.formState.errors.email?.message}</FormMessage>
+              <FormMessage />
             </FormItem>
           )}
         />
         <FormField
           control={form.control}
           name="password"
-          render={({ field }: any) => (
+          render={({ field }) => (
             <FormItem>
               <FormLabel>Passwort</FormLabel>
               <FormControl>
-                <Input type="password" {...field} onChange={(e) => form.setValue('password', e.target.value)} />
+                <Input type="password" {...field} />
               </FormControl>
-              <FormMessage>{form.formState.errors.password?.message}</FormMessage>
+              <FormMessage />
             </FormItem>
           )}
         />
         <FormField
           control={form.control}
           name="registrationCode"
-          render={({ field }: any) => (
+          render={({ field }) => (
             <FormItem>
               <FormLabel>Registrierungscode</FormLabel>
               <FormControl>
-                <Input type="password" {...field} onChange={(e) => form.setValue('registrationCode', e.target.value)} />
+                <Input type="password" {...field} />
               </FormControl>
-              <FormMessage>{form.formState.errors.registrationCode?.message}</FormMessage>
+              <FormMessage />
             </FormItem>
           )}
         />

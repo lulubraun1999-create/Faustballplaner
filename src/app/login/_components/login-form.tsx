@@ -1,7 +1,10 @@
 
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -20,39 +23,10 @@ import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 
-
-// Mock useForm for compatibility with the Form component structure
-const useForm = <T extends Record<string, any>>(defaultValues: T) => {
-  const [values, setValues] = useState(defaultValues.defaultValues);
-  const [errors, setErrors] = useState<Record<string, { message: string }>>({});
-
-  const setValue = (key: keyof T, value: any) => {
-    setValues((prev: T) => ({ ...prev, [key]: value }));
-  };
-
-  return {
-    control: {
-      _fields: {},
-      _formValues: values,
-      _defaultValues: defaultValues.defaultValues
-    },
-    handleSubmit: (fn: (values: T) => void) => (e: React.FormEvent) => {
-      e.preventDefault();
-      const newErrors: Record<string, { message: string }> = {};
-      if (!values.email || !/^\S+@\S+\.\S+$/.test(values.email)) newErrors.email = { message: "Ungültige E-Mail-Adresse." };
-      if (!values.password || values.password.length < 1) newErrors.password = { message: "Passwort ist erforderlich." };
-      
-      setErrors(newErrors);
-
-      if (Object.keys(newErrors).length === 0) {
-        fn(values);
-      }
-    },
-    watch: (key: keyof T) => values[key],
-    formState: { errors },
-    setValue,
-  };
-};
+const formSchema = z.object({
+  email: z.string().email({ message: "Ungültige E-Mail-Adresse." }),
+  password: z.string().min(1, { message: "Passwort ist erforderlich." }),
+});
 
 export function LoginForm() {
   const auth = useAuth();
@@ -61,7 +35,8 @@ export function LoginForm() {
   const { user, isUserLoading } = useUser();
   const [isPending, startTransition] = React.useTransition();
 
-  const form = useForm({
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
     defaultValues: {
       email: "",
       password: "",
@@ -74,7 +49,7 @@ export function LoginForm() {
     }
   }, [user, isUserLoading, router]);
 
-  const onSubmit = (values: any) => {
+  const onSubmit = (values: z.infer<typeof formSchema>) => {
     startTransition(async () => {
       try {
         const userCredential = await signInWithEmailAndPassword(auth, values.email, values.password);
@@ -117,32 +92,31 @@ export function LoginForm() {
   }
 
   return (
-     // @ts-ignore
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4">
         <FormField
           control={form.control}
           name="email"
-          render={({ field }: any) => (
+          render={({ field }) => (
             <FormItem>
               <FormLabel>Email</FormLabel>
               <FormControl>
-                <Input placeholder="name@beispiel.de" {...field} onChange={(e) => form.setValue('email', e.target.value)}/>
+                <Input placeholder="name@beispiel.de" {...field} />
               </FormControl>
-               <FormMessage>{form.formState.errors.email?.message}</FormMessage>
+               <FormMessage />
             </FormItem>
           )}
         />
         <FormField
           control={form.control}
           name="password"
-          render={({ field }: any) => (
+          render={({ field }) => (
             <FormItem>
               <FormLabel>Passwort</FormLabel>
               <FormControl>
-                <Input type="password" {...field} onChange={(e) => form.setValue('password', e.target.value)} />
+                <Input type="password" {...field} />
               </FormControl>
-              <FormMessage>{form.formState.errors.password?.message}</FormMessage>
+              <FormMessage />
             </FormItem>
           )}
         />
