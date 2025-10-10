@@ -1,3 +1,58 @@
 {
-  "placeholderImages": []
+  "placeholderImages": [
+    {
+      "id": "news-1",
+      "description": "Players celebrating a goal",
+      "imageUrl": "https://picsum.photos/seed/news1/800/600",
+      "imageHint": "soccer celebration"
+    },
+    {
+      "id": "news-2",
+      "description": "Manager in a press conference",
+      "imageUrl": "https://picsum.photos/seed/news2/800/600",
+      "imageHint": "soccer manager"
+    },
+    {
+      "id": "news-3",
+      "description": "Stadium view",
+      "imageUrl": "https://picsum.photos/seed/news3/800/600",
+      "imageHint": "soccer stadium"
+    },
+    {
+      "id": "player-wirtz",
+      "description": "Florian Wirtz",
+      "imageUrl": "https://picsum.photos/seed/wirtz/400/500",
+      "imageHint": "soccer player portrait"
+    },
+    {
+      "id": "player-boniface",
+      "description": "Victor Boniface",
+      "imageUrl": "https://picsum.photos/seed/boniface/400/500",
+      "imageHint": "soccer player portrait"
+    },
+    {
+      "id": "player-xhaka",
+      "description": "Granit Xhaka",
+      "imageUrl": "https://picsum.photos/seed/xhaka/400/500",
+      "imageHint": "soccer player portrait"
+    },
+    {
+      "id": "player-frimpong",
+      "description": "Jeremie Frimpong",
+      "imageUrl": "https://picsum.photos/seed/frimpong/400/500",
+      "imageHint": "soccer player portrait"
+    },
+    {
+      "id": "player-grimaldo",
+      "description": "Alejandro Grimaldo",
+      "imageUrl": "https://picsum.photos/seed/grimaldo/400/500",
+      "imageHint": "soccer player portrait"
+    },
+    {
+      "id": "player-tah",
+      "description": "Jonathan Tah",
+      "imageUrl": "https://picsum.photos/seed/tah/400/500",
+      "imageHint": "soccer player portrait"
+    }
+  ]
 }
