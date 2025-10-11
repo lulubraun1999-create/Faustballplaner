@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useForm, Controller } from 'react-hook-form';
@@ -106,7 +105,6 @@ export default function ProfileSettingsPage() {
       await setDoc(userDocRef, values, { merge: true });
       toast({ title: 'Erfolg', description: 'Ihre Daten wurden erfolgreich gespeichert.' });
     } catch (error) {
-      console.error("Error updating document: ", error);
       toast({ variant: 'destructive', title: 'Fehler', description: 'Beim Speichern Ihrer Daten ist ein Fehler aufgetreten.' });
     }
   };
@@ -345,7 +343,3 @@ export default function ProfileSettingsPage() {
     </div>
   );
 }
-
-    
-
-    
