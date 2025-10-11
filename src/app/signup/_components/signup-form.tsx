@@ -21,7 +21,7 @@ import {
   sendEmailVerification,
   updateProfile,
 } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
@@ -83,6 +83,7 @@ export function SignUpForm() {
           email: values.email,
           name: displayName,
           adminRechte: false, // Default admin rights to false
+          createdAt: serverTimestamp(),
         };
 
         const userDocRef = doc(firestore, "users", user.uid);
@@ -190,3 +191,5 @@ export function SignUpForm() {
     </Form>
   );
 }
+
+    
