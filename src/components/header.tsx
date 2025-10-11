@@ -5,7 +5,7 @@ import { useAuth, useUser } from '@/firebase';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
-import { LogOut, Moon, ChevronDown, User as UserIcon } from 'lucide-react';
+import { LogOut, ChevronDown, User as UserIcon } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,7 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import Link from 'next/link';
-import Image from 'next/image';
+import { ModeToggle } from './mode-toggle';
 
 export function Header() {
   const auth = useAuth();
@@ -66,9 +66,7 @@ export function Header() {
         </nav>
 
         <div className="flex items-center justify-end gap-4 flex-1">
-           <Button variant="ghost" size="icon">
-             <Moon className="h-5 w-5" />
-           </Button>
+            <ModeToggle />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" className="flex items-center gap-2">
