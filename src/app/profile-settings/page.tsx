@@ -304,6 +304,7 @@ export default function ProfileSettingsPage() {
                                                 </PopoverTrigger>
                                                 <PopoverContent className="w-auto p-0">
                                                     <Calendar
+                                                        locale={de}
                                                         mode="single"
                                                         selected={field.value}
                                                         onSelect={field.onChange}
