@@ -15,7 +15,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import Link from 'next/link';
-import Image from 'next/image';
 
 export function Header() {
   const auth = useAuth();
@@ -39,13 +38,7 @@ export function Header() {
       <div className="container flex h-16 max-w-screen-2xl items-center justify-between">
         <div className="flex items-center gap-6 flex-1">
           <Link href="/" className="flex items-center gap-2">
-            <Image 
-              src="https://www.tsvbayer04.de/layout/img/bayer-logo-92.svg" 
-              alt="TSV Bayer Leverkusen Logo"
-              width={130}
-              height={40}
-              className="object-contain"
-            />
+             <span className="font-bold text-lg">TSV Bayer Leverkusen</span>
           </Link>
         </div>
 
