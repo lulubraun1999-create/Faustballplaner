@@ -275,9 +275,8 @@ export default function ProfileSettingsPage() {
                                                 </SelectTrigger>
                                             </FormControl>
                                             <SelectContent>
-                                                <SelectItem value="mann">Mann</SelectItem>
-                                                <SelectItem value="frau">Frau</SelectItem>
-                                                <SelectItem value="divers">Divers</SelectItem>
+                                                <SelectItem value="divers_herrenteam">Divers Herrenteam</SelectItem>
+                                                <SelectItem value="divers_damenteam">Divers Damenteam</SelectItem>
                                             </SelectContent>
                                         </Select>
                                         <FormMessage />
@@ -344,5 +343,7 @@ export default function ProfileSettingsPage() {
     </div>
   );
 }
+
+    
 
     
