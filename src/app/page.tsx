@@ -36,7 +36,7 @@ export default function Home() {
         router.push('/login');
       }
     }
-  }, [user, isUserLoading, router, auth, toast]);
+  }, [user, isUserLoading, router, auth]);
 
   if (isUserLoading || !user || !user.emailVerified) {
     return (
