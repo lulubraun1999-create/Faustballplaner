@@ -76,7 +76,9 @@ export function Header() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem>Profileinstellungen</DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/profile-settings">Profileinstellungen</Link>
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={handleLogout}>
                 <LogOut className="mr-2 h-4 w-4"/>
                 Logout
