@@ -14,6 +14,10 @@ export default function Home() {
   const { toast } = useToast();
 
   useEffect(() => {
+    if (!isUserLoading && !auth) {
+        // Firebase auth is not available, maybe show an error or redirect
+        return;
+    }
     if (!isUserLoading) {
       if (!user) {
         router.push('/login');
@@ -30,12 +34,14 @@ export default function Home() {
   }, [user, isUserLoading, router, auth, toast]);
 
   const handleLogout = async () => {
-    await auth.signOut();
-    toast({
-      title: "Abgemeldet",
-      description: "Sie wurden erfolgreich abgemeldet.",
-    });
-    router.push('/login');
+    if(auth) {
+      await auth.signOut();
+      toast({
+        title: "Abgemeldet",
+        description: "Sie wurden erfolgreich abgemeldet.",
+      });
+      router.push('/login');
+    }
   };
 
   if (isUserLoading || !user || !user.emailVerified) {

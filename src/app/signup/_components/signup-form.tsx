@@ -15,13 +15,13 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { useAuth, useFirestore } from "@/firebase";
+import { useAuth, useFirestore, setDocumentNonBlocking } from "@/firebase";
 import {
   createUserWithEmailAndPassword,
   sendEmailVerification,
   updateProfile,
 } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
+import { doc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
@@ -56,6 +56,14 @@ export function SignUpForm() {
 
   const onSubmit = (values: z.infer<typeof formSchema>) => {
     startTransition(async () => {
+       if (!auth || !firestore) {
+        toast({
+          variant: "destructive",
+          title: "Fehler",
+          description: "Firebase-Dienste nicht verfügbar.",
+        });
+        return;
+      }
       try {
         const userCredential = await createUserWithEmailAndPassword(
           auth,
@@ -80,11 +88,8 @@ export function SignUpForm() {
         const userDocRef = doc(firestore, "users", user.uid);
         const memberDocRef = doc(firestore, "members", user.uid);
 
-        // Write to both collections
-        await Promise.all([
-            setDoc(userDocRef, userData, { merge: true }),
-            setDoc(memberDocRef, userData, { merge: true })
-        ]);
+        setDocumentNonBlocking(userDocRef, userData, { merge: true });
+        setDocumentNonBlocking(memberDocRef, userData, { merge: true });
         
         await sendEmailVerification(user);
 
