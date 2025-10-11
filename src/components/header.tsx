@@ -15,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import Link from 'next/link';
+import Image from 'next/image';
 
 export function Header() {
   const auth = useAuth();
@@ -71,7 +72,7 @@ export function Header() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" className="flex items-center gap-2">
-                <UserIcon className="h-4 w-4" />
+                <UserIcon className="h-4 w-4 text-muted-foreground" />
                 {user?.displayName || 'Benutzer'}
                 <ChevronDown className="h-4 w-4" />
               </Button>
