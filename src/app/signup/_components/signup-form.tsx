@@ -86,10 +86,8 @@ export function SignUpForm() {
         };
 
         const userDocRef = doc(firestore, "users", user.uid);
-        const memberDocRef = doc(firestore, "members", user.uid);
-
+        
         setDocumentNonBlocking(userDocRef, userData, { merge: true });
-        setDocumentNonBlocking(memberDocRef, userData, { merge: true });
         
         await sendEmailVerification(user);
 
