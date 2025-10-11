@@ -15,13 +15,13 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { useAuth, useFirestore, setDocumentNonBlocking } from "@/firebase";
+import { useAuth, useFirestore } from "@/firebase";
 import {
   createUserWithEmailAndPassword,
   sendEmailVerification,
   updateProfile,
 } from "firebase/auth";
-import { doc } from "firebase/firestore";
+import { doc, setDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
@@ -87,7 +87,7 @@ export function SignUpForm() {
 
         const userDocRef = doc(firestore, "users", user.uid);
         
-        setDocumentNonBlocking(userDocRef, userData, { merge: true });
+        await setDoc(userDocRef, userData, { merge: true });
         
         await sendEmailVerification(user);
 
@@ -99,9 +99,12 @@ export function SignUpForm() {
         router.push("/login");
 
       } catch (error: any) {
-        let description = "Ein unerwarteter Fehler ist aufgetreten.";
+        let description = error.message || "Ein unerwarteter Fehler ist aufgetreten.";
         if (error.code === 'auth/email-already-in-use') {
             description = "Diese E-Mail-Adresse wird bereits verwendet.";
+        }
+        if (error.code === 'permission-denied') {
+            description = "Berechtigung verweigert. Bitte überprüfen Sie die Firestore-Sicherheitsregeln.";
         }
         toast({
           variant: "destructive",
