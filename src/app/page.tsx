@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Newspaper, CalendarDays, Users, MessageSquare } from 'lucide-react';
 import { Header } from '@/components/header';
+import Link from 'next/link';
 
 export default function Home() {
   const { user, isUserLoading } = useUser();
@@ -61,7 +62,9 @@ export default function Home() {
                 <p className="text-xs text-muted-foreground">
                   Bleiben Sie auf dem Laufenden über die Werkself.
                 </p>
-                <Button size="sm" className="mt-4">Zu den News</Button>
+                <Button size="sm" className="mt-4" asChild>
+                  <Link href="/aktuelles">Zu den News</Link>
+                </Button>
               </CardContent>
             </Card>
             <Card className="hover:border-primary/80 transition-all">
