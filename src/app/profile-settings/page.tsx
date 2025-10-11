@@ -365,7 +365,7 @@ export default function ProfileSettingsPage() {
                                     render={({ field }) => (
                                         <FormItem className="space-y-2">
                                         <FormLabel>Geschlecht</FormLabel>
-                                        <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
+                                        <Select onValueChange={field.onChange} value={field.value}>
                                             <FormControl>
                                                 <SelectTrigger>
                                                     <SelectValue placeholder="Geschlecht wählen" />
