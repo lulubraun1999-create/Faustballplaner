@@ -14,7 +14,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="de" className="h-full dark">
+    <html lang="de" className="h-full">
       <head/>
       <body className="antialiased h-full">
           <FirebaseClientProvider>

@@ -55,8 +55,11 @@ export function Header() {
               <ChevronDown className="h-4 w-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent>
-              <DropdownMenuItem>Benutzer</DropdownMenuItem>
-              <DropdownMenuItem>Inhalte</DropdownMenuItem>
+              <DropdownMenuItem>Gruppen</DropdownMenuItem>
+              <DropdownMenuItem>Mitglieder</DropdownMenuItem>
+              <DropdownMenuItem>News</DropdownMenuItem>
+              <DropdownMenuItem>Umfragen</DropdownMenuItem>
+              <DropdownMenuItem>Termine</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </nav>
