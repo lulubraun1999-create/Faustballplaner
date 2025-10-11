@@ -1,121 +1,351 @@
-
 {
   "entities": {
+    "NewsArticle": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "NewsArticle",
+      "type": "object",
+      "description": "Represents a news article related to Bayer Leverkusen.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the news article."
+        },
+        "title": {
+          "type": "string",
+          "description": "Title of the news article."
+        },
+        "content": {
+          "type": "string",
+          "description": "The full content of the news article."
+        },
+        "author": {
+          "type": "string",
+          "description": "Author of the news article."
+        },
+        "publicationDate": {
+          "type": "string",
+          "description": "Date and time when the article was published.",
+          "format": "date-time"
+        },
+        "imageUrl": {
+          "type": "string",
+          "description": "URL of the image associated with the article.",
+          "format": "uri"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "content",
+        "author",
+        "publicationDate"
+      ]
+    },
+    "Match": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Match",
+      "type": "object",
+      "description": "Represents a Bayer Leverkusen match.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the match."
+        },
+        "date": {
+          "type": "string",
+          "description": "Date and time of the match.",
+          "format": "date-time"
+        },
+        "homeTeam": {
+          "type": "string",
+          "description": "Name of the home team."
+        },
+        "awayTeam": {
+          "type": "string",
+          "description": "Name of the away team."
+        },
+        "homeScore": {
+          "type": "number",
+          "description": "Score of the home team."
+        },
+        "awayScore": {
+          "type": "number",
+          "description": "Score of the away team."
+        },
+        "matchStatus": {
+          "type": "string",
+          "description": "Status of the match (e.g., upcoming, live, finished)."
+        }
+      },
+      "required": [
+        "id",
+        "date",
+        "homeTeam",
+        "awayTeam",
+        "homeScore",
+        "awayScore",
+        "matchStatus"
+      ]
+    },
+    "Player": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Player",
+      "type": "object",
+      "description": "Represents a Bayer Leverkusen player.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the player."
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the player."
+        },
+        "position": {
+          "type": "string",
+          "description": "Playing position of the player."
+        },
+        "dateOfBirth": {
+          "type": "string",
+          "description": "Date of birth of the player.",
+          "format": "date"
+        },
+        "nationality": {
+          "type": "string",
+          "description": "Nationality of the player."
+        },
+        "imageUrl": {
+          "type": "string",
+          "description": "URL of the player's image.",
+          "format": "uri"
+        },
+        "jerseyNumber": {
+          "type": "number",
+          "description": "Jersey number of the player."
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "position",
+        "dateOfBirth",
+        "nationality"
+      ]
+    },
+    "HighlightReel": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "HighlightReel",
+      "type": "object",
+      "description": "Represents a highlight reel generated for a match.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the highlight reel."
+        },
+        "matchId": {
+          "type": "string",
+          "description": "Reference to Match. (Relationship: Match 1:N HighlightReel)"
+        },
+        "generationDate": {
+          "type": "string",
+          "description": "Date and time when the highlight reel was generated.",
+          "format": "date-time"
+        },
+        "videoUrl": {
+          "type": "string",
+          "description": "URL of the generated highlight reel video.",
+          "format": "uri"
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the highlight reel."
+        }
+      },
+      "required": [
+        "id",
+        "matchId",
+        "generationDate",
+        "videoUrl"
+      ]
+    },
+    "ForumPost": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ForumPost",
+      "type": "object",
+      "description": "Represents a post in the fan forum.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the forum post."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to User. (Relationship: User 1:N ForumPost)"
+        },
+        "title": {
+          "type": "string",
+          "description": "Title of the forum post."
+        },
+        "content": {
+          "type": "string",
+          "description": "Content of the forum post."
+        },
+        "creationDate": {
+          "type": "string",
+          "description": "Date and time when the post was created.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "title",
+        "content",
+        "creationDate"
+      ]
+    },
     "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "User",
       "type": "object",
       "description": "Represents a user of the application.",
       "properties": {
-        "name": {
+        "id": {
           "type": "string",
-          "description": "The user's display name."
+          "description": "Unique identifier for the user."
+        },
+        "username": {
+          "type": "string",
+          "description": "Username of the user."
         },
         "email": {
           "type": "string",
-          "description": "The user's email address.",
+          "description": "Email address of the user.",
           "format": "email"
         },
-        "vorname": { "type": "string", "description": "User's first name" },
-        "nachname": { "type": "string", "description": "User's last name" },
-        "telefon": { "type": "string", "description": "User's phone number" },
-        "wohnort": { "type": "string", "description": "User's city of residence" },
-        "geschlecht": { "type": "string", "description": "User's gender" },
-        "position": { "type": "array", "items": { "type": "string" }, "description": "User's position(s) in the team" },
-        "geburtstag": { "type": "string", "format": "date-time", "description": "User's birthdate" },
-        "rolle": { "type": "string", "description": "User's role (e.g., Trainer, Spieler)" },
-        "adminRechte": { "type": "boolean", "description": "User's admin rights" },
-        "groupIds": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "An array of group IDs the user belongs to."
+        "registrationDate": {
+          "type": "string",
+          "description": "Date and time when the user registered.",
+          "format": "date-time"
         }
       },
-      "required": ["name", "email"]
-    },
-    "Member": {
-      "title": "Member",
-      "type": "object",
-      "description": "A public-facing member profile, copied from the user document.",
-      "properties": {
-         "name": {
-          "type": "string",
-          "description": "The user's display name."
-        },
-        "email": {
-          "type": "string",
-          "description": "The user's email address.",
-          "format": "email"
-        },
-        "vorname": { "type": "string", "description": "User's first name" },
-        "nachname": { "type": "string", "description": "User's last name" },
-        "telefon": { "type": "string", "description": "User's phone number" },
-        "wohnort": { "type": "string", "description": "User's city of residence" },
-        "geschlecht": { "type": "string", "description": "User's gender" },
-        "position": { "type": "array", "items": { "type": "string" }, "description": "User's position(s) in the team" },
-        "geburtstag": { "type": "string", "format": "date-time", "description": "User's birthdate" },
-        "rolle": { "type": "string", "description": "User's role (e.g., Trainer, Spieler)" },
-        "adminRechte": { "type": "boolean", "description": "User's admin rights" },
-        "groupIds": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "An array of group IDs the user belongs to."
-        }
-      },
-      "required": ["name", "email"]
-    },
-    "Group": {
-      "title": "Group",
-      "type": "object",
-      "description": "Represents a group or subgroup.",
-      "properties": {
-        "name": {
-          "type": "string",
-          "description": "The name of the group."
-        },
-        "parentGroupId": {
-          "type": "string",
-          "description": "The ID of the parent group, if this is a subgroup."
-        }
-      },
-      "required": ["name"]
-    },
-    "NewsArticle": {
-      "title": "News Article",
-      "type": "object",
-      "description": "Represents a news article.",
-      "properties": {
-        "title": { "type": "string", "description": "The title of the article." },
-        "content": { "type": "string", "description": "The main content of the article." },
-        "imageUrls": { "type": "array", "items": { "type": "string", "format": "uri" }, "description": "A list of URLs for the article images." },
-        "imageKeywords": { "type": "string", "description": "Keywords for AI to describe the image." },
-        "publicAuthor": { "type": "string", "description": "The publicly displayed author name, e.g., 'TSV Bayer Leverkusen'." },
-        "authorId": { "type": "string", "description": "The UID of the user who created the article." },
-        "authorName": { "type": "string", "description": "The name of the user who created the article." },
-        "createdAt": { "type": "string", "format": "date-time", "description": "The timestamp when the article was created." },
-        "updatedAt": { "type": "string", "format": "date-time", "description": "The timestamp when the article was last updated." }
-      },
-      "required": ["title", "content", "publicAuthor", "authorId", "authorName", "createdAt"]
+      "required": [
+        "id",
+        "username",
+        "email",
+        "registrationDate"
+      ]
     }
   },
   "auth": {
-    "providers": ["password"]
+    "providers": [
+      "password",
+      "anonymous"
+    ]
   },
   "firestore": {
-    "/users/{userId}": {
-      "schema": { "$ref": "#/backend/entities/User" },
-      "description": "Stores private information for each user, editable only by the user."
-    },
-     "/members/{memberId}": {
-      "schema": { "$ref": "#/backend/entities/Member" },
-      "description": "Stores public-readable member profiles, for admin views."
-    },
-    "/groups/{groupId}": {
-      "schema": { "$ref": "#/backend/entities/Group" },
-      "description": "Stores all groups and subgroups."
-    },
-    "/news/{newsId}": {
-      "schema": { "$ref": "#/backend/entities/NewsArticle" },
-      "description": "Stores news articles for the app."
-    }
+    "structure": [
+      {
+        "path": "/news_articles/{newsArticleId}",
+        "definition": {
+          "entityName": "NewsArticle",
+          "schema": {
+            "$ref": "#/backend/entities/NewsArticle"
+          },
+          "description": "Collection of news articles related to Bayer Leverkusen.",
+          "params": [
+            {
+              "name": "newsArticleId",
+              "description": "Unique identifier for the news article."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/matches/{matchId}",
+        "definition": {
+          "entityName": "Match",
+          "schema": {
+            "$ref": "#/backend/entities/Match"
+          },
+          "description": "Collection of Bayer Leverkusen matches.",
+          "params": [
+            {
+              "name": "matchId",
+              "description": "Unique identifier for the match."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/players/{playerId}",
+        "definition": {
+          "entityName": "Player",
+          "schema": {
+            "$ref": "#/backend/entities/Player"
+          },
+          "description": "Collection of Bayer Leverkusen players.",
+          "params": [
+            {
+              "name": "playerId",
+              "description": "Unique identifier for the player."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/highlight_reels/{highlightReelId}",
+        "definition": {
+          "entityName": "HighlightReel",
+          "schema": {
+            "$ref": "#/backend/entities/HighlightReel"
+          },
+          "description": "Collection of highlight reels generated for matches. Includes denormalized 'matchId' for querying highlight reels for a specific match.",
+          "params": [
+            {
+              "name": "highlightReelId",
+              "description": "Unique identifier for the highlight reel."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/forum_posts/{postId}",
+        "definition": {
+          "entityName": "ForumPost",
+          "schema": {
+            "$ref": "#/backend/entities/ForumPost"
+          },
+          "description": "Collection of forum posts created by a specific user.  Uses path-based ownership for simplified security rules.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "Unique identifier for the user."
+            },
+            {
+              "name": "postId",
+              "description": "Unique identifier for the forum post."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Collection of user documents. Path based ownership for securing data to the user.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "Unique identifier for the user."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore data structure is designed to support the Werkself Hub application, focusing on news, match data, player information, AI-generated highlights, and a fan forum. The structure emphasizes authorization independence and efficient data retrieval.  \n\nAuthorization Independence is achieved by avoiding `get()` calls in Firestore rules. For instance, user-specific forum posts are stored under the `/users/{userId}/forum_posts/{postId}` path, making ownership explicit and verifiable without needing to access parent document data.  Similarly, although HighlightReels have a relationship to Matches, they are stored under a separate collection `/highlight_reels/{highlightReelId}` with the `matchId` denormalized, removing authorization dependencies based on match data.  The lack of any custom claims enforces DBAC. \n\nQAPs (Queries Are Permissions) are supported via Structural Segregation.  There is no mixing of secured and public data in any collection. For instance, forum posts are accessible only to authenticated users (or potentially publicly, depending on desired configuration), and sensitive user data (if any beyond the auth record) would be kept in `/users/{userId}` which uses path-based authorization, ensuring only the user can access their own data.\n\nThe structure favors path-based ownership (`/users/{userId}/forum_posts/{postId}`) for user-generated content and dedicated collections (e.g., `/news_articles`, `/matches`, `/players`) for global data. Global data is assumed to be read-only for most users, with administrative access controlled at the application level. In the future, if access controls are required for global data, a membership map could be used to control access, with appropriate denormalization."
   }
 }

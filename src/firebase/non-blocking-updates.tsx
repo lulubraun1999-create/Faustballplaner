@@ -47,8 +47,6 @@ export function addDocumentNonBlocking(colRef: CollectionReference, data: any) {
           requestResourceData: data,
         })
       )
-      // Also re-throw the original error so downstream .catch blocks can see it
-      throw error;
     });
   return promise;
 }
