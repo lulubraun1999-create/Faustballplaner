@@ -37,7 +37,7 @@ export function Header() {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 max-w-screen-2xl items-center justify-between">
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-6 flex-1">
           <Link href="/" className="flex items-center gap-2">
             <Image 
               src="https://www.tsvbayer04.de/layout/img/bayer-logo-92.svg" 
@@ -47,27 +47,28 @@ export function Header() {
               className="object-contain"
             />
           </Link>
-          <nav className="hidden md:flex items-center gap-4 text-sm font-medium">
-            <Link href="/aktuelles" className="text-foreground transition-colors hover:text-foreground/80">
-              Aktuelles
-            </Link>
-            <Link href="#" className="text-muted-foreground transition-colors hover:text-foreground/80">
-              Chat
-            </Link>
-             <DropdownMenu>
-              <DropdownMenuTrigger className="flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground/80 focus:outline-none">
-                Verwaltung
-                <ChevronDown className="h-4 w-4" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuItem>Benutzer</DropdownMenuItem>
-                <DropdownMenuItem>Inhalte</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </nav>
         </div>
 
-        <div className="flex items-center gap-4">
+        <nav className="hidden md:flex items-center justify-center gap-4 text-sm font-medium flex-1">
+          <Link href="/aktuelles" className="text-foreground transition-colors hover:text-foreground/80">
+            Aktuelles
+          </Link>
+          <Link href="#" className="text-muted-foreground transition-colors hover:text-foreground/80">
+            Chat
+          </Link>
+           <DropdownMenu>
+            <DropdownMenuTrigger className="flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground/80 focus:outline-none">
+              Verwaltung
+              <ChevronDown className="h-4 w-4" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem>Benutzer</DropdownMenuItem>
+              <DropdownMenuItem>Inhalte</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </nav>
+
+        <div className="flex items-center justify-end gap-4 flex-1">
            <Button variant="ghost" size="icon">
              <Moon className="h-5 w-5" />
            </Button>
