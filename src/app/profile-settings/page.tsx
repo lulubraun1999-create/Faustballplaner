@@ -3,12 +3,13 @@
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useEffect, useMemo } from 'react';
-import { doc, setDoc } from 'firebase/firestore';
+import { useEffect, useMemo, useState } from 'react';
+import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { useAuth, useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
+import { sendPasswordResetEmail, deleteUser } from 'firebase/auth';
 
 import { Header } from '@/components/header';
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,17 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { CalendarIcon, Loader2 } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { cn } from "@/lib/utils";
 import { useRouter } from 'next/navigation';
 
@@ -44,6 +56,7 @@ export default function ProfileSettingsPage() {
   const auth = useAuth();
   const router = useRouter();
   const { toast } = useToast();
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const userDocRef = useMemoFirebase(() => {
     if (!firestore || !user) return null;
@@ -94,6 +107,68 @@ export default function ProfileSettingsPage() {
     }
   };
 
+  const handlePasswordReset = async () => {
+    if (!user?.email || !auth) {
+      toast({
+        variant: "destructive",
+        title: "Fehler",
+        description: "E-Mail-Adresse nicht gefunden, um eine E-Mail zum Zurücksetzen zu senden.",
+      });
+      return;
+    }
+    try {
+      await sendPasswordResetEmail(auth, user.email);
+      toast({
+        title: "E-Mail gesendet",
+        description: "Eine E-Mail zum Zurücksetzen des Passworts wurde an Ihre E-Mail-Adresse gesendet.",
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Fehler",
+        description: "Beim Senden der E-Mail zum Zurücksetzen des Passworts ist ein Fehler aufgetreten.",
+      });
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!user || !firestore) {
+      toast({ variant: 'destructive', title: 'Fehler', description: 'Benutzer nicht authentifiziert.' });
+      return;
+    }
+
+    setIsDeleting(true);
+
+    try {
+      // First, delete the Firestore document
+      const userDocRef = doc(firestore, 'users', user.uid);
+      await deleteDoc(userDocRef);
+
+      // Then, delete the user from Firebase Auth
+      await deleteUser(user);
+      
+      toast({
+        title: "Konto gelöscht",
+        description: "Ihr Konto wurde dauerhaft gelöscht.",
+      });
+
+      router.push('/login');
+
+    } catch (error: any) {
+      setIsDeleting(false);
+      let description = 'Beim Löschen Ihres Kontos ist ein Fehler aufgetreten.';
+      // This error often means the user needs to re-authenticate
+      if (error.code === 'auth/requires-recent-login') {
+        description = 'Diese Aktion erfordert eine erneute Anmeldung. Bitte melden Sie sich ab und wieder an, bevor Sie es erneut versuchen.';
+      }
+      toast({
+        variant: 'destructive',
+        title: 'Löschen fehlgeschlagen',
+        description: description,
+      });
+    }
+  };
+
 
   const onSubmit = async (values: z.infer<typeof profileSchema>) => {
     if (!user || !firestore) {
@@ -130,7 +205,7 @@ export default function ProfileSettingsPage() {
               </CardHeader>
               <CardContent className="grid gap-2">
                 <Button variant="ghost" className="justify-start">Daten ändern</Button>
-                <Button variant="ghost" className="justify-start text-muted-foreground" disabled>Passwort ändern</Button>
+                <Button variant="ghost" className="justify-start" onClick={handlePasswordReset}>Passwort ändern</Button>
                 <Button variant="ghost" className="justify-start" onClick={handleLogout}>Logout</Button>
               </CardContent>
             </Card>
@@ -142,7 +217,31 @@ export default function ProfileSettingsPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <Button variant="destructive" className="w-full" disabled>Konto dauerhaft löschen</Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="destructive" className="w-full" disabled={isDeleting}>
+                        Konto dauerhaft löschen
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Sind Sie absolut sicher?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Diese Aktion kann nicht rückgängig gemacht werden. Dadurch wird Ihr Konto dauerhaft gelöscht und Ihre Daten von unseren Servern entfernt.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={handleDeleteAccount}
+                          className="bg-destructive hover:bg-destructive/90"
+                          disabled={isDeleting}
+                        >
+                          {isDeleting ? <Loader2 className="animate-spin" /> : 'Ja, Konto löschen'}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </CardContent>
             </Card>
           </aside>
