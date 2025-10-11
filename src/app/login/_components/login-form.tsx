@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { useAuth, useUser } from "@/firebase";
 import {
   signInWithEmailAndPassword,
+  sendPasswordResetEmail,
 } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
@@ -48,6 +49,44 @@ export function LoginForm() {
       router.push("/aktuelles");
     }
   }, [user, isUserLoading, router]);
+
+  const handlePasswordReset = async () => {
+    const email = form.getValues("email");
+    if (!email) {
+      toast({
+        variant: "destructive",
+        title: "E-Mail fehlt",
+        description: "Bitte geben Sie Ihre E-Mail-Adresse ein, um Ihr Passwort zurückzusetzen.",
+      });
+      return;
+    }
+    if (!auth) {
+      toast({
+        variant: "destructive",
+        title: "Fehler",
+        description: "Authentifizierungsdienst nicht verfügbar.",
+      });
+      return;
+    }
+
+    try {
+      await sendPasswordResetEmail(auth, email);
+      toast({
+        title: "E-Mail gesendet",
+        description: "Eine E-Mail zum Zurücksetzen des Passworts wurde an Ihre E-Mail-Adresse gesendet.",
+      });
+    } catch (error: any) {
+      let description = "Beim Senden der E-Mail zum Zurücksetzen des Passworts ist ein Fehler aufgetreten.";
+      if (error.code === 'auth/user-not-found') {
+        description = "Für diese E-Mail-Adresse wurde kein Benutzer gefunden.";
+      }
+      toast({
+        variant: "destructive",
+        title: "Fehler",
+        description,
+      });
+    }
+  };
 
   const onSubmit = (values: z.infer<typeof formSchema>) => {
     startTransition(async () => {
@@ -120,7 +159,17 @@ export function LoginForm() {
           name="password"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Passwort</FormLabel>
+              <div className="flex items-center">
+                <FormLabel>Passwort</FormLabel>
+                <Button
+                    type="button"
+                    variant="link"
+                    className="ml-auto inline-block px-0 text-sm underline"
+                    onClick={handlePasswordReset}
+                  >
+                    Passwort vergessen?
+                  </Button>
+              </div>
               <FormControl>
                 <Input type="password" {...field} />
               </FormControl>
