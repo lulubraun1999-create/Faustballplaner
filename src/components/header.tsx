@@ -76,14 +76,10 @@ export function Header() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>Mein Konto</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>Profil</DropdownMenuItem>
-              <DropdownMenuItem>Einstellungen</DropdownMenuItem>
-              <DropdownMenuSeparator />
+              <DropdownMenuItem>Profileinstellungen</DropdownMenuItem>
               <DropdownMenuItem onClick={handleLogout}>
                 <LogOut className="mr-2 h-4 w-4"/>
-                Abmelden
+                Logout
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
