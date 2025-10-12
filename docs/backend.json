@@ -311,6 +311,7 @@
       "description": "Represents a lightweight, denormalized user object containing only essential details for quick reference.",
       "properties": {
         "vorname": { "type": "string" },
+        "nachname": { "type": "string" },
         "position": {
           "type": "object",
           "properties": {

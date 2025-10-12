@@ -217,6 +217,7 @@ export default function MitgliederPage() {
             const groupMemberData = {
                 id: userToSync.id,
                 vorname: userToSync.vorname,
+                nachname: userToSync.nachname,
                 position: userToSync.position,
                 adminRechte: userToSync.adminRechte,
                 teamIds: selectedTeamIds, // use updated teamIds
@@ -288,7 +289,7 @@ export default function MitgliederPage() {
                 <TableCell>{formatPosition(user.position)}</TableCell>
                 <TableCell>
                   {user.adminRechte ? (
-                    <Badge>Admin</Badge>
+                    <Badge>Trainer</Badge>
                   ) : (
                     <Badge variant="secondary">Benutzer</Badge>
                   )}
@@ -366,15 +367,15 @@ export default function MitgliederPage() {
                 <div className="grid grid-cols-4 items-center gap-4">
                     <Label htmlFor="role-select" className="text-right">Rolle</Label>
                     <Select
-                        value={selectedRole ? 'admin' : 'user'}
-                        onValueChange={(value) => setSelectedRole(value === 'admin')}
+                        value={selectedRole ? 'trainer' : 'user'}
+                        onValueChange={(value) => setSelectedRole(value === 'trainer')}
                     >
                         <SelectTrigger id="role-select" className="col-span-3">
                             <SelectValue placeholder="Rolle auswählen" />
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="user">Benutzer</SelectItem>
-                            <SelectItem value="admin">Admin</SelectItem>
+                            <SelectItem value="trainer">Trainer</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>

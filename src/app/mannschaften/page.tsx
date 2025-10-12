@@ -36,6 +36,7 @@ interface Team {
 interface GroupMember {
   id: string;
   vorname: string;
+  nachname: string;
   position?: {
     abwehr: boolean;
     zuspiel: boolean;
@@ -290,7 +291,6 @@ export default function MannschaftenPage() {
 
   const selectedCategory = categories?.find(c => c.id === selectedCategoryId);
   const selectedTeam = teams?.find(t => t.id === selectedTeamId);
-  const filteredTeams = teams?.filter(g => g.categoryId === selectedCategoryId);
   const filteredMembers = groupMembers?.filter(member => member.teamIds?.includes(selectedTeamId || ''));
 
 
@@ -378,9 +378,9 @@ export default function MannschaftenPage() {
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                             {filteredMembers.map(member => (
                                 <Card key={member.id} className="p-4">
-                                    <p className="font-bold text-lg">{member.vorname}</p>
+                                    <p className="font-bold text-lg">{`${member.vorname} ${member.nachname}`}</p>
                                     <p className="text-sm text-muted-foreground">{formatPosition(member.position)}</p>
-                                    {member.adminRechte && <Badge className="mt-2">Admin</Badge>}
+                                    {member.adminRechte && <Badge className="mt-2">Trainer</Badge>}
                                 </Card>
                             ))}
                         </div>

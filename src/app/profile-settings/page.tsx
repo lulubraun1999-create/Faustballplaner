@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useForm, Controller } from 'react-hook-form';
@@ -68,10 +69,6 @@ const profileSchema = z.object({
 });
 
 type ProfileFormValues = z.infer<typeof profileSchema>;
-
-const emailSchema = z.object({
-  newEmail: z.string().email({ message: "Ungültige E-Mail-Adresse." }),
-});
 
 interface UserData {
     vorname?: string;
@@ -216,7 +213,7 @@ function ProfileForm({ defaultValues, userData }: { defaultValues: ProfileFormVa
             {/* Rolle */}
             <div className="space-y-2">
                 <Label htmlFor="rolle">Rolle</Label>
-                <Input id="rolle" defaultValue={userData?.adminRechte ? "Admin" : "Benutzer"} disabled />
+                <Input id="rolle" defaultValue={userData?.adminRechte ? "Trainer" : "Benutzer"} disabled />
             </div>
 
             {/* Geschlecht */}
