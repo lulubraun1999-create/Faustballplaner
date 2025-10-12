@@ -1,104 +1,126 @@
 /**
- * @fileoverview Firestore Security Rules for the Werkself Hub application.
+ * @fileoverview Firestore Security Rules for Werkself Hub.
  *
  * Core Philosophy:
- * This ruleset is configured for rapid prototyping.  All data is publicly readable and writable.  
+ * This ruleset prioritizes security by enforcing strict ownership and segregation of data.
+ * Path-based authorization is used extensively to ensure that users can only access their own data.
+ * Read access is generally open for global collections (news, matches, players), while write access is restricted.
  *
  * Data Structure:
- * - /news_articles/{newsArticleId}: Collection of news articles.
- * - /matches/{matchId}: Collection of match data.
- * - /players/{playerId}: Collection of player data.
- * - /highlight_reels/{highlightReelId}: Collection of AI-generated highlight reels.
- * - /users/{userId}: Collection of user documents.
- * - /users/{userId}/forum_posts/{postId}: Subcollection of forum posts for each user.
+ * - `/news_articles/{newsArticleId}`: Publicly readable news articles.
+ * - `/matches/{matchId}`: Publicly readable match data.
+ * - `/players/{playerId}`: Publicly readable player information.
+ * - `/highlight_reels/{highlightReelId}`: Publicly readable highlight reels.
+ * - `/users/{userId}`: User profile data, accessible only by the user.
+ * - `/users/{userId}/forum_posts/{postId}`: Forum posts created by a specific user, accessible only by that user.
  *
  * Key Security Decisions:
- * - All data is publicly accessible (get, list).
- * - Any user can create, update, and delete any document in any collection.
+ * - Global collections (news, matches, players, highlight reels) are publicly readable. Write access to these collections is not secured by these rules and should be managed through backend logic or other administrative controls.
+ * - User data and forum posts are strictly controlled by path-based ownership.
+ * - Listing of user documents (`/users`) is denied to prevent unauthorized access to user data.
+ * - No custom claims are used; authorization relies entirely on the authenticated user's UID and path-based ownership.
  *
  * Denormalization for Authorization:
- * - The highlight_reels collection denormalizes the matchId to remove authorization dependencies on match data.
+ * - The `matchId` is denormalized into the `HighlightReel` documents. This avoids needing to perform a `get()` operation on the `Match` document to authorize access to a highlight reel.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Allows anyone to read or write news articles.
+     * @description Allows anyone to read news articles. Write access is not controlled by these rules.
      * @path /news_articles/{newsArticleId}
-     * @allow (get, list) Any user can read any news article.
-     * @allow (create, update, delete) Any user can create, update, or delete any news article.
-     * @deny (none) This rule allows all operations.
-     * @principle Allows public read and write access to news articles.
+     * @allow (get, list): if true
+     * @deny (create, update, delete): if false
+     * @principle Public read, backend-controlled write.
      */
     match /news_articles/{newsArticleId} {
       allow get, list: if true;
-      allow create, update, delete: if true;
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Allows anyone to read or write match data.
+     * @description Allows anyone to read match data. Write access is not controlled by these rules.
      * @path /matches/{matchId}
-     * @allow (get, list) Any user can read any match data.
-     * @allow (create, update, delete) Any user can create, update, or delete any match data.
-     * @deny (none) This rule allows all operations.
-     * @principle Allows public read and write access to match data.
+     * @allow (get, list): if true
+     * @deny (create, update, delete): if false
+     * @principle Public read, backend-controlled write.
      */
     match /matches/{matchId} {
       allow get, list: if true;
-      allow create, update, delete: if true;
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Allows anyone to read or write player data.
+     * @description Allows anyone to read player data. Write access is not controlled by these rules.
      * @path /players/{playerId}
-     * @allow (get, list) Any user can read any player data.
-     * @allow (create, update, delete) Any user can create, update, or delete any player data.
-     * @deny (none) This rule allows all operations.
-     * @principle Allows public read and write access to player data.
+     * @allow (get, list): if true
+     * @deny (create, update, delete): if false
+     * @principle Public read, backend-controlled write.
      */
     match /players/{playerId} {
       allow get, list: if true;
-      allow create, update, delete: if true;
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Allows anyone to read or write highlight reels.
+     * @description Allows anyone to read highlight reels. Write access is not controlled by these rules.
      * @path /highlight_reels/{highlightReelId}
-     * @allow (get, list) Any user can read any highlight reel.
-     * @allow (create, update, delete) Any user can create, update, or delete any highlight reel.
-     * @deny (none) This rule allows all operations.
-     * @principle Allows public read and write access to highlight reels.
+     * @allow (get, list): if true
+     * @deny (create, update, delete): if false
+     * @principle Public read, backend-controlled write.
      */
     match /highlight_reels/{highlightReelId} {
       allow get, list: if true;
-      allow create, update, delete: if true;
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Allows anyone to read or write user documents.
+     * @description Restricts access to user profiles to the owning user.
      * @path /users/{userId}
-     * @allow (get, list) Any user can read any user document.
-     * @allow (create, update, delete) Any user can create, update, or delete any user document.
-     * @deny (none) This rule allows all operations.
-     * @principle Allows public read and write access to user documents.
+     * @allow (get): if isOwner(userId);
+     * @allow (create): if isOwner(userId);
+     * @allow (update): if isExistingOwner(userId);
+     * @allow (delete): if isExistingOwner(userId);
+     * @allow (list): if false;
+     * @deny   (create, update, delete): if !isSignedIn();
+     * @deny   (get, list): if !isSignedIn();
+     * @principle Enforces document ownership for user profiles.
      */
     match /users/{userId} {
-      allow get, list: if true;
-      allow create, update, delete: if true;
+      allow get: if isSignedIn() && isOwner(userId);
+      allow list: if false;
+      allow create: if isSignedIn() && isOwner(userId);
+      allow update: if isSignedIn() && isExistingOwner(userId);
+      allow delete: if isSignedIn() && isExistingOwner(userId);
     }
 
     /**
-     * @description Allows anyone to read or write forum posts for any user.
+     * @description Restricts access to forum posts to the owning user.
      * @path /users/{userId}/forum_posts/{postId}
-     * @allow (get, list) Any user can read any forum post.
-     * @allow (create, update, delete) Any user can create, update, or delete any forum post.
-     * @deny (none) This rule allows all operations.
-     * @principle Allows public read and write access to forum posts.
+     * @allow (get, list, create, update, delete): if isOwner(userId);
+     * @deny   (create, update, delete): if !isSignedIn();
+     * @deny   (get, list): if !isSignedIn();
+     * @principle Enforces document ownership for forum posts.
      */
     match /users/{userId}/forum_posts/{postId} {
-      allow get, list: if true;
-      allow create, update, delete: if true;
+      allow get: if isSignedIn() && isOwner(userId);
+      allow list: if isSignedIn() && isOwner(userId);
+      allow create: if isSignedIn() && isOwner(userId);
+      allow update: if isSignedIn() && isExistingOwner(userId);
+      allow delete: if isSignedIn() && isExistingOwner(userId);
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    function isExistingOwner(userId) {
+        return isSignedIn() && isOwner(userId) && resource != null;
     }
   }
 }
