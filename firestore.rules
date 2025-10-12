@@ -2,123 +2,130 @@
  * @fileoverview Firestore Security Rules for Werkself Hub.
  *
  * Core Philosophy:
- * This ruleset provides open access to most data, including news articles, matches, and player information,
- * while restricting user-specific data (user profiles and forum posts) to the owning user. This is based
- * on the user request "an was liegt es denn. alle können alles sehen" which implies data should be broadly visible.
+ * This ruleset prioritizes ease of data access for prototyping purposes, focusing on securing user-specific data while allowing open reads for all other content.
  *
  * Data Structure:
- * - News articles: Stored in `/news_articles/{newsArticleId}`.
- * - Matches: Stored in `/matches/{matchId}`.
- * - Players: Stored in `/players/{playerId}`.
- * - Highlight Reels: Stored in `/highlight_reels/{highlightReelId}`.
- * - Forum posts: Stored in `/users/{userId}/forum_posts/{postId}`, nested under user documents.
- * - User profiles: Stored in `/users/{userId}`.
+ * - `/news_articles/{newsArticleId}`: Publicly readable news articles. Write access needs to be configured.
+ * - `/matches/{matchId}`: Publicly readable match data. Write access needs to be configured.
+ * - `/players/{playerId}`: Publicly readable player data. Write access needs to be configured.
+ * - `/highlight_reels/{highlightReelId}`: Publicly readable highlight reels. Write access needs to be configured.
+ * - `/users/{userId}`: User profile data, accessible only to the authenticated user.
+ * - `/users/{userId}/forum_posts/{postId}`: Forum posts created by a specific user, accessible only to that user.
  *
  * Key Security Decisions:
- * - Global data (news, matches, players, highlight reels) is publicly readable.
- * - User profiles and forum posts are strictly owner-only for all operations.
- * - Listing user documents is disallowed to prevent information disclosure.
- * - No data validation is performed in this prototyping phase, except for ownership on create and update
- *   operations in user-owned subcollections.
- *
- * Denormalization for Authorization:
- * - HighlightReels denormalize `matchId` to allow for efficient querying without extra reads.
+ * - All collections are publicly readable.
+ * - Write access to news articles, matches, players, and highlight reels is not yet configured, requiring future refinement.
+ * - User data and forum posts are strictly controlled by path-based ownership.
+ * - No user listing is allowed.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Allows public read access to news articles and restricts write access.
+     * @description Allows anyone to read news articles, but restricts creation, updates, and deletions.
      * @path /news_articles/{newsArticleId}
      * @allow (get, list): Any user can read news articles.
-     * @deny (create, update, delete): No user can create, update, or delete news articles through direct write access.
-     * @principle Allows public read access for broad visibility and restricts write access.
+     * @deny (create, update, delete): No one can create, update, or delete news articles without further configuration.
+     * @principle Allows public read access.
      */
     match /news_articles/{newsArticleId} {
-      allow get, list: if true;
-      allow create, update, delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
     }
 
     /**
-     * @description Allows public read access to match data and restricts write access.
+     * @description Allows anyone to read match data, but restricts creation, updates, and deletions.
      * @path /matches/{matchId}
      * @allow (get, list): Any user can read match data.
-     * @deny (create, update, delete): No user can create, update, or delete match data through direct write access.
-     * @principle Allows public read access for broad visibility and restricts write access.
+     * @deny (create, update, delete): No one can create, update, or delete match data without further configuration.
+     * @principle Allows public read access.
      */
     match /matches/{matchId} {
-      allow get, list: if true;
-      allow create, update, delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
     }
 
     /**
-     * @description Allows public read access to player data and restricts write access.
+     * @description Allows anyone to read player data, but restricts creation, updates, and deletions.
      * @path /players/{playerId}
      * @allow (get, list): Any user can read player data.
-     * @deny (create, update, delete): No user can create, update, or delete player data through direct write access.
-     * @principle Allows public read access for broad visibility and restricts write access.
+     * @deny (create, update, delete): No one can create, update, or delete player data without further configuration.
+     * @principle Allows public read access.
      */
     match /players/{playerId} {
-      allow get, list: if true;
-      allow create, update, delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
     }
 
     /**
-     * @description Allows public read access to highlight reels and restricts write access.
+     * @description Allows anyone to read highlight reels, but restricts creation, updates, and deletions.
      * @path /highlight_reels/{highlightReelId}
      * @allow (get, list): Any user can read highlight reels.
-     * @deny (create, update, delete): No user can create, update, or delete highlight reels through direct write access.
-     * @principle Allows public read access for broad visibility and restricts write access.
+     * @deny (create, update, delete): No one can create, update, or delete highlight reels without further configuration.
+     * @principle Allows public read access.
      */
     match /highlight_reels/{highlightReelId} {
-      allow get, list: if true;
-      allow create, update, delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
     }
 
     /**
-     * @description Manages user-specific data (forum posts) with path-based ownership.
-     * @path /users/{userId}/forum_posts/{postId}
-     * @allow (create): Allows a user to create a forum post under their own user ID.
-     * @allow (get, list, update, delete): Allows a user to read, list, update, and delete their own forum posts.
-     * @deny (create, update, delete): Denies create, update or delete if the user ID does not match the authenticated user.
-     * @principle Enforces document ownership for all operations in user-owned subcollections.
-     */
-    match /users/{userId}/forum_posts/{postId} {
-      allow create: if isSignedIn() && request.resource.data.userId == userId;
-      allow get, list: if isOwner(userId);
-      allow update: if isExistingOwner(userId) && request.resource.data.userId == userId;
-      allow delete: if isExistingOwner(userId);
-    }
-
-    /**
-     * @description Manages user profiles with path-based ownership.
+     * @description Manages access to user documents, allowing each user to read and write their own data.
      * @path /users/{userId}
-     * @allow (create): Allows a user to create their own user document.
-     * @allow (get, update, delete): Allows a user to read, update, and delete their own user document.
-     * @deny (list): Listing all users is disallowed to protect user privacy.
-     * @deny (create, update, delete): Denies create, update, or delete if the user ID does not match the authenticated user.
-     * @principle Enforces strict document ownership for all operations on user profiles.
+     * @allow (create): A user can create their own document if the userId matches their auth.uid.
+     * @allow (get, update, delete): A user can only access their own document.
+     * @deny: Any other operation is denied.
+     * @principle Enforces document ownership for writes and reads.
      */
     match /users/{userId} {
-      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.id == userId;
       allow get: if isOwner(userId);
       allow list: if false;
-      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
+      allow create: if isSignedIn() && isOwner(userId);
+      allow update: if isExistingOwner(userId);
       allow delete: if isExistingOwner(userId);
     }
-  }
 
-  // Helper functions
-  function isSignedIn() {
-    return request.auth != null;
-  }
+    /**
+     * @description Manages access to forum posts, allowing each user to read and write their own posts.
+     * @path /users/{userId}/forum_posts/{postId}
+     * @allow (create): A user can create their own forum post under their user ID.
+     * @allow (get, list, update, delete): A user can only access their own forum posts.
+     * @deny: Any other operation is denied.
+     * @principle Enforces path-based ownership for user-generated content.
+     */
+    match /users/{userId}/forum_posts/{postId} {
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isSignedIn() && isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
+    }
 
-  function isOwner(userId) {
-    return request.auth.uid == userId;
-  }
+    // --- Helper functions ---
 
-  function isExistingOwner(userId) {
-    return isOwner(userId) && resource != null;
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    function isExistingOwner(userId) {
+        return isOwner(userId) && resource != null;
+    }
   }
 }
