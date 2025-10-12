@@ -81,7 +81,8 @@ export default function MitgliederPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
+              <TableHead>Vorname</TableHead>
+              <TableHead>Nachname</TableHead>
               <TableHead>Position</TableHead>
               <TableHead>Rolle</TableHead>
               <TableHead>Geburtstag</TableHead>
@@ -93,7 +94,8 @@ export default function MitgliederPage() {
           <TableBody>
             {users.map((user) => (
               <TableRow key={user.id}>
-                <TableCell className="font-medium">{user.name || `${user.vorname || ''} ${user.nachname || ''}`.trim()}</TableCell>
+                <TableCell className="font-medium">{user.vorname || 'N/A'}</TableCell>
+                <TableCell className="font-medium">{user.nachname || 'N/A'}</TableCell>
                 <TableCell>{formatPosition(user.position)}</TableCell>
                 <TableCell>
                   {user.adminRechte ? (
