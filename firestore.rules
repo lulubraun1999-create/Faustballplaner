@@ -1,32 +1,38 @@
 /**
- * @fileoverview Firestore Security Rules for Werkself Hub.
- *
- * Core Philosophy:
- * This ruleset provides open read access for all collections while enforcing strict
- * ownership-based write access for user-specific data under the `/users/{userId}` path.
+ * @file Firestore Security Rules for Werkself Hub
+ * @description This ruleset enforces a user-ownership model for user-generated content and public read access for global data like news, matches, and player information.
  *
  * Data Structure:
- * - Top-level collections (`/news_articles`, `/matches`, `/players`, `/highlight_reels`)
- *   are globally readable.
- * - User-specific data (e.g., `/users/{userId}`, `/users/{userId}/forum_posts/{postId}`)
- *   is secured via path-based ownership.
+ * - /news_articles/{newsArticleId}: Public collection of news articles.
+ * - /matches/{matchId}: Public collection of match data.
+ * - /players/{playerId}: Public collection of player information.
+ * - /highlight_reels/{highlightReelId}: Public collection of match highlight reels.
+ * - /users/{userId}: User profiles, accessible only to the user themselves.
+ * - /users/{userId}/forum_posts/{postId}: Forum posts created by a specific user, accessible only to that user.
  *
  * Key Security Decisions:
- * - Global collections are publicly readable.
- * - User listing is implicitly denied as there are no rules granting `list` on `/users`.
- * - Forum posts are stored as subcollections of user documents, enabling path-based authorization.
- * - Denormalization is used to avoid `get()` calls in rules.  For example, HighlightReels contain a `matchId` field.
+ * - Public read access is granted for news articles, matches, players, and highlight reels.
+ * - User-generated forum posts are stored under the user's document and are only accessible to the owning user.
+ * - User profiles are only accessible to the user themselves.
+ * - No listing of user documents is allowed to protect user privacy.
+ * - Data validation is relaxed in this prototype, focusing on ownership and relationship integrity rather than comprehensive schema enforcement.
+ *
+ * Denormalization for Authorization:
+ * - The `matchId` is denormalized in the `HighlightReel` documents to allow for efficient querying without requiring additional reads.
+ *
+ * Structural Segregation:
+ * - User-specific forum posts are stored under a user subcollection (`/users/{userId}/forum_posts/{postId}`) to ensure only the owner has access. Public data (news, matches, players) is stored in top-level collections.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Allows public read access to news articles. All writes are denied, as this collection should be managed via a trusted environment.
+     * @description Grants public read access to news articles and restricts write access.
      * @path /news_articles/{newsArticleId}
-     * @allow get, list: Any user can read news articles.
-     * @deny create, update, delete: No one can create, update, or delete news articles directly via the client.
-     * @principle Grants public read access to news articles while restricting writes.
+     * @allow get, list: Everyone can read news articles.
+     * @deny create, update, delete: No one can create, update, or delete news articles through the client.  Administrative access should be managed via backend.
+     * @principle Allows public access for reading, with write access restricted to backend.
      */
     match /news_articles/{newsArticleId} {
       allow get, list: if true;
@@ -34,11 +40,11 @@ service cloud.firestore {
     }
 
     /**
-     * @description Allows public read access to matches. All writes are denied, as this collection should be managed via a trusted environment.
+     * @description Grants public read access to match data and restricts write access.
      * @path /matches/{matchId}
-     * @allow get, list: Any user can read match data.
-     * @deny create, update, delete: No one can create, update, or delete matches directly via the client.
-     * @principle Grants public read access to match data while restricting writes.
+     * @allow get, list: Everyone can read match data.
+     * @deny create, update, delete: No one can create, update, or delete match data through the client. Administrative access should be managed via backend.
+     * @principle Allows public access for reading, with write access restricted to backend.
      */
     match /matches/{matchId} {
       allow get, list: if true;
@@ -46,11 +52,11 @@ service cloud.firestore {
     }
 
     /**
-     * @description Allows public read access to player profiles. All writes are denied, as this collection should be managed via a trusted environment.
+     * @description Grants public read access to player information and restricts write access.
      * @path /players/{playerId}
-     * @allow get, list: Any user can read player profiles.
-     * @deny create, update, delete: No one can create, update, or delete players directly via the client.
-     * @principle Grants public read access to player profiles while restricting writes.
+     * @allow get, list: Everyone can read player information.
+     * @deny create, update, delete: No one can create, update, or delete player information through the client. Administrative access should be managed via backend.
+     * @principle Allows public access for reading, with write access restricted to backend.
      */
     match /players/{playerId} {
       allow get, list: if true;
@@ -58,11 +64,11 @@ service cloud.firestore {
     }
 
     /**
-     * @description Allows public read access to highlight reels. All writes are denied, as this collection should be managed via a trusted environment.
+     * @description Grants public read access to highlight reels and restricts write access.
      * @path /highlight_reels/{highlightReelId}
-     * @allow get, list: Any user can read highlight reels.
-     * @deny create, update, delete: No one can create, update, or delete highlight reels directly via the client.
-     * @principle Grants public read access to highlight reels while restricting writes.
+     * @allow get, list: Everyone can read highlight reels.
+     * @deny create, update, delete: No one can create, update, or delete highlight reels through the client. Administrative access should be managed via backend.
+     * @principle Allows public access for reading, with write access restricted to backend.
      */
     match /highlight_reels/{highlightReelId} {
       allow get, list: if true;
@@ -70,37 +76,42 @@ service cloud.firestore {
     }
 
     /**
-     * @description Manages user documents and enforces ownership.
-     * @path /users/{userId}
-     * @allow get: Any user can read another user's profile.
-     * @allow list: if false;
-     * @allow create: Any authenticated user can create their own user document.
-     * @allow update: Only the owner can update their own user document.
-     * @allow delete: Only the owner can delete their own user document.
-     * @principle Enforces document ownership for writes and restricts user listing.
+     * @description Manages access to user-specific forum posts. Only the owner can create, read, update, or delete their own posts.
+     * @path /users/{userId}/forum_posts/{postId}
+     * @allow get, list: If the user is the owner of the forum post.
+     * @allow create: If the user is the owner and the userId matches the path.
+     * @allow update: If the user is the owner and the userId matches the path, and the document exists.
+     * @allow delete: If the user is the owner and the userId matches the path, and the document exists.
+     * @deny create: If the user is not the owner.
+     * @deny update: If the user is not the owner or the document doesn't exist.
+     * @deny delete: If the user is not the owner or the document doesn't exist.
+     * @principle Enforces document ownership for all operations.
      */
-    match /users/{userId} {
-      allow get: if true;
-      allow list: if false;
-      allow create: if isSignedIn() && request.auth.uid == userId;
-      allow update: if isSignedIn() && isExistingOwner(userId);
+    match /users/{userId}/forum_posts/{postId} {
+      allow get, list: if isOwner(userId);
+      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.userId == userId;
+      allow update: if isSignedIn() && isExistingOwner(userId) && request.resource.data.userId == userId;
       allow delete: if isSignedIn() && isExistingOwner(userId);
     }
 
     /**
-     * @description Manages forum posts and enforces ownership via path.
-     * @path /users/{userId}/forum_posts/{postId}
-     * @allow get, list: Only the owner can list forum posts.
-     * @allow create: Only the owner can create forum posts. The `userId` must match the `request.auth.uid`.
-     * @allow update: Only the owner can update their forum posts.
-     * @allow delete: Only the owner can delete their forum posts.
-     * @principle Enforces document ownership for writes within the user's data tree.
+     * @description Manages access to user profiles. Only the user can read or update their own profile.
+     * @path /users/{userId}
+     * @allow get: If the user is the owner.
+     * @allow create: If the user is the owner.
+     * @allow update: If the user is the owner and the document exists.
+     * @deny list: No one can list all users.
+     * @deny create: If the user is not the owner.
+     * @deny update: If the user is not the owner or the document doesn't exist.
+     * @deny delete: No one can delete a user document through the client.
+     * @principle Enforces document ownership for all operations.
      */
-    match /users/{userId}/forum_posts/{postId} {
-      allow get, list: if isSignedIn() && isOwner(userId);
-      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.userId == userId;
-      allow update: if isSignedIn() && isExistingOwner(userId) && resource.data.userId == userId;
-      allow delete: if isSignedIn() && isExistingOwner(userId);
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow list: if false;
+      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.id == userId;
+      allow update: if isSignedIn() && isExistingOwner(userId) && request.resource.data.id == userId;
+      allow delete: if false;
     }
 
     function isSignedIn() {
@@ -112,7 +123,7 @@ service cloud.firestore {
     }
 
     function isExistingOwner(userId) {
-      return isSignedIn() && isOwner(userId) && resource != null;
+        return isOwner(userId) && resource != null;
     }
   }
 }
