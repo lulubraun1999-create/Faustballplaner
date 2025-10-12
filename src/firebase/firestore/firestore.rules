@@ -1,0 +1,48 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- Helpers ---
+    function isSignedIn() { return request.auth != null; }
+    function uid() { return request.auth.uid; }
+
+    // Rolle aus eigenem User-Dokument lesen
+    function me() {
+      return get(/databases/$(database)/documents/users/$(uid()));
+    }
+    function role() {
+      return isSignedIn() && me().exists() ? me().data.role : null;
+    }
+    function isAdmin()   { return role() == "admin"; }
+    function isTrainer() { return role() == "trainer"; }
+    function isPlayer()  { return role() == "player"; }
+
+    // --- USERS Collection ---
+    match /users/{userId} {
+
+      // Einzelnes Dokument lesen:
+      allow get: if isSignedIn() && (
+        userId == uid() || isAdmin() || isTrainer()
+      );
+
+      // Liste aller Nutzer:
+      allow list: if isSignedIn() && (isAdmin() || isTrainer());
+
+      // Erstellen: Admin oder Trainer
+      allow create: if isSignedIn() && (isAdmin() || isTrainer());
+
+      // Update: Admin/Trainer oder eigener Eintrag
+      allow update: if isSignedIn() && (
+        isAdmin() || isTrainer() || userId == uid()
+      );
+
+      // Löschen: nur Admin
+      allow delete: if isSignedIn() && isAdmin();
+    }
+
+    // Beispiel für weitere Collections:
+    match /teams/{teamId} {
+      allow read, write: if isSignedIn() && (isAdmin() || isTrainer());
+    }
+  }
+}
