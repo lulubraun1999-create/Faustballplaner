@@ -82,14 +82,14 @@ export default function ProfileSettingsPage() {
 
   const form = useForm<z.infer<typeof profileSchema>>({
     resolver: zodResolver(profileSchema),
-    values: {
-      vorname: userData?.vorname || '',
-      nachname: userData?.nachname || '',
-      telefon: userData?.telefon || '',
-      wohnort: userData?.wohnort || '',
-      position: userData?.position || { abwehr: false, zuspiel: false, angriff: false },
-      geschlecht: userData?.geschlecht || '',
-      geburtstag: userData?.geburtstag?.toDate() || undefined,
+    defaultValues: {
+      vorname: '',
+      nachname: '',
+      telefon: '',
+      wohnort: '',
+      position: { abwehr: false, zuspiel: false, angriff: false },
+      geschlecht: '',
+      geburtstag: undefined,
     }
   });
 
