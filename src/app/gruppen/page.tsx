@@ -4,11 +4,21 @@
 import { useState, useEffect } from 'react';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, orderBy, query } from 'firebase/firestore';
+import { collection, orderBy, query, addDoc, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { Loader2 } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { useToast } from "@/hooks/use-toast";
+
 
 interface GroupCategory {
   id: string;
@@ -22,9 +32,193 @@ interface Group {
   categoryId: string;
 }
 
+function ManageGroupsForm({ categories, groups, onDone }: { categories: GroupCategory[], groups: Group[], onDone: () => void }) {
+    const firestore = useFirestore();
+    const { toast } = useToast();
+    const [action, setAction] = useState<'add' | 'edit' | 'delete'>('add');
+    const [target, setTarget] = useState<'category' | 'group'>('group');
+    const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
+    const [selectedGroupId, setSelectedGroupId] = useState<string>('');
+    const [newName, setNewName] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const getTargetId = () => target === 'category' ? selectedCategoryId : selectedGroupId;
+    const getTargetName = () => {
+        if (target === 'category') {
+            return categories.find(c => c.id === selectedCategoryId)?.name || '';
+        }
+        return groups.find(g => g.id === selectedGroupId)?.name || '';
+    }
+
+    useEffect(() => {
+        if (action === 'edit' || action === 'delete') {
+            const targetId = getTargetId();
+            const targetName = getTargetName();
+            if(targetId) setNewName(targetName);
+            else setNewName('');
+        } else {
+            setNewName('');
+        }
+    }, [action, target, selectedCategoryId, selectedGroupId, categories, groups]);
+
+
+    const handleExecute = async () => {
+        if (!firestore) {
+            toast({ variant: 'destructive', title: 'Datenbank nicht verbunden.' });
+            return;
+        }
+
+        setIsSubmitting(true);
+        try {
+            if (action === 'add') {
+                if (!newName) {
+                    toast({ variant: 'destructive', title: 'Name fehlt' });
+                    return;
+                }
+                if (target === 'category') {
+                    await addDoc(collection(firestore, 'group_categories'), {
+                        name: newName,
+                        order: (categories?.length || 0) + 1,
+                    });
+                    toast({ title: 'Obergruppe hinzugefügt' });
+                } else { // target === 'group'
+                    if (!selectedCategoryId) {
+                        toast({ variant: 'destructive', title: 'Obergruppe fehlt' });
+                        return;
+                    }
+                    await addDoc(collection(firestore, 'groups'), {
+                        name: newName,
+                        categoryId: selectedCategoryId,
+                    });
+                    toast({ title: 'Untergruppe hinzugefügt' });
+                }
+            } else if (action === 'edit') {
+                 if (!newName || !getTargetId()) {
+                    toast({ variant: 'destructive', title: 'Auswahl oder Name fehlt' });
+                    return;
+                 }
+                const collectionName = target === 'category' ? 'group_categories' : 'groups';
+                await updateDoc(doc(firestore, collectionName, getTargetId()), { name: newName });
+                toast({ title: `${target === 'category' ? 'Ober' : 'Unter'}gruppe aktualisiert` });
+
+            } else { // action === 'delete'
+                if (!getTargetId()) {
+                    toast({ variant: 'destructive', title: 'Auswahl fehlt' });
+                    return;
+                }
+                 const collectionName = target === 'category' ? 'group_categories' : 'groups';
+                await deleteDoc(doc(firestore, collectionName, getTargetId()));
+                if(target === 'category' && selectedCategoryId) {
+                     // Also delete subgroups
+                    const groupsToDelete = groups.filter(g => g.categoryId === selectedCategoryId);
+                    for(const group of groupsToDelete) {
+                        await deleteDoc(doc(firestore, 'groups', group.id));
+                    }
+                }
+                toast({ title: `${target === 'category' ? 'Ober' : 'Unter'}gruppe gelöscht` });
+            }
+            setNewName('');
+            setSelectedCategoryId('');
+            setSelectedGroupId('');
+        } catch (error) {
+            console.error(error);
+            toast({ variant: 'destructive', title: 'Ein Fehler ist aufgetreten' });
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+
+    return (
+        <Card>
+            <CardHeader>
+                <div className="flex justify-between items-start">
+                    <div>
+                        <CardTitle>Gruppen verwalten</CardTitle>
+                        <CardDescription>Füge neue Gruppen hinzu, bearbeite oder lösche bestehende.</CardDescription>
+                    </div>
+                    <Button variant="outline" onClick={onDone}>Schließen</Button>
+                </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Select value={action} onValueChange={(v: any) => setAction(v)}>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Aktion wählen..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="add">Hinzufügen</SelectItem>
+                            <SelectItem value="edit">Bearbeiten</SelectItem>
+                            <SelectItem value="delete">Löschen</SelectItem>
+                        </SelectContent>
+                    </Select>
+                     <Select value={target} onValueChange={(v: any) => setTarget(v)}>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Ziel wählen..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="category">Obergruppe</SelectItem>
+                            <SelectItem value="group">Untergruppe</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+                
+                { (action === 'add' && target === 'group') || (action !== 'add' && target === 'group') ? (
+                    <Select value={selectedCategoryId} onValueChange={setSelectedCategoryId}>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Obergruppe wählen..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {categories.map(cat => <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                ) : null }
+
+                {action !== 'add' && target === 'group' ? (
+                     <Select value={selectedGroupId} onValueChange={setSelectedGroupId}>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Untergruppe wählen..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                             {(groups || []).filter(g => g.categoryId === selectedCategoryId).map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                ) : null}
+
+                 {action !== 'add' && target === 'category' ? (
+                     <Select value={selectedCategoryId} onValueChange={setSelectedCategoryId}>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Obergruppe wählen..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {categories.map(cat => <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                ) : null}
+
+                { action !== 'delete' && (
+                    <Input
+                        placeholder="Name für neues Element..."
+                        value={newName}
+                        onChange={(e) => setNewName(e.target.value)}
+                    />
+                )}
+
+                <div className="flex justify-end">
+                    <Button onClick={handleExecute} disabled={isSubmitting}>
+                        {isSubmitting ? <Loader2 className="animate-spin" /> : 'Aktion ausführen'}
+                    </Button>
+                </div>
+            </CardContent>
+        </Card>
+    );
+}
+
 export default function GruppenPage() {
   const firestore = useFirestore();
+  const { toast } = useToast();
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
 
   const categoriesQuery = useMemoFirebase(() => {
     if (!firestore) return null;
@@ -58,8 +252,17 @@ export default function GruppenPage() {
       );
     }
     
+    if (isEditing) {
+        return <ManageGroupsForm categories={categories || []} groups={groups || []} onDone={() => setIsEditing(false)} />;
+    }
+    
     if (!categories || categories.length === 0) {
-        return <p className="p-4 text-muted-foreground">Keine Gruppenkategorien gefunden.</p>
+        return (
+            <div className="text-center p-8">
+                <p className="p-4 text-muted-foreground">Keine Gruppenkategorien gefunden.</p>
+                <Button onClick={() => setIsEditing(true)}>Jetzt erstellen</Button>
+            </div>
+        );
     }
 
     return (
@@ -117,7 +320,7 @@ export default function GruppenPage() {
         <div className="mx-auto max-w-6xl">
           <div className="flex items-center justify-between mb-8">
             <h1 className="text-3xl font-bold">Gruppen</h1>
-            <Button variant="outline">Gruppe bearbeiten</Button>
+            {!isEditing && <Button variant="outline" onClick={() => setIsEditing(true)}>Gruppe bearbeiten</Button>}
           </div>
           {renderContent()}
         </div>
@@ -125,5 +328,3 @@ export default function GruppenPage() {
     </div>
   );
 }
-
-    
