@@ -219,6 +219,11 @@ export default function GruppenPage() {
   const { toast } = useToast();
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   const categoriesQuery = useMemoFirebase(() => {
     if (!firestore) return null;
@@ -244,7 +249,7 @@ export default function GruppenPage() {
   const filteredGroups = groups?.filter(g => g.categoryId === selectedCategoryId);
 
   const renderContent = () => {
-    if (categoriesLoading || groupsLoading) {
+    if (!isClient || categoriesLoading || groupsLoading) {
       return (
         <div className="flex items-center justify-center p-8">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
