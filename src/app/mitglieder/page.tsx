@@ -70,7 +70,7 @@ export default function MitgliederPage() {
           <ShieldAlert className="h-12 w-12" />
           <div className="space-y-1">
              <p className="font-bold text-lg">Zugriff verweigert</p>
-             <p className="text-muted-foreground">Sie haben nicht die erforderlichen Berechtigungen, um diese Seite anzuzeigen.</p>
+             <p className="text-muted-foreground">Sie haben nicht die erforderlichen Administratorrechte, um diese Seite anzuzeigen.</p>
           </div>
         </div>
       );
@@ -125,7 +125,7 @@ export default function MitgliederPage() {
             <CardHeader>
               <CardTitle>Mitglieder</CardTitle>
               <CardDescription>
-                Eine Liste aller registrierten Mitglieder im System.
+                Eine Liste aller registrierten Mitglieder im System. Nur für Administratoren sichtbar.
               </CardDescription>
             </CardHeader>
             <CardContent>
