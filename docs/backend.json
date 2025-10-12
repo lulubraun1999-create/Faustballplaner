@@ -235,6 +235,40 @@
         "email",
         "registrationDate"
       ]
+    },
+    "GroupCategory": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "GroupCategory",
+      "type": "object",
+      "description": "Represents a category for groups.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the category."
+        },
+        "order": {
+          "type": "number",
+          "description": "The order in which to display the categories."
+        }
+      },
+      "required": ["name", "order"]
+    },
+    "Group": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Group",
+      "type": "object",
+      "description": "Represents a single group within a category.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the group."
+        },
+        "categoryId": {
+          "type": "string",
+          "description": "The ID of the category this group belongs to."
+        }
+      },
+      "required": ["name", "categoryId"]
     }
   },
   "auth": {
@@ -344,8 +378,29 @@
             }
           ]
         }
+      },
+      {
+        "path": "/group_categories/{categoryId}",
+        "definition": {
+          "entityName": "GroupCategory",
+          "schema": {
+            "$ref": "#/backend/entities/GroupCategory"
+          },
+          "description": "Collection of group categories."
+        }
+      },
+      {
+        "path": "/groups/{groupId}",
+        "definition": {
+          "entityName": "Group",
+          "schema": {
+            "$ref": "#/backend/entities/Group"
+          },
+          "description": "Collection of all groups."
+        }
       }
     ],
     "reasoning": "The Firestore data structure is designed to support the Werkself Hub application, focusing on news, match data, player information, AI-generated highlights, and a fan forum. The structure emphasizes authorization independence and efficient data retrieval.  \n\nAuthorization Independence is achieved by avoiding `get()` calls in Firestore rules. For instance, user-specific forum posts are stored under the `/users/{userId}/forum_posts/{postId}` path, making ownership explicit and verifiable without needing to access parent document data.  Similarly, although HighlightReels have a relationship to Matches, they are stored under a separate collection `/highlight_reels/{highlightReelId}` with the `matchId` denormalized, removing authorization dependencies based on match data.  The lack of any custom claims enforces DBAC. \n\nQAPs (Queries Are Permissions) are supported via Structural Segregation.  There is no mixing of secured and public data in any collection. For instance, forum posts are accessible only to authenticated users (or potentially publicly, depending on desired configuration), and sensitive user data (if any beyond the auth record) would be kept in `/users/{userId}` which uses path-based authorization, ensuring only the user can access their own data.\n\nThe structure favors path-based ownership (`/users/{userId}/forum_posts/{postId}`) for user-generated content and dedicated collections (e.g., `/news_articles`, `/matches`, `/players`) for global data. Global data is assumed to be read-only for most users, with administrative access controlled at the application level. In the future, if access controls are required for global data, a membership map could be used to control access, with appropriate denormalization."
   }
 }
+    
