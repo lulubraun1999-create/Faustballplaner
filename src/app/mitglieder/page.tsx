@@ -1,6 +1,6 @@
 'use client';
 
-import { collection, Timestamp } from 'firebase/firestore';
+import { collection, Timestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { useFirestore, useCollection, useMemoFirebase, useUser } from '@/firebase';
 import { Header } from '@/components/header';
 import {
@@ -16,7 +16,36 @@ import { Loader2, ShieldAlert, Edit, Shield, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogClose,
+} from "@/components/ui/dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useToast } from '@/hooks/use-toast';
+import { Label } from '@/components/ui/label';
 
 interface User {
   id: string;
@@ -54,6 +83,16 @@ const formatPosition = (position?: { abwehr: boolean; zuspiel: boolean; angriff:
 export default function MitgliederPage() {
   const firestore = useFirestore();
   const { user: currentUser, isUserLoading } = useUser();
+  const { toast } = useToast();
+  
+  const [actionUser, setActionUser] = useState<User | null>(null);
+  const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
+  const [isRoleDialogOpen, setIsRoleDialogOpen] = useState(false);
+  const [isTeamDialogOpen, setIsTeamDialogOpen] = useState(false);
+  const [selectedRole, setSelectedRole] = useState<boolean | undefined>(undefined);
+  const [selectedTeam, setSelectedTeam] = useState<string | undefined>(undefined);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
 
   const usersCollectionRef = useMemoFirebase(() => {
     if (!firestore) return null;
@@ -71,7 +110,7 @@ export default function MitgliederPage() {
   const isLoading = usersLoading || teamsLoading || isUserLoading;
   const error = usersError || teamsError;
 
-  const teamsMap = useMemoFirebase(() => {
+  const teamsMap = useMemo(() => {
     if (!teams) return new Map();
     return new Map(teams.map(team => [team.id, team.name]));
   }, [teams]);
@@ -82,6 +121,71 @@ export default function MitgliederPage() {
   }, [currentUser, users]);
 
   const isAdmin = currentUserData?.adminRechte === true;
+  
+  // Action handlers
+  const openDeleteAlert = (user: User) => {
+    setActionUser(user);
+    setIsDeleteAlertOpen(true);
+  };
+  
+  const openRoleDialog = (user: User) => {
+    setActionUser(user);
+    setSelectedRole(user.adminRechte);
+    setIsRoleDialogOpen(true);
+  };
+  
+  const openTeamDialog = (user: User) => {
+    setActionUser(user);
+    setSelectedTeam(user.teamId);
+    setIsTeamDialogOpen(true);
+  };
+  
+  const handleDeleteUser = async () => {
+    if (!actionUser || !firestore) return;
+    setIsSubmitting(true);
+    try {
+        await deleteDoc(doc(firestore, 'users', actionUser.id));
+        toast({ title: 'Benutzer gelöscht', description: 'Das Benutzerkonto wurde erfolgreich entfernt.' });
+        setIsDeleteAlertOpen(false);
+        setActionUser(null);
+    } catch (err: any) {
+        toast({ variant: 'destructive', title: 'Fehler beim Löschen', description: err.message });
+    } finally {
+        setIsSubmitting(false);
+    }
+  };
+  
+  const handleUpdateRole = async () => {
+    if (actionUser === null || selectedRole === undefined || !firestore) return;
+    setIsSubmitting(true);
+    try {
+        const userDocRef = doc(firestore, 'users', actionUser.id);
+        await updateDoc(userDocRef, { adminRechte: selectedRole });
+        toast({ title: 'Rolle aktualisiert', description: 'Die Rolle des Benutzers wurde erfolgreich geändert.' });
+        setIsRoleDialogOpen(false);
+        setActionUser(null);
+    } catch (err: any) {
+        toast({ variant: 'destructive', title: 'Fehler bei Rollenänderung', description: err.message });
+    } finally {
+        setIsSubmitting(false);
+    }
+  };
+  
+  const handleUpdateTeam = async () => {
+    if (!actionUser || selectedTeam === undefined || !firestore) return;
+     setIsSubmitting(true);
+    try {
+        const userDocRef = doc(firestore, 'users', actionUser.id);
+        await updateDoc(userDocRef, { teamId: selectedTeam });
+        toast({ title: 'Mannschaft aktualisiert', description: 'Die Mannschaft des Benutzers wurde erfolgreich geändert.' });
+        setIsTeamDialogOpen(false);
+        setActionUser(null);
+    } catch (err: any) {
+        toast({ variant: 'destructive', title: 'Fehler bei Mannschaftsänderung', description: err.message });
+    } finally {
+        setIsSubmitting(false);
+    }
+  };
 
 
   const renderContent = () => {
@@ -146,9 +250,9 @@ export default function MitgliederPage() {
                 {isAdmin && (
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                        <button className="p-1 hover:text-primary transition-colors"><Edit className="h-4 w-4" /></button>
-                        <button className="p-1 hover:text-primary transition-colors"><Shield className="h-4 w-4" /></button>
-                        <button className="p-1 hover:text-destructive transition-colors"><Trash2 className="h-4 w-4" /></button>
+                        <Button variant="ghost" size="icon" onClick={() => openTeamDialog(user)}><Edit className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => openRoleDialog(user)}><Shield className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="icon" className="hover:bg-destructive/10 hover:text-destructive" onClick={() => openDeleteAlert(user)}><Trash2 className="h-4 w-4" /></Button>
                     </div>
                   </TableCell>
                 )}
@@ -180,6 +284,92 @@ export default function MitgliederPage() {
           </Card>
         </div>
       </main>
+      
+      {/* Dialogs and Alerts */}
+      <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sind Sie absolut sicher?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Diese Aktion kann nicht rückgängig gemacht werden. Dadurch wird das Benutzerkonto
+              ({actionUser?.vorname} {actionUser?.nachname}) dauerhaft gelöscht.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isSubmitting}>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteUser} disabled={isSubmitting} className="bg-destructive hover:bg-destructive/90">
+              {isSubmitting ? <Loader2 className="animate-spin" /> : 'Ja, löschen'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      
+      <Dialog open={isRoleDialogOpen} onOpenChange={setIsRoleDialogOpen}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle>Rolle bearbeiten</DialogTitle>
+                <DialogDescription>
+                    Ändern Sie die Rolle für {actionUser?.vorname} {actionUser?.nachname}.
+                </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="role-select" className="text-right">Rolle</Label>
+                    <Select
+                        value={selectedRole ? 'admin' : 'user'}
+                        onValueChange={(value) => setSelectedRole(value === 'admin')}
+                    >
+                        <SelectTrigger id="role-select" className="col-span-3">
+                            <SelectValue placeholder="Rolle auswählen" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="user">Benutzer</SelectItem>
+                            <SelectItem value="admin">Admin</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+            </div>
+            <DialogFooter>
+                <DialogClose asChild><Button type="button" variant="outline" disabled={isSubmitting}>Abbrechen</Button></DialogClose>
+                <Button onClick={handleUpdateRole} disabled={isSubmitting}>
+                   {isSubmitting ? <Loader2 className="animate-spin" /> : 'Speichern'}
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      <Dialog open={isTeamDialogOpen} onOpenChange={setIsTeamDialogOpen}>
+          <DialogContent>
+               <DialogHeader>
+                    <DialogTitle>Mannschaft bearbeiten</DialogTitle>
+                    <DialogDescription>
+                        Wählen Sie eine neue Mannschaft für {actionUser?.vorname} {actionUser?.nachname}.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="grid grid-cols-4 items-center gap-4">
+                      <Label htmlFor="team-select" className="text-right">Mannschaft</Label>
+                       <Select value={selectedTeam} onValueChange={setSelectedTeam}>
+                           <SelectTrigger id="team-select" className="col-span-3">
+                               <SelectValue placeholder="Mannschaft auswählen" />
+                           </SelectTrigger>
+                           <SelectContent>
+                               {teams?.map(team => (
+                                   <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
+                               ))}
+                           </SelectContent>
+                       </Select>
+                  </div>
+                </div>
+                <DialogFooter>
+                    <DialogClose asChild><Button type="button" variant="outline" disabled={isSubmitting}>Abbrechen</Button></DialogClose>
+                    <Button onClick={handleUpdateTeam} disabled={isSubmitting}>
+                        {isSubmitting ? <Loader2 className="animate-spin" /> : 'Speichern'}
+                    </Button>
+                </DialogFooter>
+          </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
