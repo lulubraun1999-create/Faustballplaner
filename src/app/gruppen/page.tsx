@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -38,10 +38,13 @@ export default function GruppenPage() {
 
   const { data: categories, isLoading: categoriesLoading } = useCollection<GroupCategory>(categoriesQuery);
   const { data: groups, isLoading: groupsLoading } = useCollection<Group>(groupsQuery);
+  
+  useEffect(() => {
+    if (categories && categories.length > 0 && !selectedCategoryId) {
+      setSelectedCategoryId(categories[0].id);
+    }
+  }, [categories, selectedCategoryId]);
 
-  if (categories && !selectedCategoryId) {
-    setSelectedCategoryId(categories[0]?.id);
-  }
 
   const selectedCategory = categories?.find(c => c.id === selectedCategoryId);
   const filteredGroups = groups?.filter(g => g.categoryId === selectedCategoryId);
