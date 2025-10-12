@@ -1,35 +1,44 @@
 /**
- * @fileoverview Firestore Security Rules for Werkself Hub.
+ * @file Firestore Security Rules for Werkself Hub.
  *
- * Core Philosophy:
- * This ruleset enforces a user-ownership model for user-generated content (forum posts)
- * and assumes that other data (news, matches, players) is managed by the application.
- * User data is private and only accessible to the user themselves.
+ * @description This ruleset enforces a security model focused on authorization independence
+ * and efficient data retrieval for the Werkself Hub application. It avoids `get()` calls
+ * in rules and relies on path-based ownership and structural segregation to ensure secure access.
  *
  * Data Structure:
- * - /news_articles/{newsArticleId}: Public news articles.
- * - /matches/{matchId}: Public match data.
- * - /players/{playerId}: Public player information.
- * - /highlight_reels/{highlightReelId}: Public highlight reels.
- * - /users/{userId}: User profiles, accessible only to the user.
- * - /users/{userId}/forum_posts/{postId}: Forum posts created by a specific user.
+ * - Global data (news, matches, players, highlight reels) is stored in top-level collections
+ *   and is publicly readable. Writes to these collections are implicitly restricted as
+ *   there is no role based access control setup.
+ * - User-specific data (forum posts, user profiles) is stored under `/users/{userId}/...`
+ *   and is accessible only to the authenticated user.
+ * - Denormalized user information is available in `/members/{memberId}` and `/group_members/{memberId}`
+ *   for efficient querying and lookups.
  *
  * Key Security Decisions:
- * - Global data (news, matches, players, highlight reels) is publicly readable.
- * - User listing is not allowed.
- * - User-generated content (forum posts) is owned by the user and stored under their profile.
- * - The rules do not enforce any data validation beyond authorization.
+ * - Public read access is granted to global data collections (`/news_articles`, `/matches`,
+ *   `/players`, `/highlight_reels`).
+ * - Strict user-ownership is enforced for data under `/users/{userId}`.
+ * - Data in `/members/{memberId}` and `/group_members/{memberId}` is assumed to be managed
+ *   by backend processes and not directly writable by users.
+ * - There is no role-based access control or admin user roles defined, all access is owner based.
+ *
+ * Denormalization for Authorization:
+ * - The `matchId` is denormalized into the `HighlightReel` documents to avoid `get()` calls
+ *   when querying highlight reels for a specific match.
+ *
+ * Structural Segregation:
+ * - User-specific data is stored under `/users/{userId}` to ensure that only the user can access it.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Allows anyone to read news articles. Writes are not allowed.
+     * @description Grants public read access to news articles and restricts write access.
      * @path /news_articles/{newsArticleId}
      * @allow get, list: if true;
      * @deny create, update, delete: if false;
-     * @principle Public read, no writes allowed.
+     * @principle Allows public reading of news articles, but restricts writes.
      */
     match /news_articles/{newsArticleId} {
       allow get, list: if true;
@@ -37,11 +46,11 @@ service cloud.firestore {
     }
 
     /**
-     * @description Allows anyone to read match data. Writes are not allowed.
+     * @description Grants public read access to match data and restricts write access.
      * @path /matches/{matchId}
      * @allow get, list: if true;
      * @deny create, update, delete: if false;
-     * @principle Public read, no writes allowed.
+     * @principle Allows public reading of match data, but restricts writes.
      */
     match /matches/{matchId} {
       allow get, list: if true;
@@ -49,11 +58,11 @@ service cloud.firestore {
     }
 
     /**
-     * @description Allows anyone to read player data. Writes are not allowed.
+     * @description Grants public read access to player data and restricts write access.
      * @path /players/{playerId}
      * @allow get, list: if true;
      * @deny create, update, delete: if false;
-     * @principle Public read, no writes allowed.
+     * @principle Allows public reading of player data, but restricts writes.
      */
     match /players/{playerId} {
       allow get, list: if true;
@@ -61,11 +70,11 @@ service cloud.firestore {
     }
 
     /**
-     * @description Allows anyone to read highlight reels. Writes are not allowed.
+     * @description Grants public read access to highlight reels and restricts write access.
      * @path /highlight_reels/{highlightReelId}
      * @allow get, list: if true;
      * @deny create, update, delete: if false;
-     * @principle Public read, no writes allowed.
+     * @principle Allows public reading of highlight reels, but restricts writes.
      */
     match /highlight_reels/{highlightReelId} {
       allow get, list: if true;
@@ -73,103 +82,97 @@ service cloud.firestore {
     }
 
     /**
-     * @description Allows a user to read and write their own forum posts.
+     * @description Enforces user-ownership for forum posts.
      * @path /users/{userId}/forum_posts/{postId}
-     * @allow create: if isSignedIn() && request.auth.uid == userId;
+     * @allow create: if request.auth.uid == userId;
      * @allow get, list: if isOwner(userId);
      * @allow update: if isExistingOwner(userId);
      * @allow delete: if isExistingOwner(userId);
-     * @deny create: if !isSignedIn() || request.auth.uid != userId;
-     * @deny update: if !(isSignedIn() && resource.data.userId == userId);
-     * @deny delete: if !(isSignedIn() && resource.data.userId == userId);
-     * @principle Enforces user-ownership for forum posts.
+     * @principle Enforces document ownership for all forum post writes.
      */
     match /users/{userId}/forum_posts/{postId} {
       allow get, list: if isOwner(userId);
-      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && isCreatingOwnedByUser(userId);
       allow update: if isExistingOwner(userId);
       allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Allows a user to read and write their own profile data.
+     * @description Enforces user-ownership for user profiles. Allows a user to create their own profile.
      * @path /users/{userId}
+     * @allow create: if request.auth.uid == userId;
      * @allow get: if isOwner(userId);
-     * @allow create: if isSignedIn() && request.auth.uid == userId;
      * @allow update: if isExistingOwner(userId);
      * @allow delete: if isExistingOwner(userId);
-     * @deny list: if false;
-     * @deny create: if !isSignedIn() || request.auth.uid != userId;
-     * @deny update: if !(isSignedIn() && resource.data.id == userId);
-     * @deny delete: if !(isSignedIn() && resource.data.id == userId);
-     * @principle Enforces user-ownership for profile data.
+     * @principle Enforces document ownership for all user profile operations.
      */
     match /users/{userId} {
       allow get: if isOwner(userId);
-      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow list: if false;
+      allow create: if isSignedIn() && isCreatingOwnedByUser(userId);
       allow update: if isExistingOwner(userId);
       allow delete: if isExistingOwner(userId);
-      allow list: if false;
     }
 
     /**
-     * @description Allows anyone to read team categories. Writes are not allowed.
+     * @description Grants public read access to team categories and restricts write access.
      * @path /team_categories/{categoryId}
      * @allow get, list: if true;
      * @deny create, update, delete: if false;
-     * @principle Public read, no writes allowed.
+     * @principle Allows public reading of team categories, but restricts writes.
      */
     match /team_categories/{categoryId} {
-        allow get, list: if true;
-        allow create, update, delete: if false;
+      allow get, list: if true;
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Allows anyone to read team data. Writes are not allowed.
+     * @description Grants public read access to teams and restricts write access.
      * @path /teams/{teamId}
      * @allow get, list: if true;
      * @deny create, update, delete: if false;
-     * @principle Public read, no writes allowed.
+     * @principle Allows public reading of teams, but restricts writes.
      */
     match /teams/{teamId} {
-        allow get, list: if true;
-        allow create, update, delete: if false;
+      allow get, list: if true;
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Allows anyone to read member data. Writes are not allowed.
+     * @description Restricts access to members collection. Data is assumed to be managed by backend.
      * @path /members/{memberId}
-     * @allow get, list: if true;
-     * @deny create, update, delete: if false;
-     * @principle Public read, no writes allowed.
+     * @deny get, list, create, update, delete: if true;
+     * @principle Only backend processes can manage denormalized user data.
      */
-     match /members/{memberId} {
-        allow get, list: if true;
-        allow create, update, delete: if false;
+    match /members/{memberId} {
+      allow get, list, create, update, delete: if false;
     }
 
-    /**
-     * @description Allows anyone to read group member data. Writes are not allowed.
-     * @path /group_members/{memberId}
-     * @allow get, list: if true;
-     * @deny create, update, delete: if false;
-     * @principle Public read, no writes allowed.
-     */
-     match /group_members/{memberId} {
-        allow get, list: if true;
-        allow create, update, delete: if false;
+     /**
+      * @description Restricts access to group members collection. Data is assumed to be managed by backend.
+      * @path /group_members/{memberId}
+      * @deny get, list, create, update, delete: if true;
+      * @principle Only backend processes can manage denormalized group member data.
+      */
+    match /group_members/{memberId} {
+      allow get, list, create, update, delete: if false;
     }
 
+    // Helper functions
     function isSignedIn() {
       return request.auth != null;
     }
 
     function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+      return request.auth.uid == userId;
+    }
+
+    function isCreatingOwnedByUser(userId) {
+        return isSignedIn() && request.auth.uid == userId;
     }
 
     function isExistingOwner(userId) {
-      return isOwner(userId) && resource != null;
+      return isSignedIn() && isOwner(userId) && resource != null;
     }
   }
 }
