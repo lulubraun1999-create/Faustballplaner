@@ -56,7 +56,9 @@ export function Header() {
               <ChevronDown className="h-4 w-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent>
-              <DropdownMenuItem>Gruppen</DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/gruppen">Gruppen</Link>
+              </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link href="/mitglieder">Mitglieder</Link>
               </DropdownMenuItem>
