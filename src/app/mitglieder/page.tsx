@@ -1,6 +1,6 @@
 'use client';
 
-import { collection, Timestamp, doc, updateDoc, deleteDoc, setDoc } from 'firebase/firestore';
+import { collection, Timestamp, doc, updateDoc, deleteDoc, setDoc, query, orderBy } from 'firebase/firestore';
 import { useFirestore, useCollection, useMemoFirebase, useUser } from '@/firebase';
 import { Header } from '@/components/header';
 import {
@@ -47,6 +47,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 
 interface User {
@@ -68,9 +69,16 @@ interface User {
   geschlecht?: string;
 }
 
+interface TeamCategory {
+  id: string;
+  name: string;
+  order: number;
+}
+
 interface Team {
-    id: string;
-    name: string;
+  id: string;
+  name: string;
+  categoryId: string;
 }
 
 const formatPosition = (position?: { abwehr: boolean; zuspiel: boolean; angriff: boolean; }) => {
@@ -106,11 +114,18 @@ export default function MitgliederPage() {
     return collection(firestore, 'teams');
   }, [firestore]);
 
+  const categoriesQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'team_categories'), orderBy('order'));
+  }, [firestore]);
+
   const { data: users, isLoading: usersLoading, error: usersError } = useCollection<User>(usersCollectionRef);
   const { data: teams, isLoading: teamsLoading, error: teamsError } = useCollection<Team>(teamsCollectionRef);
+  const { data: categories, isLoading: categoriesLoading, error: categoriesError } = useCollection<TeamCategory>(categoriesQuery);
+
   
-  const isLoading = usersLoading || teamsLoading || isUserLoading;
-  const error = usersError || teamsError;
+  const isLoading = usersLoading || teamsLoading || isUserLoading || categoriesLoading;
+  const error = usersError || teamsError || categoriesError;
 
   const teamsMap = useMemo(() => {
     if (!teams) return new Map();
@@ -123,6 +138,14 @@ export default function MitgliederPage() {
   }, [currentUser, users]);
 
   const isAdmin = currentUserData?.adminRechte === true;
+  
+  const groupedTeams = useMemo(() => {
+    if (!categories || !teams) return [];
+    return categories.map(category => ({
+      ...category,
+      teams: teams.filter(team => team.categoryId === category.id)
+    }));
+  }, [categories, teams]);
   
   // Action handlers
   const openDeleteAlert = (user: User) => {
@@ -186,6 +209,7 @@ export default function MitgliederPage() {
         if(userToSync) {
             const fullMemberData = {
                 ...userToSync,
+                id: userToSync.id,
                 teamIds: selectedTeamIds, // use updated teamIds
             };
 
@@ -204,7 +228,7 @@ export default function MitgliederPage() {
         setIsTeamDialogOpen(false);
         setActionUser(null);
     } catch (err: any) {
-        toast({ variant: 'destructive', title: 'Fehler bei Mannschaftsänderung', description: err.message });
+        toast({ variant: 'destructive', title: 'Fehler bei Mannschaftsänderung', description: err.message || 'Ein unbekannter Fehler ist aufgetreten.' });
     } finally {
         setIsSubmitting(false);
     }
@@ -369,26 +393,33 @@ export default function MitgliederPage() {
                         Wählen Sie die Mannschaften für {actionUser?.vorname} {actionUser?.nachname}.
                     </DialogDescription>
                 </DialogHeader>
-                <div className="grid gap-4 py-4">
-                  <div className="space-y-2">
-                      <Label>Mannschaften</Label>
-                      <div className="space-y-2 rounded-md border p-4 max-h-60 overflow-y-auto">
-                        {teams?.map(team => (
-                            <div key={team.id} className="flex items-center gap-2">
-                                <Checkbox
-                                    id={`team-${team.id}`}
-                                    checked={selectedTeamIds.includes(team.id)}
-                                    onCheckedChange={(checked) => {
-                                        return checked
-                                            ? setSelectedTeamIds([...selectedTeamIds, team.id])
-                                            : setSelectedTeamIds(selectedTeamIds.filter(id => id !== team.id))
-                                    }}
-                                />
-                                <Label htmlFor={`team-${team.id}`} className="font-normal">{team.name}</Label>
+                <div className="py-4">
+                    <Label>Mannschaften</Label>
+                    <ScrollArea className="h-60 mt-2 rounded-md border p-4">
+                      <div className="space-y-4">
+                        {groupedTeams.map(category => (
+                          <div key={category.id}>
+                            <Label className="font-semibold text-base">{category.name}</Label>
+                            <div className="space-y-2 mt-2 pl-2">
+                              {category.teams.map(team => (
+                                <div key={team.id} className="flex items-center gap-2">
+                                  <Checkbox
+                                      id={`team-${team.id}`}
+                                      checked={selectedTeamIds.includes(team.id)}
+                                      onCheckedChange={(checked) => {
+                                          return checked
+                                              ? setSelectedTeamIds([...selectedTeamIds, team.id])
+                                              : setSelectedTeamIds(selectedTeamIds.filter(id => id !== team.id))
+                                      }}
+                                  />
+                                  <Label htmlFor={`team-${team.id}`} className="font-normal">{team.name}</Label>
+                                </div>
+                              ))}
                             </div>
+                          </div>
                         ))}
                       </div>
-                  </div>
+                    </ScrollArea>
                 </div>
                 <DialogFooter>
                     <DialogClose asChild><Button type="button" variant="outline" disabled={isSubmitting}>Abbrechen</Button></DialogClose>
