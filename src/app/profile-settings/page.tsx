@@ -72,6 +72,7 @@ export default function ProfileSettingsPage() {
   const { toast } = useToast();
   const [isDeleting, setIsDeleting] = useState(false);
   const [isChangingEmail, setIsChangingEmail] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const userDocRef = useMemoFirebase(() => {
     if (!firestore || !user) return null;
@@ -225,12 +226,15 @@ export default function ProfileSettingsPage() {
       toast({ variant: 'destructive', title: 'Fehler', description: 'Benutzer nicht authentifiziert.' });
       return;
     }
+    setIsSubmitting(true);
     try {
       const userDocRef = doc(firestore, "users", user.uid);
       await setDoc(userDocRef, values, { merge: true });
       toast({ title: 'Erfolg', description: 'Ihre Daten wurden erfolgreich gespeichert.' });
     } catch (error) {
       toast({ variant: 'destructive', title: 'Fehler', description: 'Beim Speichern Ihrer Daten ist ein Fehler aufgetreten.' });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -519,8 +523,8 @@ export default function ProfileSettingsPage() {
                                 </div>
                             </div>
                             <div>
-                                <Button type="submit" disabled={form.formState.isSubmitting}>
-                                  {form.formState.isSubmitting ? <Loader2 className="animate-spin"/> : 'Speichern'}
+                                <Button type="submit" disabled={isSubmitting}>
+                                  {isSubmitting ? <Loader2 className="animate-spin"/> : 'Speichern'}
                                 </Button>
                             </div>
                         </CardContent>
