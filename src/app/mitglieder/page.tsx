@@ -2,7 +2,7 @@
 'use client';
 
 import { collection } from 'firebase/firestore';
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { useFirestore, useCollection, useMemoFirebase, useUser } from '@/firebase';
 import { Header } from '@/components/header';
 import {
   Table,
@@ -13,7 +13,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ShieldAlert } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 interface User {
@@ -25,6 +25,7 @@ interface User {
 
 export default function MitgliederPage() {
   const firestore = useFirestore();
+  const { user: currentUser, isUserLoading } = useUser();
 
   const usersCollectionRef = useMemoFirebase(() => {
     if (!firestore) return null;
@@ -32,6 +33,60 @@ export default function MitgliederPage() {
   }, [firestore]);
 
   const { data: users, isLoading, error } = useCollection<User>(usersCollectionRef);
+
+  const renderContent = () => {
+    if (isLoading || isUserLoading) {
+      return (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="ml-2 text-muted-foreground">Mitglieder werden geladen...</p>
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <div className="text-center py-8 text-destructive flex flex-col items-center gap-4">
+          <ShieldAlert className="h-12 w-12" />
+          <div className="space-y-1">
+             <p className="font-bold text-lg">Zugriff verweigert</p>
+             <p className="text-muted-foreground">Sie haben nicht die erforderlichen Berechtigungen, um diese Seite anzuzeigen.</p>
+          </div>
+        </div>
+      );
+    }
+    
+    if (users) {
+      return (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>E-Mail</TableHead>
+              <TableHead>Rolle</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {users.map((user) => (
+              <TableRow key={user.id}>
+                <TableCell className="font-medium">{user.name}</TableCell>
+                <TableCell>{user.email}</TableCell>
+                <TableCell>
+                  {user.adminRechte ? (
+                    <Badge>Admin</Badge>
+                  ) : (
+                    <Badge variant="secondary">Benutzer</Badge>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      );
+    }
+
+    return null;
+  };
 
   return (
     <div className="flex min-h-screen w-full flex-col bg-background">
@@ -46,43 +101,7 @@ export default function MitgliederPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {isLoading && (
-                 <div className="flex items-center justify-center py-8">
-                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                   <p className="ml-2 text-muted-foreground">Mitglieder werden geladen...</p>
-                 </div>
-              )}
-              {error && (
-                <div className="text-center py-8 text-destructive">
-                  Fehler beim Laden der Mitglieder: {error.message}
-                </div>
-              )}
-              {!isLoading && !error && users && (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>E-Mail</TableHead>
-                      <TableHead>Rolle</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {users.map((user) => (
-                      <TableRow key={user.id}>
-                        <TableCell className="font-medium">{user.name}</TableCell>
-                        <TableCell>{user.email}</TableCell>
-                        <TableCell>
-                          {user.adminRechte ? (
-                            <Badge>Admin</Badge>
-                          ) : (
-                            <Badge variant="secondary">Benutzer</Badge>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
+              {renderContent()}
             </CardContent>
           </Card>
         </div>
