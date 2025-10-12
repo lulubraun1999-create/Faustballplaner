@@ -234,7 +234,7 @@ function ProfileForm({ defaultValues, userData }: { defaultValues: ProfileFormVa
                     >
                       <FormItem className="flex items-center space-x-3 space-y-0">
                         <FormControl>
-                          <RadioGroupItem value="männlich" />
+                          <RadioGroupItem value="Männlich" />
                         </FormControl>
                         <FormLabel className="font-normal">
                           Männlich
@@ -242,7 +242,7 @@ function ProfileForm({ defaultValues, userData }: { defaultValues: ProfileFormVa
                       </FormItem>
                       <FormItem className="flex items-center space-x-3 space-y-0">
                         <FormControl>
-                          <RadioGroupItem value="weiblich" />
+                          <RadioGroupItem value="Weiblich" />
                         </FormControl>
                         <FormLabel className="font-normal">
                           Weiblich
@@ -250,9 +250,15 @@ function ProfileForm({ defaultValues, userData }: { defaultValues: ProfileFormVa
                       </FormItem>
                       <FormItem className="flex items-center space-x-3 space-y-0">
                         <FormControl>
-                          <RadioGroupItem value="divers" />
+                          <RadioGroupItem value="Divers (Herrenteam)" />
                         </FormControl>
-                        <FormLabel className="font-normal">Divers</FormLabel>
+                        <FormLabel className="font-normal">Divers (Herrenteam)</FormLabel>
+                      </FormItem>
+                      <FormItem className="flex items-center space-x-3 space-y-0">
+                        <FormControl>
+                          <RadioGroupItem value="Divers (Damenteam)" />
+                        </FormControl>
+                        <FormLabel className="font-normal">Divers (Damenteam)</FormLabel>
                       </FormItem>
                     </RadioGroup>
                   </FormControl>
