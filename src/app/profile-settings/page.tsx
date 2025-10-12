@@ -82,16 +82,14 @@ export default function ProfileSettingsPage() {
 
   const form = useForm<z.infer<typeof profileSchema>>({
     resolver: zodResolver(profileSchema),
+    // Use the loaded userData to set defaultValues directly.
+    // This ensures the form is initialized with the correct data from the start.
     defaultValues: {
       vorname: '',
       nachname: '',
       telefon: '',
       wohnort: '',
-      position: {
-        abwehr: false,
-        zuspiel: false,
-        angriff: false,
-      },
+      position: { abwehr: false, zuspiel: false, angriff: false },
       geschlecht: '',
       geburtstag: undefined,
     },
@@ -104,6 +102,8 @@ export default function ProfileSettingsPage() {
     },
   });
 
+  // This useEffect now only serves to *reset* the form if the user data changes,
+  // which is more robust.
   useEffect(() => {
     if (userData) {
       form.reset({
@@ -116,7 +116,7 @@ export default function ProfileSettingsPage() {
         geburtstag: userData.geburtstag?.toDate() || undefined,
       });
     }
-  }, [userData, form]);
+  }, [userData, form.reset]);
   
   const handleLogout = async () => {
     if(auth) {
@@ -463,7 +463,7 @@ export default function ProfileSettingsPage() {
                                     render={({ field }) => (
                                         <FormItem className="space-y-2">
                                         <FormLabel>Geschlecht</FormLabel>
-                                        <Select onValueChange={field.onChange} value={field.value}>
+                                        <Select onValueChange={field.onChange} value={field.value || ''}>
                                             <FormControl>
                                                 <SelectTrigger>
                                                     <SelectValue placeholder="Geschlecht wählen" />
