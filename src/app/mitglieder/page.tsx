@@ -93,7 +93,7 @@ export default function MitgliederPage() {
           <TableBody>
             {users.map((user) => (
               <TableRow key={user.id}>
-                <TableCell className="font-medium">{user.name || `${user.vorname} ${user.nachname}`}</TableCell>
+                <TableCell className="font-medium">{user.name || `${user.vorname || ''} ${user.nachname || ''}`.trim()}</TableCell>
                 <TableCell>{formatPosition(user.position)}</TableCell>
                 <TableCell>
                   {user.adminRechte ? (
@@ -103,7 +103,7 @@ export default function MitgliederPage() {
                   )}
                 </TableCell>
                 <TableCell>{user.geburtstag ? format(user.geburtstag.toDate(), 'dd.MM.yyyy', { locale: de }) : 'N/A'}</TableCell>
-                <TableCell>{user.email}</TableCell>
+                <TableCell>{user.email || 'N/A'}</TableCell>
                 <TableCell>{user.telefon || 'N/A'}</TableCell>
                 <TableCell>{user.wohnort || 'N/A'}</TableCell>
               </TableRow>
