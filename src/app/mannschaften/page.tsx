@@ -377,16 +377,18 @@ export default function MannschaftenPage() {
                 </CardHeader>
                 <CardContent>
                     {filteredMembers && filteredMembers.length > 0 ? (
-                        <div className="flex flex-col gap-2">
-                            {filteredMembers.map(member => {
+                        <div className="flex flex-col">
+                            {filteredMembers.map((member, index) => {
                                 const positionText = formatPosition(member.position);
                                 const roleText = member.adminRechte ? ", Trainer" : "";
                                 return (
-                                    <p key={member.id}>
-                                        {`${member.vorname} ${member.nachname}`}
-                                        {positionText && ` - ${positionText}`}
-                                        {roleText}
-                                    </p>
+                                    <div key={member.id} className={cn("py-2", index < filteredMembers.length - 1 && "border-b")}>
+                                        <p>
+                                            {`${member.vorname} ${member.nachname}`}
+                                            {positionText && ` - ${positionText}`}
+                                            {roleText}
+                                        </p>
+                                    </div>
                                 );
                             })}
                         </div>
