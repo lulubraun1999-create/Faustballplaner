@@ -57,7 +57,9 @@ export function Header() {
             </DropdownMenuTrigger>
             <DropdownMenuContent>
               <DropdownMenuItem>Gruppen</DropdownMenuItem>
-              <DropdownMenuItem>Mitglieder</DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/mitglieder">Mitglieder</Link>
+              </DropdownMenuItem>
               <DropdownMenuItem>News</DropdownMenuItem>
               <DropdownMenuItem>Umfragen</DropdownMenuItem>
               <DropdownMenuItem>Termine</DropdownMenuItem>
