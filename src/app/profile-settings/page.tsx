@@ -82,17 +82,15 @@ export default function ProfileSettingsPage() {
 
   const form = useForm<z.infer<typeof profileSchema>>({
     resolver: zodResolver(profileSchema),
-    // Use the loaded userData to set defaultValues directly.
-    // This ensures the form is initialized with the correct data from the start.
-    defaultValues: {
-      vorname: '',
-      nachname: '',
-      telefon: '',
-      wohnort: '',
-      position: { abwehr: false, zuspiel: false, angriff: false },
-      geschlecht: '',
-      geburtstag: undefined,
-    },
+    values: {
+      vorname: userData?.vorname || '',
+      nachname: userData?.nachname || '',
+      telefon: userData?.telefon || '',
+      wohnort: userData?.wohnort || '',
+      position: userData?.position || { abwehr: false, zuspiel: false, angriff: false },
+      geschlecht: userData?.geschlecht || '',
+      geburtstag: userData?.geburtstag?.toDate() || undefined,
+    }
   });
 
    const emailForm = useForm({
@@ -102,8 +100,6 @@ export default function ProfileSettingsPage() {
     },
   });
 
-  // This useEffect now only serves to *reset* the form if the user data changes,
-  // which is more robust.
   useEffect(() => {
     if (userData) {
       form.reset({
@@ -144,7 +140,6 @@ export default function ProfileSettingsPage() {
         description: "Bitte überprüfen Sie Ihr neues E-Mail-Postfach, um die Änderung zu bestätigen.",
       });
       emailForm.reset();
-      // Manually close dialog if possible/needed, depends on Dialog component structure
     } catch (error: any) {
       let description = 'Beim Senden der Bestätigungs-E-Mail ist ein Fehler aufgetreten.';
       if (error.code === 'auth/email-already-in-use') {
@@ -196,11 +191,9 @@ export default function ProfileSettingsPage() {
     setIsDeleting(true);
 
     try {
-      // First, delete the Firestore document
       const userDocRef = doc(firestore, 'users', user.uid);
       await deleteDoc(userDocRef);
 
-      // Then, delete the user from Firebase Auth
       if(auth.currentUser) {
         await deleteUser(auth.currentUser);
       }
@@ -215,7 +208,6 @@ export default function ProfileSettingsPage() {
     } catch (error: any) {
       setIsDeleting(false);
       let description = 'Beim Löschen Ihres Kontos ist ein Fehler aufgetreten.';
-      // This error often means the user needs to re-authenticate
       if (error.code === 'auth/requires-recent-login') {
         description = 'Diese Aktion erfordert eine erneute Anmeldung. Bitte melden Sie sich ab und wieder an, bevor Sie es erneut versuchen.';
       }
