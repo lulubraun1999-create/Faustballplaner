@@ -215,6 +215,7 @@ export default function MitgliederPage() {
             };
 
             const groupMemberData = {
+                id: userToSync.id,
                 vorname: userToSync.vorname,
                 position: userToSync.position,
                 adminRechte: userToSync.adminRechte,
