@@ -73,6 +73,7 @@ function ManageGroupsForm({ categories, groups, onDone }: { categories: GroupCat
             if (action === 'add') {
                 if (!newName) {
                     toast({ variant: 'destructive', title: 'Name fehlt', description: 'Bitte geben Sie einen Namen ein.' });
+                    setIsSubmitting(false);
                     return;
                 }
                 if (target === 'category') {
@@ -84,6 +85,7 @@ function ManageGroupsForm({ categories, groups, onDone }: { categories: GroupCat
                 } else { // target === 'group'
                     if (!selectedCategoryId) {
                         toast({ variant: 'destructive', title: 'Obergruppe fehlt', description: 'Bitte wählen Sie eine Obergruppe aus.' });
+                        setIsSubmitting(false);
                         return;
                     }
                     await addDoc(collection(firestore, 'groups'), {
@@ -95,6 +97,7 @@ function ManageGroupsForm({ categories, groups, onDone }: { categories: GroupCat
             } else if (action === 'edit') {
                  if (!newName || !getTargetId()) {
                     toast({ variant: 'destructive', title: 'Auswahl oder Name fehlt', description: 'Bitte wählen Sie ein Element aus und geben Sie einen neuen Namen an.' });
+                    setIsSubmitting(false);
                     return;
                  }
                 const collectionName = target === 'category' ? 'group_categories' : 'groups';
@@ -104,6 +107,7 @@ function ManageGroupsForm({ categories, groups, onDone }: { categories: GroupCat
             } else { // action === 'delete'
                 if (!getTargetId()) {
                     toast({ variant: 'destructive', title: 'Auswahl fehlt', description: 'Bitte wählen Sie ein Element zum Löschen aus.' });
+                    setIsSubmitting(false);
                     return;
                 }
                  const collectionName = target === 'category' ? 'group_categories' : 'groups';
@@ -117,9 +121,6 @@ function ManageGroupsForm({ categories, groups, onDone }: { categories: GroupCat
                 }
                 toast({ title: `${target === 'category' ? 'Ober' : 'Unter'}gruppe gelöscht` });
             }
-            setNewName('');
-            setSelectedCategoryId('');
-            setSelectedGroupId('');
         } catch (error: any) {
             console.error("Fehler bei der Aktion:", error);
             toast({ 
