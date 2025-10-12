@@ -1,145 +1,135 @@
 /**
- * @file Firestore Security Rules for Werkself Hub.
+ * @fileoverview Firestore Security Rules for Werkself Hub.
  *
- * @core_philosophy This ruleset enforces a strict user-ownership model for personal data
- *  (e.g., /users/{userId}) and assumes public read access for global data (e.g., news,
- *  matches, players). Write access to global data is not controlled at the rules level
- *  in this prototype.
+ * Core Philosophy:
+ * This ruleset prioritizes security by enforcing strict ownership and segregation of data.
+ * Path-based authorization is used extensively to avoid complex queries and ensure efficient access control.
  *
- * @data_structure
- *  - /news_articles/{newsArticleId}: Public news articles.
- *  - /matches/{matchId}: Public match data.
- *  - /players/{playerId}: Public player data.
- *  - /highlight_reels/{highlightReelId}: Public highlight reels with denormalized matchId.
- *  - /users/{userId}: User profiles, accessible only to the user.
- *  - /users/{userId}/forum_posts/{postId}: Forum posts owned by a specific user.
+ * Data Structure:
+ * - News articles, matches, players, and highlight reels are stored in top-level collections.
+ * - Forum posts are nested under `/users/{userId}/forum_posts/{postId}` to enforce user ownership.
+ * - User profiles are stored under `/users/{userId}` and are only accessible to the respective user.
  *
- * @key_security_decisions
- *  - Public read access for news, matches, players, and highlight reels.
- *  - Strict user ownership for user profiles and forum posts.
- *  - No user listing is allowed (to protect user privacy).
- *  - Write access to top-level collections is not secured (assumed to be handled externally).
- *  - No custom claims or role-based access control (DBAC is enforced).
+ * Key Security Decisions:
+ * - Public listing is enabled for news articles, matches, players, and highlight reels, assuming this data is public.
+ * - Forum posts are owned by the user and only accessible to that user.
+ * - User profiles are private and only accessible to the user.
+ * - No user listing is allowed.
  *
- * @denormalization_for_authorization
- *  - HighlightReels denormalize `matchId` to allow filtering without extra `get()` calls.
+ * Denormalization for Authorization:
+ * - The `matchId` is denormalized into the `HighlightReel` documents to avoid needing to query the `matches` collection to determine access.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Securely checks if the request is authenticated.
-     * @return {bool} True if the request is authenticated, false otherwise.
+     * @description Allows anyone to read news articles. Only allows administrators to create, update, or delete news articles.
+     * @path /news_articles/{newsArticleId}
+     * @allow (get, list)
+     * @deny (create, update, delete)
+     * @principle Allows public read access to news articles but restricts modifications to administrators.
      */
+    match /news_articles/{newsArticleId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+
+    /**
+     * @description Allows anyone to read match data. Only allows administrators to create, update, or delete match data.
+     * @path /matches/{matchId}
+     * @allow (get, list)
+     * @deny (create, update, delete)
+     * @principle Allows public read access to match data but restricts modifications to administrators.
+     */
+    match /matches/{matchId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+
+    /**
+     * @description Allows anyone to read player data. Only allows administrators to create, update, or delete player data.
+     * @path /players/{playerId}
+     * @allow (get, list)
+     * @deny (create, update, delete)
+     * @principle Allows public read access to player data but restricts modifications to administrators.
+     */
+    match /players/{playerId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+
+    /**
+     * @description Allows anyone to read highlight reels. Only allows administrators to create, update, or delete highlight reels.
+     * @path /highlight_reels/{highlightReelId}
+     * @allow (get, list)
+     * @deny (create, update, delete)
+     * @principle Allows public read access to highlight reels but restricts modifications to administrators.
+     */
+    match /highlight_reels/{highlightReelId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+
+    /**
+     * @description Allows a user to create, read, update, and delete their own forum posts.
+     * @path /users/{userId}/forum_posts/{postId}
+     * @allow (create, get, list, update, delete) User "ktsIeHZuenhgIdwo0jWzumfHHNm1" can create/read/update/delete forum posts under /users/ktsIeHZuenhgIdwo0jWzumfHHNm1/forum_posts/{postId}.
+     * @deny (create, get, list, update, delete) User "otherUserId" cannot create/read/update/delete forum posts under /users/ktsIeHZuenhgIdwo0jWzumfHHNm1/forum_posts/{postId}.
+     * @principle Enforces document ownership for forum posts using path-based authorization.
+     */
+    match /users/{userId}/forum_posts/{postId} {
+      allow read, list: if isSignedIn() && isOwner(userId);
+      allow create: if isSignedIn() && isOwner(userId);
+      allow update: if isSignedIn() && isOwner(userId) && resource != null;
+      allow delete: if isSignedIn() && isOwner(userId) && resource != null;
+    }
+
+    /**
+     * @description Allows a user to read and update their own user document. Allows a user to create their own user document if the user id in request matches the document id.
+     * @path /users/{userId}
+     * @allow (create, get, update, delete) User "ktsIeHZuenhgIdwo0jWzumfHHNm1" can create/read/update their own profile at /users/ktsIeHZuenhgIdwo0jWzumfHHNm1.
+     * @deny (create, get, update, delete) User "otherUserId" cannot create/read/update user profile at /users/ktsIeHZuenhgIdwo0jWzumfHHNm1.
+     * @principle Enforces document ownership for user profiles using path-based authorization.
+     */
+    match /users/{userId} {
+      allow get: if isSignedIn() && isOwner(userId);
+      allow list: if false;
+      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.id == userId;
+      allow update: if isSignedIn() && isOwner(userId) && resource != null && request.resource.data.id == userId;
+      allow delete: if false;
+    }
+
+    /**
+     * @description Allows anyone to read group categories. Only allows administrators to create, update, or delete group categories.
+     * @path /group_categories/{categoryId}
+     * @allow (get, list)
+     * @deny (create, update, delete)
+     * @principle Allows public read access to group categories but restricts modifications to administrators.
+     */
+    match /group_categories/{categoryId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+
+    /**
+     * @description Allows anyone to read groups. Only allows administrators to create, update, or delete groups.
+     * @path /groups/{groupId}
+     * @allow (get, list)
+     * @deny (create, update, delete)
+     * @principle Allows public read access to groups but restricts modifications to administrators.
+     */
+    match /groups/{groupId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+
     function isSignedIn() {
       return request.auth != null;
     }
 
-    /**
-     * @description Securely checks if the authenticated user ID matches the provided user ID.
-     * @param {string} userId The user ID to compare against the authenticated user's ID.
-     * @return {bool} True if the user IDs match, false otherwise.
-     */
     function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    /**
-     * @description Combines ownership and existence check for update/delete operations.
-     * @param {string} userId The user ID to compare against the resource's user ID.
-     * @return {bool} True if the user is the owner and the document exists, false otherwise.
-     */
-    function isExistingOwner(userId) {
-        return isOwner(userId) && resource != null;
-    }
-
-    /**
-     * @description Rules for news articles.
-     * @path /news_articles/{newsArticleId}
-     * @allow (get, list): Any user can read news articles.
-     * @allow (create, update, delete): No rule is defined, assuming admin-level control is applied externally.
-     * @deny (create, update, delete): No one is allowed to create, update, or delete without authentication.
-     * @principle Public read access for news articles.
-     */
-    match /news_articles/{newsArticleId} {
-      allow get, list: if true;
-      allow create, update, delete: if false; // TODO: Secure write access appropriately (e.g., admin role).
-    }
-
-    /**
-     * @description Rules for matches.
-     * @path /matches/{matchId}
-     * @allow (get, list): Any user can read match data.
-     * @allow (create, update, delete): No rule is defined, assuming admin-level control is applied externally.
-     * @deny (create, update, delete): No one is allowed to create, update, or delete without authentication.
-     * @principle Public read access for match data.
-     */
-    match /matches/{matchId} {
-      allow get, list: if true;
-      allow create, update, delete: if false; // TODO: Secure write access appropriately (e.g., admin role).
-    }
-
-    /**
-     * @description Rules for players.
-     * @path /players/{playerId}
-     * @allow (get, list): Any user can read player data.
-     * @allow (create, update, delete): No rule is defined, assuming admin-level control is applied externally.
-     * @deny (create, update, delete): No one is allowed to create, update, or delete without authentication.
-     * @principle Public read access for player data.
-     */
-    match /players/{playerId} {
-      allow get, list: if true;
-      allow create, update, delete: if false; // TODO: Secure write access appropriately (e.g., admin role).
-    }
-
-    /**
-     * @description Rules for highlight reels.
-     * @path /highlight_reels/{highlightReelId}
-     * @allow (get, list): Any user can read highlight reels.
-     * @allow (create, update, delete): No rule is defined, assuming admin-level control is applied externally.
-     * @deny (create, update, delete): No one is allowed to create, update, or delete without authentication.
-     * @principle Public read access for highlight reels.
-     */
-    match /highlight_reels/{highlightReelId} {
-      allow get, list: if true;
-      allow create, update, delete: if false; // TODO: Secure write access appropriately (e.g., admin role).
-    }
-
-    /**
-     * @description Rules for forum posts under a specific user.
-     * @path /users/{userId}/forum_posts/{postId}
-     * @allow (create): The user can create a forum post under their own user ID.
-     * @allow (get, list): The user can read and list their own forum posts.
-     * @allow (update, delete): The user can update and delete their own existing forum posts.
-     * @deny (create): A user cannot create a forum post under another user's ID.
-     * @deny (get, list, update, delete): A user cannot access, update, or delete another user's forum posts.
-     * @principle Enforces path-based ownership for forum posts.
-     */
-    match /users/{userId}/forum_posts/{postId} {
-      allow create: if isOwner(userId) && request.resource.data.userId == userId;
-      allow get, list: if isOwner(userId);
-      allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
-      allow delete: if isExistingOwner(userId);
-    }
-
-    /**
-     * @description Rules for user profiles.
-     * @path /users/{userId}
-     * @allow (create): A user can create their own profile.
-     * @allow (get): A user can read their own profile.
-     * @allow (update): A user can update their own existing profile.
-     * @allow (delete): A user can delete their own existing profile.
-     * @deny (create): A user cannot create a profile for another user.
-     * @deny (get, update, delete): A user cannot access, update, or delete another user's profile.
-     * @principle Enforces path-based ownership for user profiles.
-     */
-    match /users/{userId} {
-      allow create: if isOwner(userId) && request.resource.data.id == userId;
-      allow get: if isOwner(userId);
-      allow list: if false; // User listing is not allowed.
-      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
-      allow delete: if isExistingOwner(userId);
+      return request.auth.uid == userId;
     }
   }
 }
