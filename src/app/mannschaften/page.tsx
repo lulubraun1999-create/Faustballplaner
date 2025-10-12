@@ -18,8 +18,6 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Badge } from '@/components/ui/badge';
-
 
 interface TeamCategory {
   id: string;
@@ -47,12 +45,12 @@ interface GroupMember {
 }
 
 const formatPosition = (position?: { abwehr: boolean; zuspiel: boolean; angriff: boolean; }) => {
-    if (!position) return 'N/A';
+    if (!position) return '';
     const positions = [];
     if (position.abwehr) positions.push('Abwehr');
     if (position.zuspiel) positions.push('Zuspiel');
     if (position.angriff) positions.push('Angriff');
-    return positions.length > 0 ? positions.join(', ') : 'N/A';
+    return positions.length > 0 ? positions.join(', ') : '';
 }
 
 
@@ -375,18 +373,22 @@ export default function MannschaftenPage() {
         {selectedTeamId && (
             <Card>
                 <CardHeader>
-                    <CardTitle>Mitglieder von: {selectedTeam?.name}</CardTitle>
+                    <CardTitle>{selectedTeam?.name}</CardTitle>
                 </CardHeader>
                 <CardContent>
                     {filteredMembers && filteredMembers.length > 0 ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                            {filteredMembers.map(member => (
-                                <Card key={member.id} className="p-4">
-                                    <p className="font-bold text-lg">{`${member.vorname} ${member.nachname}`}</p>
-                                    <p className="text-sm text-muted-foreground">{formatPosition(member.position)}</p>
-                                    {member.adminRechte && <Badge className="mt-2">Trainer</Badge>}
-                                </Card>
-                            ))}
+                        <div className="flex flex-col gap-2">
+                            {filteredMembers.map(member => {
+                                const positionText = formatPosition(member.position);
+                                const roleText = member.adminRechte ? ", Trainer" : "";
+                                return (
+                                    <p key={member.id}>
+                                        {`${member.vorname} ${member.nachname}`}
+                                        {positionText && ` - ${positionText}`}
+                                        {roleText}
+                                    </p>
+                                );
+                            })}
                         </div>
                     ) : (
                         <p className="text-muted-foreground">Keine Mitglieder in dieser Mannschaft gefunden.</p>
