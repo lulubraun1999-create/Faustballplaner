@@ -46,6 +46,8 @@ import {
 } from "@/components/ui/select";
 import { useToast } from '@/hooks/use-toast';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+
 
 interface User {
   id: string;
@@ -62,7 +64,7 @@ interface User {
   email?: string;
   telefon?: string;
   wohnort?: string;
-  teamId?: string;
+  teamIds?: string[];
   geschlecht?: string;
 }
 
@@ -90,7 +92,7 @@ export default function MitgliederPage() {
   const [isRoleDialogOpen, setIsRoleDialogOpen] = useState(false);
   const [isTeamDialogOpen, setIsTeamDialogOpen] = useState(false);
   const [selectedRole, setSelectedRole] = useState<boolean | undefined>(undefined);
-  const [selectedTeam, setSelectedTeam] = useState<string | undefined>(undefined);
+  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
 
@@ -136,7 +138,7 @@ export default function MitgliederPage() {
   
   const openTeamDialog = (user: User) => {
     setActionUser(user);
-    setSelectedTeam(user.teamId);
+    setSelectedTeamIds(user.teamIds || []);
     setIsTeamDialogOpen(true);
   };
   
@@ -172,12 +174,12 @@ export default function MitgliederPage() {
   };
   
   const handleUpdateTeam = async () => {
-    if (!actionUser || selectedTeam === undefined || !firestore) return;
+    if (!actionUser || !firestore) return;
      setIsSubmitting(true);
     try {
         const userDocRef = doc(firestore, 'users', actionUser.id);
-        await updateDoc(userDocRef, { teamId: selectedTeam });
-        toast({ title: 'Mannschaft aktualisiert', description: 'Die Mannschaft des Benutzers wurde erfolgreich geändert.' });
+        await updateDoc(userDocRef, { teamIds: selectedTeamIds });
+        toast({ title: 'Mannschaften aktualisiert', description: 'Die Mannschaften des Benutzers wurden erfolgreich geändert.' });
         setIsTeamDialogOpen(false);
         setActionUser(null);
     } catch (err: any) {
@@ -231,7 +233,7 @@ export default function MitgliederPage() {
           <TableBody>
             {users.map((user) => (
               <TableRow key={user.id}>
-                <TableCell>{user.teamId ? teamsMap.get(user.teamId) || 'N/A' : 'N/A'}</TableCell>
+                <TableCell>{user.teamIds?.map(id => teamsMap.get(id)).filter(Boolean).join(', ') || 'N/A'}</TableCell>
                 <TableCell className="font-medium">{user.vorname || 'N/A'}</TableCell>
                 <TableCell className="font-medium">{user.nachname || 'N/A'}</TableCell>
                 <TableCell>{user.geschlecht || 'N/A'}</TableCell>
@@ -341,24 +343,30 @@ export default function MitgliederPage() {
       <Dialog open={isTeamDialogOpen} onOpenChange={setIsTeamDialogOpen}>
           <DialogContent>
                <DialogHeader>
-                    <DialogTitle>Mannschaft bearbeiten</DialogTitle>
+                    <DialogTitle>Mannschaften bearbeiten</DialogTitle>
                     <DialogDescription>
-                        Wählen Sie eine neue Mannschaft für {actionUser?.vorname} {actionUser?.nachname}.
+                        Wählen Sie die Mannschaften für {actionUser?.vorname} {actionUser?.nachname}.
                     </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
-                  <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="team-select" className="text-right">Mannschaft</Label>
-                       <Select value={selectedTeam} onValueChange={setSelectedTeam}>
-                           <SelectTrigger id="team-select" className="col-span-3">
-                               <SelectValue placeholder="Mannschaft auswählen" />
-                           </SelectTrigger>
-                           <SelectContent>
-                               {teams?.map(team => (
-                                   <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
-                               ))}
-                           </SelectContent>
-                       </Select>
+                  <div className="space-y-2">
+                      <Label>Mannschaften</Label>
+                      <div className="space-y-2 rounded-md border p-4 max-h-60 overflow-y-auto">
+                        {teams?.map(team => (
+                            <div key={team.id} className="flex items-center gap-2">
+                                <Checkbox
+                                    id={`team-${team.id}`}
+                                    checked={selectedTeamIds.includes(team.id)}
+                                    onCheckedChange={(checked) => {
+                                        return checked
+                                            ? setSelectedTeamIds([...selectedTeamIds, team.id])
+                                            : setSelectedTeamIds(selectedTeamIds.filter(id => id !== team.id))
+                                    }}
+                                />
+                                <Label htmlFor={`team-${team.id}`} className="font-normal">{team.name}</Label>
+                            </div>
+                        ))}
+                      </div>
                   </div>
                 </div>
                 <DialogFooter>

@@ -228,9 +228,12 @@
           "description": "Date and time when the user registered.",
           "format": "date-time"
         },
-        "teamId": {
-          "type": "string",
-          "description": "The ID of the team this user belongs to."
+        "teamIds": {
+          "type": "array",
+          "description": "The IDs of the teams this user belongs to.",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [

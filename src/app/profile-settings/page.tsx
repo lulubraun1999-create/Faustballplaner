@@ -86,7 +86,7 @@ interface UserData {
     geschlecht?: string;
     geburtstag?: Timestamp;
     adminRechte?: boolean;
-    teamId?: string;
+    teamIds?: string[];
 }
 
 interface Team {
