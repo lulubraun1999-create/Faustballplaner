@@ -33,6 +33,7 @@ interface User {
   telefon?: string;
   wohnort?: string;
   teamId?: string;
+  geschlecht?: string;
 }
 
 interface Team {
@@ -107,6 +108,7 @@ export default function MitgliederPage() {
               <TableHead>Nachname</TableHead>
               <TableHead>Position</TableHead>
               <TableHead>Rolle</TableHead>
+              <TableHead>Geschlecht</TableHead>
               <TableHead>Geburtstag</TableHead>
               <TableHead>E-Mail</TableHead>
               <TableHead>Telefonnummer</TableHead>
@@ -127,6 +129,7 @@ export default function MitgliederPage() {
                     <Badge variant="secondary">Benutzer</Badge>
                   )}
                 </TableCell>
+                <TableCell>{user.geschlecht || 'N/A'}</TableCell>
                 <TableCell>{user.geburtstag ? format(user.geburtstag.toDate(), 'dd.MM.yyyy', { locale: de }) : 'N/A'}</TableCell>
                 <TableCell>{user.email || 'N/A'}</TableCell>
                 <TableCell>{user.telefon || 'N/A'}</TableCell>

@@ -17,6 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CalendarIcon, Loader2 } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
@@ -62,8 +63,8 @@ const profileSchema = z.object({
     zuspiel: z.boolean().default(false),
     angriff: z.boolean().default(false),
   }).optional(),
+  geschlecht: z.string().optional(),
   geburtstag: z.date().optional(),
-  teamId: z.string().optional(),
 });
 
 type ProfileFormValues = z.infer<typeof profileSchema>;
@@ -93,7 +94,7 @@ interface Team {
   name: string;
 }
 
-function ProfileForm({ defaultValues, userData, teams }: { defaultValues: ProfileFormValues, userData: UserData | null, teams: Team[] | null }) {
+function ProfileForm({ defaultValues, userData }: { defaultValues: ProfileFormValues, userData: UserData | null }) {
   const { user } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
@@ -117,11 +118,6 @@ function ProfileForm({ defaultValues, userData, teams }: { defaultValues: Profil
         geburtstag: values.geburtstag ? Timestamp.fromDate(values.geburtstag) : null,
       }
       
-      // The `teamId` should only be set if the user is an admin
-      if (!userData?.adminRechte) {
-        delete dataToSave.teamId;
-      }
-
       await setDoc(userDocRef, dataToSave, { merge: true });
       toast({ title: 'Erfolg', description: 'Ihre Daten wurden erfolgreich gespeichert.' });
     } catch (error) {
@@ -223,32 +219,47 @@ function ProfileForm({ defaultValues, userData, teams }: { defaultValues: Profil
                 <Input id="rolle" defaultValue={userData?.adminRechte ? "Admin" : "Benutzer"} disabled />
             </div>
 
-            {/* Mannschaft - Nur für Admins */}
-            {userData?.adminRechte && (
-              <FormField
-                control={form.control}
-                name="teamId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Mannschaft</FormLabel>
-                     <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Mannschaft auswählen..." />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="none">Keine Mannschaft</SelectItem>
-                        {teams?.map(team => (
-                          <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
+            {/* Geschlecht */}
+            <FormField
+              control={form.control}
+              name="geschlecht"
+              render={({ field }) => (
+                <FormItem className="space-y-3">
+                  <FormLabel>Geschlecht</FormLabel>
+                  <FormControl>
+                    <RadioGroup
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                      className="flex flex-col space-y-1"
+                    >
+                      <FormItem className="flex items-center space-x-3 space-y-0">
+                        <FormControl>
+                          <RadioGroupItem value="männlich" />
+                        </FormControl>
+                        <FormLabel className="font-normal">
+                          Männlich
+                        </FormLabel>
+                      </FormItem>
+                      <FormItem className="flex items-center space-x-3 space-y-0">
+                        <FormControl>
+                          <RadioGroupItem value="weiblich" />
+                        </FormControl>
+                        <FormLabel className="font-normal">
+                          Weiblich
+                        </FormLabel>
+                      </FormItem>
+                      <FormItem className="flex items-center space-x-3 space-y-0">
+                        <FormControl>
+                          <RadioGroupItem value="divers" />
+                        </FormControl>
+                        <FormLabel className="font-normal">Divers</FormLabel>
+                      </FormItem>
+                    </RadioGroup>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             {/* Geburtstag */}
              <FormField
@@ -353,13 +364,7 @@ export default function ProfileSettingsPage() {
     return doc(firestore, 'users', user.uid);
   }, [firestore, user]);
 
-  const teamsCollectionRef = useMemoFirebase(() => {
-    if(!firestore) return null;
-    return collection(firestore, 'teams');
-  }, [firestore]);
-
   const { data: userData, isLoading: isUserDataLoading } = useDoc<UserData>(userDocRef);
-  const { data: teams, isLoading: areTeamsLoading } = useCollection<Team>(teamsCollectionRef);
 
   const emailForm = useForm({
     resolver: zodResolver(emailSchema),
@@ -472,7 +477,7 @@ export default function ProfileSettingsPage() {
     }
   };
 
-  const isLoading = isUserLoading || isUserDataLoading || areTeamsLoading;
+  const isLoading = isUserLoading || isUserDataLoading;
 
   if (isLoading) {
      return (
@@ -489,8 +494,8 @@ export default function ProfileSettingsPage() {
     telefon: userData?.telefon || '',
     wohnort: userData?.wohnort || '',
     position: userData?.position || { abwehr: false, zuspiel: false, angriff: false },
+    geschlecht: userData?.geschlecht || '',
     geburtstag: userData?.geburtstag?.toDate() || undefined,
-    teamId: userData?.teamId || 'none',
   };
 
   return (
@@ -587,7 +592,7 @@ export default function ProfileSettingsPage() {
           </aside>
 
           <section>
-             <ProfileForm defaultValues={defaultFormValues} userData={userData} teams={teams}/>
+             <ProfileForm defaultValues={defaultFormValues} userData={userData} />
           </section>
         </div>
       </main>
