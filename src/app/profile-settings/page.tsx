@@ -4,7 +4,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useEffect, useState } from 'react';
-import { doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 import { useAuth, useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -64,6 +64,21 @@ const emailSchema = z.object({
   newEmail: z.string().email({ message: "Ungültige E-Mail-Adresse." }),
 });
 
+interface UserData {
+    vorname?: string;
+    nachname?: string;
+    telefon?: string;
+    wohnort?: string;
+    position?: {
+        abwehr: boolean;
+        zuspiel: boolean;
+        angriff: boolean;
+    };
+    geschlecht?: string;
+    geburtstag?: Timestamp;
+    adminRechte?: boolean;
+}
+
 export default function ProfileSettingsPage() {
   const { user, isUserLoading } = useUser();
   const firestore = useFirestore();
@@ -79,7 +94,7 @@ export default function ProfileSettingsPage() {
     return doc(firestore, 'users', user.uid);
   }, [firestore, user]);
 
-  const { data: userData, isLoading: isUserDataLoading } = useDoc<any>(userDocRef);
+  const { data: userData, isLoading: isUserDataLoading } = useDoc<UserData>(userDocRef);
 
   const form = useForm<z.infer<typeof profileSchema>>({
     resolver: zodResolver(profileSchema),
@@ -138,7 +153,7 @@ export default function ProfileSettingsPage() {
       await verifyBeforeUpdateEmail(auth.currentUser, values.newEmail);
       toast({
         title: "Bestätigungs-E-Mail gesendet",
-        description: "Bitte überprüfen Sie Ihr neues E-Mail-Postfach, um die Änderung zu bestätigen.",
+        description: "Bitte überprüfen Sie Ihr neues E-Mail-Postfach, um die Änderung abzuschließen.",
       });
       emailForm.reset();
     } catch (error: any) {
