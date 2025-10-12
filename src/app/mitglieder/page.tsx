@@ -219,7 +219,7 @@ export default function MitgliederPage() {
                 vorname: userToSync.vorname,
                 position: userToSync.position,
                 adminRechte: userToSync.adminRechte,
-                teamIds: selectedTeamIds // Add teamIds to group_members
+                teamIds: selectedTeamIds, // use updated teamIds
             };
 
             // Save to 'members' and 'group_members' collections
@@ -436,3 +436,5 @@ export default function MitgliederPage() {
     </div>
   );
 }
+
+    
