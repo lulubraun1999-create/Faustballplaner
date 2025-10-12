@@ -60,6 +60,8 @@ const profileSchema = z.object({
   geburtstag: z.date().optional(),
 });
 
+type ProfileFormValues = z.infer<typeof profileSchema>;
+
 const emailSchema = z.object({
   newEmail: z.string().email({ message: "Ungültige E-Mail-Adresse." }),
 });
@@ -79,6 +81,228 @@ interface UserData {
     adminRechte?: boolean;
 }
 
+function ProfileForm({ defaultValues, userData }: { defaultValues: ProfileFormValues, userData: UserData | null }) {
+  const { user } = useUser();
+  const firestore = useFirestore();
+  const { toast } = useToast();
+  
+  const form = useForm<ProfileFormValues>({
+    resolver: zodResolver(profileSchema),
+    defaultValues,
+  });
+
+  const onSubmit = async (values: ProfileFormValues) => {
+    if (!user || !firestore) {
+      toast({ variant: 'destructive', title: 'Fehler', description: 'Benutzer nicht authentifiziert.' });
+      return;
+    }
+    try {
+      const userDocRef = doc(firestore, "users", user.uid);
+      await setDoc(userDocRef, values, { merge: true });
+      toast({ title: 'Erfolg', description: 'Ihre Daten wurden erfolgreich gespeichert.' });
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Fehler', description: 'Beim Speichern Ihrer Daten ist ein Fehler aufgetreten.' });
+    }
+  };
+
+  return (
+    <Card>
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)}>
+          <CardHeader>
+            <CardTitle>Daten ändern</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <FormField
+                control={form.control}
+                name="vorname"
+                render={({ field }) => (
+                  <FormItem className="space-y-2">
+                    <FormLabel>Vorname</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="nachname"
+                render={({ field }) => (
+                  <FormItem className="space-y-2">
+                    <FormLabel>Nachname</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <FormField
+                control={form.control}
+                name="telefon"
+                render={({ field }) => (
+                  <FormItem className="space-y-2">
+                    <FormLabel>Telefon</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="wohnort"
+                render={({ field }) => (
+                  <FormItem className="space-y-2">
+                    <FormLabel>Wohnort</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <FormField
+              control={form.control}
+              name="position"
+              render={() => (
+                <FormItem className="space-y-2">
+                  <FormLabel>Position</FormLabel>
+                  <div className="flex gap-4 items-center">
+                    <FormField
+                      control={form.control}
+                      name="position.abwehr"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center gap-2 space-y-0">
+                          <FormControl>
+                            <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                          </FormControl>
+                          <FormLabel className="font-normal">Abwehr</FormLabel>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="position.zuspiel"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center gap-2 space-y-0">
+                          <FormControl>
+                            <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                          </FormControl>
+                          <FormLabel className="font-normal">Zuspiel</FormLabel>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="position.angriff"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center gap-2 space-y-0">
+                          <FormControl>
+                            <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                          </FormControl>
+                          <FormLabel className="font-normal">Angriff</FormLabel>
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <FormField
+                control={form.control}
+                name="geschlecht"
+                render={({ field }) => (
+                  <FormItem className="space-y-2">
+                    <FormLabel>Geschlecht</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Geschlecht wählen" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="Männlich">Männlich</SelectItem>
+                        <SelectItem value="Weiblich">Weiblich</SelectItem>
+                        <SelectItem value="Divers (Herrenteam)">Divers (Herrenteam)</SelectItem>
+                        <SelectItem value="Divers (Damenteam)">Divers (Damenteam)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="geburtstag"
+                render={({ field }) => (
+                  <FormItem className="space-y-2">
+                    <FormLabel>Geburtstag</FormLabel>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant={"outline"}
+                            className={cn(
+                              "w-full justify-start text-left font-normal",
+                              !field.value && "text-muted-foreground"
+                            )}
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {field.value ? format(field.value, 'PPP', { locale: de }) : <span>Wähle ein Datum</span>}
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0">
+                        <Calendar
+                          locale={de}
+                          mode="single"
+                          selected={field.value}
+                          onSelect={field.onChange}
+                          initialFocus
+                          captionLayout="dropdown-buttons"
+                          fromYear={1950}
+                          toYear={new Date().getFullYear()}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor="rolle">Rolle</Label>
+                <Input id="rolle" defaultValue={userData?.adminRechte ? "Admin" : "Benutzer"} disabled />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">E-Mail</Label>
+                <Input id="email" defaultValue={user?.email || ''} disabled />
+              </div>
+            </div>
+            <div>
+              <Button type="submit" disabled={form.formState.isSubmitting}>
+                {form.formState.isSubmitting ? <Loader2 className="animate-spin"/> : 'Speichern'}
+              </Button>
+            </div>
+          </CardContent>
+        </form>
+      </Form>
+    </Card>
+  );
+}
+
+
 export default function ProfileSettingsPage() {
   const { user, isUserLoading } = useUser();
   const firestore = useFirestore();
@@ -87,7 +311,6 @@ export default function ProfileSettingsPage() {
   const { toast } = useToast();
   const [isDeleting, setIsDeleting] = useState(false);
   const [isChangingEmail, setIsChangingEmail] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const userDocRef = useMemoFirebase(() => {
     if (!firestore || !user) return null;
@@ -96,39 +319,12 @@ export default function ProfileSettingsPage() {
 
   const { data: userData, isLoading: isUserDataLoading } = useDoc<UserData>(userDocRef);
 
-  const form = useForm<z.infer<typeof profileSchema>>({
-    resolver: zodResolver(profileSchema),
-    defaultValues: {
-      vorname: '',
-      nachname: '',
-      telefon: '',
-      wohnort: '',
-      position: { abwehr: false, zuspiel: false, angriff: false },
-      geschlecht: '',
-      geburtstag: undefined,
-    }
-  });
-
-   const emailForm = useForm({
+  const emailForm = useForm({
     resolver: zodResolver(emailSchema),
     defaultValues: {
       newEmail: "",
     },
   });
-
-  useEffect(() => {
-    if (userData) {
-      form.reset({
-        vorname: userData.vorname || '',
-        nachname: userData.nachname || '',
-        telefon: userData.telefon || '',
-        wohnort: userData.wohnort || '',
-        position: userData.position || { abwehr: false, zuspiel: false, angriff: false },
-        geschlecht: userData.geschlecht || '',
-        geburtstag: userData.geburtstag?.toDate() || undefined,
-      });
-    }
-  }, [userData, form.reset]);
   
   const handleLogout = async () => {
     if(auth) {
@@ -172,7 +368,6 @@ export default function ProfileSettingsPage() {
       setIsChangingEmail(false);
     }
   };
-
 
   const handlePasswordReset = async () => {
     if (!user?.email || !auth) {
@@ -235,24 +430,6 @@ export default function ProfileSettingsPage() {
     }
   };
 
-
-  const onSubmit = async (values: z.infer<typeof profileSchema>) => {
-    if (!user || !firestore) {
-      toast({ variant: 'destructive', title: 'Fehler', description: 'Benutzer nicht authentifiziert.' });
-      return;
-    }
-    setIsSubmitting(true);
-    try {
-      const userDocRef = doc(firestore, "users", user.uid);
-      await setDoc(userDocRef, values, { merge: true });
-      toast({ title: 'Erfolg', description: 'Ihre Daten wurden erfolgreich gespeichert.' });
-    } catch (error) {
-      toast({ variant: 'destructive', title: 'Fehler', description: 'Beim Speichern Ihrer Daten ist ein Fehler aufgetreten.' });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   if (isUserLoading || isUserDataLoading) {
      return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-background">
@@ -261,6 +438,16 @@ export default function ProfileSettingsPage() {
       </div>
     );
   }
+
+  const defaultFormValues = {
+    vorname: userData?.vorname || '',
+    nachname: userData?.nachname || '',
+    telefon: userData?.telefon || '',
+    wohnort: userData?.wohnort || '',
+    position: userData?.position || { abwehr: false, zuspiel: false, angriff: false },
+    geschlecht: userData?.geschlecht || '',
+    geburtstag: userData?.geburtstag?.toDate() || undefined,
+  };
 
   return (
     <div className="flex min-h-screen w-full flex-col bg-background">
@@ -356,199 +543,12 @@ export default function ProfileSettingsPage() {
           </aside>
 
           <section>
-            <Card>
-                <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)}>
-                        <CardHeader>
-                            <CardTitle>Daten ändern</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-6">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <FormField
-                                control={form.control}
-                                name="vorname"
-                                render={({ field }) => (
-                                <FormItem className="space-y-2">
-                                    <FormLabel>Vorname</FormLabel>
-                                    <FormControl>
-                                    <Input {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                                )}
-                            />
-                            <FormField
-                                control={form.control}
-                                name="nachname"
-                                render={({ field }) => (
-                                <FormItem className="space-y-2">
-                                    <FormLabel>Nachname</FormLabel>
-                                    <FormControl>
-                                    <Input {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                                )}
-                            />
-                            </div>
-                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <FormField
-                                    control={form.control}
-                                    name="telefon"
-                                    render={({ field }) => (
-                                    <FormItem className="space-y-2">
-                                        <FormLabel>Telefon</FormLabel>
-                                        <FormControl>
-                                        <Input {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                    )}
-                                />
-                                <FormField
-                                    control={form.control}
-                                    name="wohnort"
-                                    render={({ field }) => (
-                                    <FormItem className="space-y-2">
-                                        <FormLabel>Wohnort</FormLabel>
-                                        <FormControl>
-                                        <Input {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                    )}
-                                />
-                            </div>
-                            <FormField
-                                control={form.control}
-                                name="position"
-                                render={() => (
-                                    <FormItem className="space-y-2">
-                                        <FormLabel>Position</FormLabel>
-                                         <div className="flex gap-4 items-center">
-                                            <FormField
-                                            control={form.control}
-                                            name="position.abwehr"
-                                            render={({ field }) => (
-                                                <FormItem className="flex items-center gap-2 space-y-0">
-                                                    <FormControl>
-                                                        <Checkbox checked={field.value} onCheckedChange={field.onChange} />
-                                                    </FormControl>
-                                                    <FormLabel className="font-normal">Abwehr</FormLabel>
-                                                </FormItem>
-                                            )}
-                                            />
-                                            <FormField
-                                            control={form.control}
-                                            name="position.zuspiel"
-                                            render={({ field }) => (
-                                                <FormItem className="flex items-center gap-2 space-y-0">
-                                                    <FormControl>
-                                                        <Checkbox checked={field.value} onCheckedChange={field.onChange} />
-                                                    </FormControl>
-                                                    <FormLabel className="font-normal">Zuspiel</FormLabel>
-                                                </FormItem>
-                                            )}
-                                            />
-                                            <FormField
-                                            control={form.control}
-                                            name="position.angriff"
-                                            render={({ field }) => (
-                                                <FormItem className="flex items-center gap-2 space-y-0">
-                                                    <FormControl>
-                                                        <Checkbox checked={field.value} onCheckedChange={field.onChange} />
-                                                    </FormControl>
-                                                    <FormLabel className="font-normal">Angriff</FormLabel>
-                                                </FormItem>
-                                            )}
-                                            />
-                                        </div>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                                />
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <FormField
-                                    control={form.control}
-                                    name="geschlecht"
-                                    render={({ field }) => (
-                                        <FormItem className="space-y-2">
-                                        <FormLabel>Geschlecht</FormLabel>
-                                        <Select onValueChange={field.onChange} value={field.value || ''}>
-                                            <FormControl>
-                                                <SelectTrigger>
-                                                    <SelectValue placeholder="Geschlecht wählen" />
-                                                </SelectTrigger>
-                                            </FormControl>
-                                            <SelectContent>
-                                                <SelectItem value="Männlich">Männlich</SelectItem>
-                                                <SelectItem value="Weiblich">Weiblich</SelectItem>
-                                                <SelectItem value="Divers (Herrenteam)">Divers (Herrenteam)</SelectItem>
-                                                <SelectItem value="Divers (Damenteam)">Divers (Damenteam)</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                        <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                <Controller
-                                    control={form.control}
-                                    name="geburtstag"
-                                    render={({ field }) => (
-                                        <div className="space-y-2">
-                                            <Label htmlFor="geburtstag">Geburtstag</Label>
-                                            <Popover>
-                                                <PopoverTrigger asChild>
-                                                    <Button
-                                                    variant={"outline"}
-                                                    className={cn(
-                                                        "w-full justify-start text-left font-normal",
-                                                        !field.value && "text-muted-foreground"
-                                                    )}
-                                                    >
-                                                    <CalendarIcon className="mr-2 h-4 w-4" />
-                                                    {field.value ? format(field.value, 'PPP', { locale: de }) : <span>Wähle ein Datum</span>}
-                                                    </Button>
-                                                </PopoverTrigger>
-                                                <PopoverContent className="w-auto p-0">
-                                                    <Calendar
-                                                        locale={de}
-                                                        mode="single"
-                                                        selected={field.value}
-                                                        onSelect={field.onChange}
-                                                        initialFocus
-                                                        captionLayout="dropdown-buttons"
-                                                        fromYear={1950}
-                                                        toYear={new Date().getFullYear()}
-                                                    />
-                                                </PopoverContent>
-                                            </Popover>
-                                        </div>
-                                    )}
-                                />
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="space-y-2">
-                                    <Label htmlFor="rolle">Rolle</Label>
-                                    <Input id="rolle" defaultValue={userData?.adminRechte ? "Admin" : "Benutzer"} disabled />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="email">E-Mail</Label>
-                                    <Input id="email" defaultValue={user?.email || ''} disabled />
-                                </div>
-                            </div>
-                            <div>
-                                <Button type="submit" disabled={isSubmitting}>
-                                  {isSubmitting ? <Loader2 className="animate-spin"/> : 'Speichern'}
-                                </Button>
-                            </div>
-                        </CardContent>
-                    </form>
-              </Form>
-            </Card>
+             <ProfileForm defaultValues={defaultFormValues} userData={userData} />
           </section>
         </div>
       </main>
     </div>
   );
 }
+
+    
