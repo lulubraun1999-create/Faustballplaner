@@ -171,6 +171,8 @@ export default function MitgliederPage() {
     setIsSubmitting(true);
     try {
         await deleteDoc(doc(firestore, 'users', actionUser.id));
+        await deleteDoc(doc(firestore, 'members', actionUser.id));
+        await deleteDoc(doc(firestore, 'group_members', actionUser.id));
         toast({ title: 'Benutzer gelöscht', description: 'Das Benutzerkonto wurde erfolgreich entfernt.' });
         setIsDeleteAlertOpen(false);
         setActionUser(null);
@@ -204,15 +206,15 @@ export default function MitgliederPage() {
         const userDocRef = doc(firestore, 'users', actionUser.id);
         await updateDoc(userDocRef, { teamIds: selectedTeamIds });
 
-        // Get the full user object to save to other collections
         const userToSync = users?.find(u => u.id === actionUser.id);
         
         if(userToSync) {
-            const fullMemberData = {
+            const memberData = {
                 ...userToSync,
                 id: userToSync.id,
-                teamIds: selectedTeamIds, // use updated teamIds
+                teamIds: selectedTeamIds,
             };
+            delete (memberData as any).name; // remove deprecated field if exists
 
             const groupMemberData = {
                 id: userToSync.id,
@@ -220,11 +222,10 @@ export default function MitgliederPage() {
                 nachname: userToSync.nachname,
                 position: userToSync.position,
                 adminRechte: userToSync.adminRechte,
-                teamIds: selectedTeamIds, // use updated teamIds
+                teamIds: selectedTeamIds,
             };
 
-            // Save to 'members' and 'group_members' collections
-            await setDoc(doc(firestore, 'members', userToSync.id), fullMemberData, { merge: true });
+            await setDoc(doc(firestore, 'members', userToSync.id), memberData, { merge: true });
             await setDoc(doc(firestore, 'group_members', userToSync.id), groupMemberData, { merge: true });
         }
 
