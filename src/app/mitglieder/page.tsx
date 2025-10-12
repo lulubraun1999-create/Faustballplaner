@@ -1,6 +1,6 @@
 'use client';
 
-import { collection, Timestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, Timestamp, doc, updateDoc, deleteDoc, setDoc } from 'firebase/firestore';
 import { useFirestore, useCollection, useMemoFirebase, useUser } from '@/firebase';
 import { Header } from '@/components/header';
 import {
@@ -179,6 +179,27 @@ export default function MitgliederPage() {
     try {
         const userDocRef = doc(firestore, 'users', actionUser.id);
         await updateDoc(userDocRef, { teamIds: selectedTeamIds });
+
+        // Get the full user object to save to other collections
+        const userToSync = users?.find(u => u.id === actionUser.id);
+        
+        if(userToSync) {
+            const fullMemberData = {
+                ...userToSync,
+                teamIds: selectedTeamIds, // use updated teamIds
+            };
+
+            const groupMemberData = {
+                vorname: userToSync.vorname,
+                position: userToSync.position,
+                adminRechte: userToSync.adminRechte
+            };
+
+            // Save to 'members' and 'group_members' collections
+            await setDoc(doc(firestore, 'members', userToSync.id), fullMemberData, { merge: true });
+            await setDoc(doc(firestore, 'group_members', userToSync.id), groupMemberData, { merge: true });
+        }
+
         toast({ title: 'Mannschaften aktualisiert', description: 'Die Mannschaften des Benutzers wurden erfolgreich geändert.' });
         setIsTeamDialogOpen(false);
         setActionUser(null);

@@ -276,6 +276,50 @@
         }
       },
       "required": ["name", "categoryId"]
+    },
+    "Member": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Member",
+      "type": "object",
+      "description": "Represents a denormalized user object for efficient querying, containing all data from the members list.",
+      "properties": {
+        "id": { "type": "string" },
+        "vorname": { "type": "string" },
+        "nachname": { "type": "string" },
+        "geschlecht": { "type": "string" },
+        "position": {
+          "type": "object",
+          "properties": {
+            "abwehr": { "type": "boolean" },
+            "zuspiel": { "type": "boolean" },
+            "angriff": { "type": "boolean" }
+          }
+        },
+        "adminRechte": { "type": "boolean" },
+        "geburtstag": { "type": "string", "format": "date-time" },
+        "email": { "type": "string", "format": "email" },
+        "telefon": { "type": "string" },
+        "wohnort": { "type": "string" },
+        "teamIds": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "GroupMember": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "GroupMember",
+      "type": "object",
+      "description": "Represents a lightweight, denormalized user object containing only essential details for quick reference.",
+      "properties": {
+        "vorname": { "type": "string" },
+        "position": {
+          "type": "object",
+          "properties": {
+            "abwehr": { "type": "boolean" },
+            "zuspiel": { "type": "boolean" },
+            "angriff": { "type": "boolean" }
+          }
+        },
+        "adminRechte": { "type": "boolean" }
+      }
     }
   },
   "auth": {
@@ -404,6 +448,26 @@
             "$ref": "#/backend/entities/Team"
           },
           "description": "Collection of all teams."
+        }
+      },
+       {
+        "path": "/members/{memberId}",
+        "definition": {
+          "entityName": "Member",
+          "schema": {
+            "$ref": "#/backend/entities/Member"
+          },
+          "description": "Collection of denormalized user data for quick lookups, sorted by team."
+        }
+      },
+      {
+        "path": "/group_members/{memberId}",
+        "definition": {
+          "entityName": "GroupMember",
+          "schema": {
+            "$ref": "#/backend/entities/GroupMember"
+          },
+          "description": "Collection of lightweight, denormalized user data for quick lookups."
         }
       }
     ],
