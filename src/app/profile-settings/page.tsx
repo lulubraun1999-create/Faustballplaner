@@ -17,7 +17,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CalendarIcon, Loader2 } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
@@ -56,7 +55,6 @@ const profileSchema = z.object({
     zuspiel: z.boolean().default(false),
     angriff: z.boolean().default(false),
   }).optional(),
-  geschlecht: z.string().optional(),
   geburtstag: z.date().optional(),
 });
 
@@ -113,6 +111,7 @@ function ProfileForm({ defaultValues, userData }: { defaultValues: ProfileFormVa
             <CardTitle>Daten ändern</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
+            {/* Name */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <FormField
                 control={form.control}
@@ -141,34 +140,8 @@ function ProfileForm({ defaultValues, userData }: { defaultValues: ProfileFormVa
                 )}
               />
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <FormField
-                control={form.control}
-                name="telefon"
-                render={({ field }) => (
-                  <FormItem className="space-y-2">
-                    <FormLabel>Telefon</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="wohnort"
-                render={({ field }) => (
-                  <FormItem className="space-y-2">
-                    <FormLabel>Wohnort</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+
+            {/* Position */}
             <FormField
               control={form.control}
               name="position"
@@ -217,31 +190,15 @@ function ProfileForm({ defaultValues, userData }: { defaultValues: ProfileFormVa
                 </FormItem>
               )}
             />
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <FormField
-                control={form.control}
-                name="geschlecht"
-                render={({ field }) => (
-                  <FormItem className="space-y-2">
-                    <FormLabel>Geschlecht</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Geschlecht wählen" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="Männlich">Männlich</SelectItem>
-                        <SelectItem value="Weiblich">Weiblich</SelectItem>
-                        <SelectItem value="Divers (Herrenteam)">Divers (Herrenteam)</SelectItem>
-                        <SelectItem value="Divers (Damenteam)">Divers (Damenteam)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
+            
+            {/* Rolle */}
+            <div className="space-y-2">
+                <Label htmlFor="rolle">Rolle</Label>
+                <Input id="rolle" defaultValue={userData?.adminRechte ? "Admin" : "Benutzer"} disabled />
+            </div>
+
+            {/* Geburtstag */}
+             <FormField
                 control={form.control}
                 name="geburtstag"
                 render={({ field }) => (
@@ -279,17 +236,43 @@ function ProfileForm({ defaultValues, userData }: { defaultValues: ProfileFormVa
                   </FormItem>
                 )}
               />
+
+            {/* E-Mail */}
+            <div className="space-y-2">
+              <Label htmlFor="email">E-Mail</Label>
+              <Input id="email" defaultValue={user?.email || ''} disabled />
             </div>
+            
+            {/* Telefonnummer und Wohnort */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <Label htmlFor="rolle">Rolle</Label>
-                <Input id="rolle" defaultValue={userData?.adminRechte ? "Admin" : "Benutzer"} disabled />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email">E-Mail</Label>
-                <Input id="email" defaultValue={user?.email || ''} disabled />
-              </div>
+              <FormField
+                control={form.control}
+                name="telefon"
+                render={({ field }) => (
+                  <FormItem className="space-y-2">
+                    <FormLabel>Telefon</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="wohnort"
+                render={({ field }) => (
+                  <FormItem className="space-y-2">
+                    <FormLabel>Wohnort</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
+            
             <div>
               <Button type="submit" disabled={form.formState.isSubmitting}>
                 {form.formState.isSubmitting ? <Loader2 className="animate-spin"/> : 'Speichern'}
@@ -445,7 +428,6 @@ export default function ProfileSettingsPage() {
     telefon: userData?.telefon || '',
     wohnort: userData?.wohnort || '',
     position: userData?.position || { abwehr: false, zuspiel: false, angriff: false },
-    geschlecht: userData?.geschlecht || '',
     geburtstag: userData?.geburtstag?.toDate() || undefined,
   };
 
@@ -550,5 +532,3 @@ export default function ProfileSettingsPage() {
     </div>
   );
 }
-
-    
