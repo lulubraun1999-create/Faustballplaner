@@ -1,219 +1,175 @@
 /**
- * @file Firestore Security Rules for Werkself Hub.
+ * @fileoverview Firestore Security Rules for Werkself Hub.
  *
- * @core_philosophy This ruleset implements a role-based access control model.  The admin has full read and write access.
- * All other users have read-only access. All write access is denied to non-admin users. The ruleset emphasizes
- * authorization independence by avoiding `get()` calls.  It leverages structural segregation to keep secured
- * and public data separate, enabling performant and secure queries.
+ * Core Philosophy:
+ * This ruleset enforces a user-ownership model for user-generated content (forum posts)
+ * and assumes that other data (news, matches, players) is managed by the application.
+ * User data is private and only accessible to the user themselves.
  *
- * @data_structure The Firestore database is organized into several top-level collections: `news_articles`,
- * `matches`, `players`, `highlight_reels`, `users`, `team_categories`, `teams`, `members`, and `group_members`.
- * User-specific data (forum posts and user profiles) are nested under `/users/{userId}`.
+ * Data Structure:
+ * - /news_articles/{newsArticleId}: Public news articles.
+ * - /matches/{matchId}: Public match data.
+ * - /players/{playerId}: Public player information.
+ * - /highlight_reels/{highlightReelId}: Public highlight reels.
+ * - /users/{userId}: User profiles, accessible only to the user.
+ * - /users/{userId}/forum_posts/{postId}: Forum posts created by a specific user.
  *
- * @key_security_decisions
- *   - Admin Role: The ruleset relies on a global `isAdmin()` function that always returns `true`, granting
- *     unrestricted access to a designated admin.
- *   - Public Read Access: The `news_articles`, `matches`, `players`, `highlight_reels`, `team_categories`,
- *     `teams`, `members`, and `group_members` collections are readable by all users.
- *   - User Data: User-specific data under `/users/{userId}` is only accessible to the authenticated user.
- *   - No User Listing: Listing all users is explicitly denied.
- *   - Write Denials: All write operations are denied to non-admin users.
- *
- * @denormalization_for_authorization N/A
- * @structural_segregation Data is segregated into public (e.g., news articles, matches) and private (user-specific data) collections to simplify access controls.
+ * Key Security Decisions:
+ * - Global data (news, matches, players, highlight reels) is publicly readable.
+ * - User listing is not allowed.
+ * - User-generated content (forum posts) is owned by the user and stored under their profile.
+ * - The rules do not enforce any data validation beyond authorization.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Checks if the current user is signed in.
-     * @return {boolean} True if the user is signed in, false otherwise.
+     * @description Allows anyone to read news articles. Writes are not allowed.
+     * @path /news_articles/{newsArticleId}
+     * @allow get, list: if true;
+     * @deny create, update, delete: if false;
+     * @principle Public read, no writes allowed.
      */
+    match /news_articles/{newsArticleId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+
+    /**
+     * @description Allows anyone to read match data. Writes are not allowed.
+     * @path /matches/{matchId}
+     * @allow get, list: if true;
+     * @deny create, update, delete: if false;
+     * @principle Public read, no writes allowed.
+     */
+    match /matches/{matchId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+
+    /**
+     * @description Allows anyone to read player data. Writes are not allowed.
+     * @path /players/{playerId}
+     * @allow get, list: if true;
+     * @deny create, update, delete: if false;
+     * @principle Public read, no writes allowed.
+     */
+    match /players/{playerId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+
+    /**
+     * @description Allows anyone to read highlight reels. Writes are not allowed.
+     * @path /highlight_reels/{highlightReelId}
+     * @allow get, list: if true;
+     * @deny create, update, delete: if false;
+     * @principle Public read, no writes allowed.
+     */
+    match /highlight_reels/{highlightReelId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+
+    /**
+     * @description Allows a user to read and write their own forum posts.
+     * @path /users/{userId}/forum_posts/{postId}
+     * @allow create: if isSignedIn() && request.auth.uid == userId;
+     * @allow get, list: if isOwner(userId);
+     * @allow update: if isExistingOwner(userId);
+     * @allow delete: if isExistingOwner(userId);
+     * @deny create: if !isSignedIn() || request.auth.uid != userId;
+     * @deny update: if !(isSignedIn() && resource.data.userId == userId);
+     * @deny delete: if !(isSignedIn() && resource.data.userId == userId);
+     * @principle Enforces user-ownership for forum posts.
+     */
+    match /users/{userId}/forum_posts/{postId} {
+      allow get, list: if isOwner(userId);
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Allows a user to read and write their own profile data.
+     * @path /users/{userId}
+     * @allow get: if isOwner(userId);
+     * @allow create: if isSignedIn() && request.auth.uid == userId;
+     * @allow update: if isExistingOwner(userId);
+     * @allow delete: if isExistingOwner(userId);
+     * @deny list: if false;
+     * @deny create: if !isSignedIn() || request.auth.uid != userId;
+     * @deny update: if !(isSignedIn() && resource.data.id == userId);
+     * @deny delete: if !(isSignedIn() && resource.data.id == userId);
+     * @principle Enforces user-ownership for profile data.
+     */
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
+      allow list: if false;
+    }
+
+    /**
+     * @description Allows anyone to read team categories. Writes are not allowed.
+     * @path /team_categories/{categoryId}
+     * @allow get, list: if true;
+     * @deny create, update, delete: if false;
+     * @principle Public read, no writes allowed.
+     */
+    match /team_categories/{categoryId} {
+        allow get, list: if true;
+        allow create, update, delete: if false;
+    }
+
+    /**
+     * @description Allows anyone to read team data. Writes are not allowed.
+     * @path /teams/{teamId}
+     * @allow get, list: if true;
+     * @deny create, update, delete: if false;
+     * @principle Public read, no writes allowed.
+     */
+    match /teams/{teamId} {
+        allow get, list: if true;
+        allow create, update, delete: if false;
+    }
+
+    /**
+     * @description Allows anyone to read member data. Writes are not allowed.
+     * @path /members/{memberId}
+     * @allow get, list: if true;
+     * @deny create, update, delete: if false;
+     * @principle Public read, no writes allowed.
+     */
+     match /members/{memberId} {
+        allow get, list: if true;
+        allow create, update, delete: if false;
+    }
+
+    /**
+     * @description Allows anyone to read group member data. Writes are not allowed.
+     * @path /group_members/{memberId}
+     * @allow get, list: if true;
+     * @deny create, update, delete: if false;
+     * @principle Public read, no writes allowed.
+     */
+     match /group_members/{memberId} {
+        allow get, list: if true;
+        allow create, update, delete: if false;
+    }
+
     function isSignedIn() {
       return request.auth != null;
     }
 
-    /**
-     * @description Checks if the current user is the owner of the document.
-     * @param {string} userId - The user ID to compare against the request's authentication UID.
-     * @return {boolean} True if the user is the owner, false otherwise.
-     */
     function isOwner(userId) {
-      return request.auth.uid == userId;
+      return isSignedIn() && request.auth.uid == userId;
     }
 
-    /**
-     * @description Checks if the current user is an admin.
-     * @return {boolean} Always true, indicating the current user is an administrator.
-     * In a real application, this would be replaced with a mechanism to check for admin privileges,
-     * such as custom claims or a database lookup.
-     */
-    function isAdmin() {
-      return true; // TODO: Implement a real admin check (e.g., custom claims).
-    }
-
-    /**
-     * @description Collection of news articles related to Bayer Leverkusen.
-     * @path /news_articles/{newsArticleId}
-     * @allow (get, list): Any user can read news articles.
-     * @allow (create, update, delete): Only admin can write news articles.
-     * @deny (create, update, delete): Non-admin users cannot write news articles.
-     * @principle Allows public read access to news articles, restricts write access to admins only.
-     */
-    match /news_articles/{newsArticleId} {
-      allow get: if true;
-      allow list: if true;
-      allow create: if isAdmin();
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
-    }
-
-    /**
-     * @description Collection of Bayer Leverkusen matches.
-     * @path /matches/{matchId}
-     * @allow (get, list): Any user can read match data.
-     * @allow (create, update, delete): Only admin can write match data.
-     * @deny (create, update, delete): Non-admin users cannot write match data.
-     * @principle Allows public read access to match data, restricts write access to admins only.
-     */
-    match /matches/{matchId} {
-      allow get: if true;
-      allow list: if true;
-      allow create: if isAdmin();
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
-    }
-
-    /**
-     * @description Collection of Bayer Leverkusen players.
-     * @path /players/{playerId}
-     * @allow (get, list): Any user can read player data.
-     * @allow (create, update, delete): Only admin can write player data.
-     * @deny (create, update, delete): Non-admin users cannot write player data.
-     * @principle Allows public read access to player data, restricts write access to admins only.
-     */
-    match /players/{playerId} {
-      allow get: if true;
-      allow list: if true;
-      allow create: if isAdmin();
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
-    }
-
-    /**
-     * @description Collection of highlight reels generated for matches. Includes denormalized 'matchId' for querying highlight reels for a specific match.
-     * @path /highlight_reels/{highlightReelId}
-     * @allow (get, list): Any user can read highlight reel data.
-     * @allow (create, update, delete): Only admin can write highlight reel data.
-     * @deny (create, update, delete): Non-admin users cannot write highlight reel data.
-     * @principle Allows public read access to highlight reel data, restricts write access to admins only.
-     */
-    match /highlight_reels/{highlightReelId} {
-      allow get: if true;
-      allow list: if true;
-      allow create: if isAdmin();
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
-    }
-
-    /**
-     * @description Collection of forum posts created by a specific user.  Uses path-based ownership for simplified security rules.
-     * @path /users/{userId}/forum_posts/{postId}
-     * @allow (get, list): The owner can read and list their own forum posts.
-     * @allow (create): The owner can create forum posts under their own user ID.
-     * @allow (update, delete): The owner can update and delete their own existing forum posts.
-     * @deny (create, update, delete): Other users cannot create, update, or delete forum posts under another user's ID.
-     * @principle Enforces user ownership for forum posts through path-based authorization.
-     */
-    match /users/{userId}/forum_posts/{postId} {
-      allow get: if isSignedIn() && isOwner(userId);
-      allow list: if isSignedIn() && isOwner(userId);
-      allow create: if isSignedIn() && isOwner(userId);
-      allow update: if isSignedIn() && isOwner(userId);
-      allow delete: if isSignedIn() && isOwner(userId);
-    }
-
-    /**
-     * @description Collection of user documents. Path based ownership for securing data to the user.
-     * @path /users/{userId}
-     * @allow (get): The owner can read their own user document.
-     * @allow (create): A user can create their own user document if the userId matches their auth.uid.
-     * @allow (update, delete): The owner can update and delete their own user document, but only if it exists.
-     * @deny (create, update, delete): Other users cannot create, update, or delete user documents under another user's ID.
-     * @deny (list): Listing all users is not allowed.
-     * @principle Enforces user ownership for user documents through path-based authorization.
-     */
-    match /users/{userId} {
-      allow get: if isSignedIn() && isOwner(userId);
-      allow list: if false;
-      allow create: if isSignedIn() && isOwner(userId) && request.auth.uid == userId;
-      allow update: if isSignedIn() && isOwner(userId);
-      allow delete: if isSignedIn() && isOwner(userId);
-    }
-
-    /**
-     * @description Collection of team categories.
-     * @path /team_categories/{categoryId}
-     * @allow (get, list): Any user can read team category data.
-     * @allow (create, update, delete): Only admin can write team category data.
-     * @deny (create, update, delete): Non-admin users cannot write team category data.
-     * @principle Allows public read access to team category data, restricts write access to admins only.
-     */
-    match /team_categories/{categoryId} {
-      allow get: if true;
-      allow list: if true;
-      allow create: if isAdmin();
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
-    }
-
-    /**
-     * @description Collection of all teams.
-     * @path /teams/{teamId}
-     * @allow (get, list): Any user can read team data.
-     * @allow (create, update, delete): Only admin can write team data.
-     * @deny (create, update, delete): Non-admin users cannot write team data.
-     * @principle Allows public read access to team data, restricts write access to admins only.
-     */
-    match /teams/{teamId} {
-      allow get: if true;
-      allow list: if true;
-      allow create: if isAdmin();
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
-    }
-
-    /**
-     * @description Collection of denormalized user data for quick lookups, sorted by team.
-     * @path /members/{memberId}
-     * @allow (get, list): Any user can read member data.
-     * @allow (create, update, delete): Only admin can write member data.
-     * @deny (create, update, delete): Non-admin users cannot write member data.
-     * @principle Allows public read access to member data, restricts write access to admins only.
-     */
-    match /members/{memberId} {
-      allow get: if true;
-      allow list: if true;
-      allow create: if isAdmin();
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
-    }
-
-     /**
-      * @description Collection of lightweight, denormalized user data for quick lookups.
-      * @path /group_members/{memberId}
-      * @allow (get, list): Any user can read group member data.
-      * @allow (create, update, delete): Only admin can write group member data.
-      * @deny (create, update, delete): Non-admin users cannot write group member data.
-      * @principle Allows public read access to group member data, restricts write access to admins only.
-      */
-    match /group_members/{memberId} {
-      allow get: if true;
-      allow list: if true;
-      allow create: if isAdmin();
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
+    function isExistingOwner(userId) {
+      return isOwner(userId) && resource != null;
     }
   }
 }
