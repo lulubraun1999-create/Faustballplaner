@@ -3,7 +3,7 @@
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { useAuth, useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
@@ -374,10 +374,10 @@ export default function ProfileSettingsPage() {
                                                 </SelectTrigger>
                                             </FormControl>
                                             <SelectContent>
-                                                <SelectItem value="maennlich">männlich</SelectItem>
-                                                <SelectItem value="weiblich">weiblich</SelectItem>
-                                                <SelectItem value="divers_herrenteam">divers (, herrenteam)</SelectItem>
-                                                <SelectItem value="divers_damenteam">divers (, damenteam)</SelectItem>
+                                                <SelectItem value="Männlich">Männlich</SelectItem>
+                                                <SelectItem value="Weiblich">Weiblich</SelectItem>
+                                                <SelectItem value="Divers (Herrenteam)">Divers (Herrenteam)</SelectItem>
+                                                <SelectItem value="Divers (Damenteam)">Divers (Damenteam)</SelectItem>
                                             </SelectContent>
                                         </Select>
                                         <FormMessage />
@@ -445,3 +445,5 @@ export default function ProfileSettingsPage() {
     </div>
   );
 }
+
+    
