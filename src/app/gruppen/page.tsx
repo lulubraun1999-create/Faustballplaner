@@ -62,7 +62,8 @@ function ManageGroupsForm({ categories, groups, onDone }: { categories: GroupCat
     }, [action, target, selectedCategoryId, selectedGroupId, categories, groups]);
 
 
-    const handleExecute = async () => {
+    const handleExecute = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
         if (!firestore) {
             toast({ variant: 'destructive', title: 'Datenbank nicht verbunden.' });
             return;
@@ -145,75 +146,77 @@ function ManageGroupsForm({ categories, groups, onDone }: { categories: GroupCat
                     <Button variant="outline" onClick={onDone}>Schließen</Button>
                 </div>
             </CardHeader>
-            <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Select value={action} onValueChange={(v: any) => setAction(v)}>
-                        <SelectTrigger>
-                            <SelectValue placeholder="Aktion wählen..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="add">Hinzufügen</SelectItem>
-                            <SelectItem value="edit">Bearbeiten</SelectItem>
-                            <SelectItem value="delete">Löschen</SelectItem>
-                        </SelectContent>
-                    </Select>
-                     <Select value={target} onValueChange={(v: any) => setTarget(v)}>
-                        <SelectTrigger>
-                            <SelectValue placeholder="Ziel wählen..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="category">Obergruppe</SelectItem>
-                            <SelectItem value="group">Untergruppe</SelectItem>
-                        </SelectContent>
-                    </Select>
-                </div>
-                
-                { (action === 'add' && target === 'group') || (action !== 'add' && target === 'group') ? (
-                    <Select value={selectedCategoryId} onValueChange={setSelectedCategoryId}>
-                        <SelectTrigger>
-                            <SelectValue placeholder="Obergruppe wählen..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {categories.map(cat => <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
-                ) : null }
+            <CardContent>
+                <form onSubmit={handleExecute} className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <Select value={action} onValueChange={(v: any) => setAction(v)}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Aktion wählen..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="add">Hinzufügen</SelectItem>
+                                <SelectItem value="edit">Bearbeiten</SelectItem>
+                                <SelectItem value="delete">Löschen</SelectItem>
+                            </SelectContent>
+                        </Select>
+                         <Select value={target} onValueChange={(v: any) => setTarget(v)}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Ziel wählen..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="category">Obergruppe</SelectItem>
+                                <SelectItem value="group">Untergruppe</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    
+                    { (action === 'add' && target === 'group') || (action !== 'add' && target === 'group') ? (
+                        <Select value={selectedCategoryId} onValueChange={setSelectedCategoryId}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Obergruppe wählen..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {categories.map(cat => <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                    ) : null }
 
-                {action !== 'add' && target === 'group' ? (
-                     <Select value={selectedGroupId} onValueChange={setSelectedGroupId}>
-                        <SelectTrigger>
-                            <SelectValue placeholder="Untergruppe wählen..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                             {(groups || []).filter(g => g.categoryId === selectedCategoryId).map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
-                ) : null}
+                    {action !== 'add' && target === 'group' ? (
+                         <Select value={selectedGroupId} onValueChange={setSelectedGroupId}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Untergruppe wählen..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                 {(groups || []).filter(g => g.categoryId === selectedCategoryId).map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                    ) : null}
 
-                 {action !== 'add' && target === 'category' ? (
-                     <Select value={selectedCategoryId} onValueChange={setSelectedCategoryId}>
-                        <SelectTrigger>
-                            <SelectValue placeholder="Obergruppe wählen..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {categories.map(cat => <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
-                ) : null}
+                     {action !== 'add' && target === 'category' ? (
+                         <Select value={selectedCategoryId} onValueChange={setSelectedCategoryId}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Obergruppe wählen..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {categories.map(cat => <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                    ) : null}
 
-                { action !== 'delete' && (
-                    <Input
-                        placeholder="Name für neues Element..."
-                        value={newName}
-                        onChange={(e) => setNewName(e.target.value)}
-                    />
-                )}
+                    { action !== 'delete' && (
+                        <Input
+                            placeholder="Name für neues Element..."
+                            value={newName}
+                            onChange={(e) => setNewName(e.target.value)}
+                        />
+                    )}
 
-                <div className="flex justify-end">
-                    <Button onClick={handleExecute} disabled={isSubmitting}>
-                        {isSubmitting ? <Loader2 className="animate-spin" /> : 'Aktion ausführen'}
-                    </Button>
-                </div>
+                    <div className="flex justify-end">
+                        <Button type="submit" disabled={isSubmitting}>
+                            {isSubmitting ? <Loader2 className="animate-spin" /> : 'Aktion ausführen'}
+                        </Button>
+                    </div>
+                </form>
             </CardContent>
         </Card>
     );
