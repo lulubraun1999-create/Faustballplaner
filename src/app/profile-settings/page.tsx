@@ -9,7 +9,7 @@ import { useAuth, useUser, useFirestore, useDoc, useMemoFirebase } from '@/fireb
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
-import { sendPasswordResetEmail, deleteUser } from 'firebase/auth';
+import { sendPasswordResetEmail, deleteUser, verifyBeforeUpdateEmail } from 'firebase/auth';
 
 import { Header } from '@/components/header';
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,16 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogClose,
+} from "@/components/ui/dialog"
 import { cn } from "@/lib/utils";
 import { useRouter } from 'next/navigation';
 
@@ -50,6 +60,10 @@ const profileSchema = z.object({
   geburtstag: z.date().optional(),
 });
 
+const emailSchema = z.object({
+  newEmail: z.string().email({ message: "Ungültige E-Mail-Adresse." }),
+});
+
 export default function ProfileSettingsPage() {
   const { user, isUserLoading } = useUser();
   const firestore = useFirestore();
@@ -57,6 +71,7 @@ export default function ProfileSettingsPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isChangingEmail, setIsChangingEmail] = useState(false);
 
   const userDocRef = useMemoFirebase(() => {
     if (!firestore || !user) return null;
@@ -79,6 +94,13 @@ export default function ProfileSettingsPage() {
       },
       geschlecht: '',
       geburtstag: undefined,
+    },
+  });
+
+   const emailForm = useForm({
+    resolver: zodResolver(emailSchema),
+    defaultValues: {
+      newEmail: "",
     },
   });
 
@@ -106,6 +128,40 @@ export default function ProfileSettingsPage() {
       router.push('/login');
     }
   };
+
+  const handleChangeEmail = async (values: z.infer<typeof emailSchema>) => {
+    if (!auth?.currentUser) {
+      toast({ variant: 'destructive', title: 'Fehler', description: 'Benutzer nicht authentifiziert.' });
+      return;
+    }
+    
+    setIsChangingEmail(true);
+
+    try {
+      await verifyBeforeUpdateEmail(auth.currentUser, values.newEmail);
+      toast({
+        title: "Bestätigungs-E-Mail gesendet",
+        description: "Bitte überprüfen Sie Ihr neues E-Mail-Postfach, um die Änderung zu bestätigen.",
+      });
+      emailForm.reset();
+      // Manually close dialog if possible/needed, depends on Dialog component structure
+    } catch (error: any) {
+      let description = 'Beim Senden der Bestätigungs-E-Mail ist ein Fehler aufgetreten.';
+      if (error.code === 'auth/email-already-in-use') {
+        description = 'Diese E-Mail-Adresse wird bereits von einem anderen Konto verwendet.';
+      } else if (error.code === 'auth/requires-recent-login') {
+        description = 'Diese Aktion erfordert eine erneute Anmeldung. Bitte melden Sie sich ab und wieder an, bevor Sie es erneut versuchen.';
+      }
+      toast({
+        variant: 'destructive',
+        title: 'E-Mail-Änderung fehlgeschlagen',
+        description: description,
+      });
+    } finally {
+      setIsChangingEmail(false);
+    }
+  };
+
 
   const handlePasswordReset = async () => {
     if (!user?.email || !auth) {
@@ -207,6 +263,46 @@ export default function ProfileSettingsPage() {
               </CardHeader>
               <CardContent className="grid gap-2">
                 <Button variant="ghost" className="justify-start">Daten ändern</Button>
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <Button variant="ghost" className="justify-start">E-Mail-Adresse ändern</Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <Form {...emailForm}>
+                      <form onSubmit={emailForm.handleSubmit(handleChangeEmail)}>
+                        <DialogHeader>
+                          <DialogTitle>E-Mail-Adresse ändern</DialogTitle>
+                          <DialogDescription>
+                            Geben Sie Ihre neue E-Mail-Adresse ein. Sie erhalten eine Bestätigungs-E-Mail, um die Änderung abzuschließen.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="py-4">
+                          <FormField
+                            control={emailForm.control}
+                            name="newEmail"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Neue E-Mail-Adresse</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="neue.email@beispiel.de" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                        <DialogFooter>
+                           <DialogClose asChild>
+                            <Button type="button" variant="outline">Abbrechen</Button>
+                           </DialogClose>
+                           <Button type="submit" disabled={isChangingEmail}>
+                            {isChangingEmail ? <Loader2 className="animate-spin" /> : 'Änderung anfordern'}
+                          </Button>
+                        </DialogFooter>
+                      </form>
+                    </Form>
+                  </DialogContent>
+                </Dialog>
                 <Button variant="ghost" className="justify-start" onClick={handlePasswordReset}>Passwort ändern</Button>
                 <Button variant="ghost" className="justify-start" onClick={handleLogout}>Logout</Button>
               </CardContent>
