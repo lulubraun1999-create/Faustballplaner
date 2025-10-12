@@ -145,7 +145,9 @@ export default function ProfileSettingsPage() {
       await deleteDoc(userDocRef);
 
       // Then, delete the user from Firebase Auth
-      await deleteUser(user);
+      if(auth.currentUser) {
+        await deleteUser(auth.currentUser);
+      }
       
       toast({
         title: "Konto gelöscht",
@@ -220,7 +222,7 @@ export default function ProfileSettingsPage() {
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button variant="destructive" className="w-full" disabled={isDeleting}>
-                        Konto dauerhaft löschen
+                        {isDeleting ? <Loader2 className="animate-spin" /> : 'Konto dauerhaft löschen'}
                       </Button>
                     </AlertDialogTrigger>
                     <AlertDialogContent>
@@ -372,10 +374,10 @@ export default function ProfileSettingsPage() {
                                                 </SelectTrigger>
                                             </FormControl>
                                             <SelectContent>
-                                                <SelectItem value="herren">Herren</SelectItem>
-                                                <SelectItem value="damen">Damen</SelectItem>
-                                                <SelectItem value="divers_herrenteam">Divers Herrenteam</SelectItem>
-                                                <SelectItem value="divers_damenteam">Divers Damenteam</SelectItem>
+                                                <SelectItem value="maennlich">männlich</SelectItem>
+                                                <SelectItem value="weiblich">weiblich</SelectItem>
+                                                <SelectItem value="divers_herrenteam">divers (, herrenteam)</SelectItem>
+                                                <SelectItem value="divers_damenteam">divers (, damenteam)</SelectItem>
                                             </SelectContent>
                                         </Select>
                                         <FormMessage />
