@@ -72,7 +72,7 @@ function ManageGroupsForm({ categories, groups, onDone }: { categories: GroupCat
         try {
             if (action === 'add') {
                 if (!newName) {
-                    toast({ variant: 'destructive', title: 'Name fehlt' });
+                    toast({ variant: 'destructive', title: 'Name fehlt', description: 'Bitte geben Sie einen Namen ein.' });
                     return;
                 }
                 if (target === 'category') {
@@ -83,7 +83,7 @@ function ManageGroupsForm({ categories, groups, onDone }: { categories: GroupCat
                     toast({ title: 'Obergruppe hinzugefügt' });
                 } else { // target === 'group'
                     if (!selectedCategoryId) {
-                        toast({ variant: 'destructive', title: 'Obergruppe fehlt' });
+                        toast({ variant: 'destructive', title: 'Obergruppe fehlt', description: 'Bitte wählen Sie eine Obergruppe aus.' });
                         return;
                     }
                     await addDoc(collection(firestore, 'groups'), {
@@ -94,7 +94,7 @@ function ManageGroupsForm({ categories, groups, onDone }: { categories: GroupCat
                 }
             } else if (action === 'edit') {
                  if (!newName || !getTargetId()) {
-                    toast({ variant: 'destructive', title: 'Auswahl oder Name fehlt' });
+                    toast({ variant: 'destructive', title: 'Auswahl oder Name fehlt', description: 'Bitte wählen Sie ein Element aus und geben Sie einen neuen Namen an.' });
                     return;
                  }
                 const collectionName = target === 'category' ? 'group_categories' : 'groups';
@@ -103,7 +103,7 @@ function ManageGroupsForm({ categories, groups, onDone }: { categories: GroupCat
 
             } else { // action === 'delete'
                 if (!getTargetId()) {
-                    toast({ variant: 'destructive', title: 'Auswahl fehlt' });
+                    toast({ variant: 'destructive', title: 'Auswahl fehlt', description: 'Bitte wählen Sie ein Element zum Löschen aus.' });
                     return;
                 }
                  const collectionName = target === 'category' ? 'group_categories' : 'groups';
@@ -120,9 +120,13 @@ function ManageGroupsForm({ categories, groups, onDone }: { categories: GroupCat
             setNewName('');
             setSelectedCategoryId('');
             setSelectedGroupId('');
-        } catch (error) {
-            console.error(error);
-            toast({ variant: 'destructive', title: 'Ein Fehler ist aufgetreten' });
+        } catch (error: any) {
+            console.error("Fehler bei der Aktion:", error);
+            toast({ 
+                variant: 'destructive', 
+                title: 'Ein Fehler ist aufgetreten',
+                description: error.message || 'Die Aktion konnte nicht ausgeführt werden. Prüfen Sie die Berechtigungen.'
+            });
         } finally {
             setIsSubmitting(false);
         }
@@ -216,7 +220,6 @@ function ManageGroupsForm({ categories, groups, onDone }: { categories: GroupCat
 
 export default function GruppenPage() {
   const firestore = useFirestore();
-  const { toast } = useToast();
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isClient, setIsClient] = useState(false);
@@ -325,7 +328,7 @@ export default function GruppenPage() {
         <div className="mx-auto max-w-6xl">
           <div className="flex items-center justify-between mb-8">
             <h1 className="text-3xl font-bold">Gruppen</h1>
-            {!isEditing && <Button variant="outline" onClick={() => setIsEditing(true)}>Gruppe bearbeiten</Button>}
+            {isClient && !isEditing && <Button variant="outline" onClick={() => setIsEditing(true)}>Gruppe bearbeiten</Button>}
           </div>
           {renderContent()}
         </div>
