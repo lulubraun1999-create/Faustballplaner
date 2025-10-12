@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -20,34 +19,34 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 
 
-interface GroupCategory {
+interface TeamCategory {
   id: string;
   name: string;
   order: number;
 }
 
-interface Group {
+interface Team {
   id: string;
   name: string;
   categoryId: string;
 }
 
-function ManageGroupsForm({ categories, groups, onDone }: { categories: GroupCategory[], groups: Group[], onDone: () => void }) {
+function ManageTeamsForm({ categories, teams, onDone }: { categories: TeamCategory[], teams: Team[], onDone: () => void }) {
     const firestore = useFirestore();
     const { toast } = useToast();
     const [action, setAction] = useState<'add' | 'edit' | 'delete'>('add');
-    const [target, setTarget] = useState<'category' | 'group'>('group');
+    const [target, setTarget] = useState<'category' | 'team'>('team');
     const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
-    const [selectedGroupId, setSelectedGroupId] = useState<string>('');
+    const [selectedTeamId, setSelectedTeamId] = useState<string>('');
     const [newName, setNewName] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const getTargetId = () => target === 'category' ? selectedCategoryId : selectedGroupId;
+    const getTargetId = () => target === 'category' ? selectedCategoryId : selectedTeamId;
     const getTargetName = () => {
         if (target === 'category') {
             return categories.find(c => c.id === selectedCategoryId)?.name || '';
         }
-        return groups.find(g => g.id === selectedGroupId)?.name || '';
+        return teams.find(g => g.id === selectedTeamId)?.name || '';
     }
 
     useEffect(() => {
@@ -59,7 +58,7 @@ function ManageGroupsForm({ categories, groups, onDone }: { categories: GroupCat
         } else {
             setNewName('');
         }
-    }, [action, target, selectedCategoryId, selectedGroupId, categories, groups]);
+    }, [action, target, selectedCategoryId, selectedTeamId, categories, teams]);
 
 
     const handleExecute = async (e?: React.FormEvent) => {
@@ -78,22 +77,22 @@ function ManageGroupsForm({ categories, groups, onDone }: { categories: GroupCat
                     return;
                 }
                 if (target === 'category') {
-                    await addDoc(collection(firestore, 'group_categories'), {
+                    await addDoc(collection(firestore, 'team_categories'), {
                         name: newName,
                         order: (categories?.length || 0) + 1,
                     });
-                    toast({ title: 'Obergruppe hinzugefügt' });
-                } else { // target === 'group'
+                    toast({ title: 'Ober-Mannschaft hinzugefügt' });
+                } else { // target === 'team'
                     if (!selectedCategoryId) {
-                        toast({ variant: 'destructive', title: 'Obergruppe fehlt', description: 'Bitte wählen Sie eine Obergruppe aus.' });
+                        toast({ variant: 'destructive', title: 'Ober-Mannschaft fehlt', description: 'Bitte wählen Sie eine Ober-Mannschaft aus.' });
                         setIsSubmitting(false);
                         return;
                     }
-                    await addDoc(collection(firestore, 'groups'), {
+                    await addDoc(collection(firestore, 'teams'), {
                         name: newName,
                         categoryId: selectedCategoryId,
                     });
-                    toast({ title: 'Untergruppe hinzugefügt' });
+                    toast({ title: 'Unter-Mannschaft hinzugefügt' });
                 }
             } else if (action === 'edit') {
                  if (!newName || !getTargetId()) {
@@ -101,9 +100,9 @@ function ManageGroupsForm({ categories, groups, onDone }: { categories: GroupCat
                     setIsSubmitting(false);
                     return;
                  }
-                const collectionName = target === 'category' ? 'group_categories' : 'groups';
+                const collectionName = target === 'category' ? 'team_categories' : 'teams';
                 await updateDoc(doc(firestore, collectionName, getTargetId()), { name: newName });
-                toast({ title: `${target === 'category' ? 'Ober' : 'Unter'}gruppe aktualisiert` });
+                toast({ title: `${target === 'category' ? 'Ober' : 'Unter'}mannschaft aktualisiert` });
 
             } else { // action === 'delete'
                 if (!getTargetId()) {
@@ -111,16 +110,16 @@ function ManageGroupsForm({ categories, groups, onDone }: { categories: GroupCat
                     setIsSubmitting(false);
                     return;
                 }
-                 const collectionName = target === 'category' ? 'group_categories' : 'groups';
+                 const collectionName = target === 'category' ? 'team_categories' : 'teams';
                 await deleteDoc(doc(firestore, collectionName, getTargetId()));
                 if(target === 'category' && selectedCategoryId) {
-                     // Also delete subgroups
-                    const groupsToDelete = groups.filter(g => g.categoryId === selectedCategoryId);
-                    for(const group of groupsToDelete) {
-                        await deleteDoc(doc(firestore, 'groups', group.id));
+                     // Also delete subteams
+                    const teamsToDelete = teams.filter(g => g.categoryId === selectedCategoryId);
+                    for(const team of teamsToDelete) {
+                        await deleteDoc(doc(firestore, 'teams', team.id));
                     }
                 }
-                toast({ title: `${target === 'category' ? 'Ober' : 'Unter'}gruppe gelöscht` });
+                toast({ title: `${target === 'category' ? 'Ober' : 'Unter'}mannschaft gelöscht` });
             }
         } catch (error: any) {
             console.error("Fehler bei der Aktion:", error);
@@ -140,8 +139,8 @@ function ManageGroupsForm({ categories, groups, onDone }: { categories: GroupCat
             <CardHeader>
                 <div className="flex justify-between items-start">
                     <div>
-                        <CardTitle>Gruppen verwalten</CardTitle>
-                        <CardDescription>Füge neue Gruppen hinzu, bearbeite oder lösche bestehende.</CardDescription>
+                        <CardTitle>Mannschaften verwalten</CardTitle>
+                        <CardDescription>Füge neue Mannschaften hinzu, bearbeite oder lösche bestehende.</CardDescription>
                     </div>
                     <Button variant="outline" onClick={onDone}>Schließen</Button>
                 </div>
@@ -164,16 +163,16 @@ function ManageGroupsForm({ categories, groups, onDone }: { categories: GroupCat
                                 <SelectValue placeholder="Ziel wählen..." />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="category">Obergruppe</SelectItem>
-                                <SelectItem value="group">Untergruppe</SelectItem>
+                                <SelectItem value="category">Ober-Mannschaft</SelectItem>
+                                <SelectItem value="team">Unter-Mannschaft</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
                     
-                    { (action === 'add' && target === 'group') || (action !== 'add' && target === 'group') ? (
+                    { (action === 'add' && target === 'team') || (action !== 'add' && target === 'team') ? (
                         <Select value={selectedCategoryId} onValueChange={setSelectedCategoryId}>
                             <SelectTrigger>
-                                <SelectValue placeholder="Obergruppe wählen..." />
+                                <SelectValue placeholder="Ober-Mannschaft wählen..." />
                             </SelectTrigger>
                             <SelectContent>
                                 {categories.map(cat => <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>)}
@@ -181,13 +180,13 @@ function ManageGroupsForm({ categories, groups, onDone }: { categories: GroupCat
                         </Select>
                     ) : null }
 
-                    {action !== 'add' && target === 'group' ? (
-                         <Select value={selectedGroupId} onValueChange={setSelectedGroupId}>
+                    {action !== 'add' && target === 'team' ? (
+                         <Select value={selectedTeamId} onValueChange={setSelectedTeamId}>
                             <SelectTrigger>
-                                <SelectValue placeholder="Untergruppe wählen..." />
+                                <SelectValue placeholder="Unter-Mannschaft wählen..." />
                             </SelectTrigger>
                             <SelectContent>
-                                 {(groups || []).filter(g => g.categoryId === selectedCategoryId).map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}
+                                 {(teams || []).filter(g => g.categoryId === selectedCategoryId).map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}
                             </SelectContent>
                         </Select>
                     ) : null}
@@ -195,7 +194,7 @@ function ManageGroupsForm({ categories, groups, onDone }: { categories: GroupCat
                      {action !== 'add' && target === 'category' ? (
                          <Select value={selectedCategoryId} onValueChange={setSelectedCategoryId}>
                             <SelectTrigger>
-                                <SelectValue placeholder="Obergruppe wählen..." />
+                                <SelectValue placeholder="Ober-Mannschaft wählen..." />
                             </SelectTrigger>
                             <SelectContent>
                                 {categories.map(cat => <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>)}
@@ -222,7 +221,7 @@ function ManageGroupsForm({ categories, groups, onDone }: { categories: GroupCat
     );
 }
 
-export default function GruppenPage() {
+export default function MannschaftenPage() {
   const firestore = useFirestore();
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -234,16 +233,16 @@ export default function GruppenPage() {
 
   const categoriesQuery = useMemoFirebase(() => {
     if (!firestore) return null;
-    return query(collection(firestore, 'group_categories'), orderBy('order'));
+    return query(collection(firestore, 'team_categories'), orderBy('order'));
   }, [firestore]);
 
-  const groupsQuery = useMemoFirebase(() => {
+  const teamsQuery = useMemoFirebase(() => {
     if (!firestore) return null;
-    return collection(firestore, 'groups');
+    return collection(firestore, 'teams');
   }, [firestore]);
 
-  const { data: categories, isLoading: categoriesLoading } = useCollection<GroupCategory>(categoriesQuery);
-  const { data: groups, isLoading: groupsLoading } = useCollection<Group>(groupsQuery);
+  const { data: categories, isLoading: categoriesLoading } = useCollection<TeamCategory>(categoriesQuery);
+  const { data: teams, isLoading: teamsLoading } = useCollection<Team>(teamsQuery);
   
   useEffect(() => {
     if (categories && categories.length > 0 && !selectedCategoryId) {
@@ -253,10 +252,10 @@ export default function GruppenPage() {
 
 
   const selectedCategory = categories?.find(c => c.id === selectedCategoryId);
-  const filteredGroups = groups?.filter(g => g.categoryId === selectedCategoryId);
+  const filteredTeams = teams?.filter(g => g.categoryId === selectedCategoryId);
 
   const renderContent = () => {
-    if (!isClient || categoriesLoading || groupsLoading) {
+    if (!isClient || categoriesLoading || teamsLoading) {
       return (
         <div className="flex items-center justify-center p-8">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -265,13 +264,13 @@ export default function GruppenPage() {
     }
     
     if (isEditing) {
-        return <ManageGroupsForm categories={categories || []} groups={groups || []} onDone={() => setIsEditing(false)} />;
+        return <ManageTeamsForm categories={categories || []} teams={teams || []} onDone={() => setIsEditing(false)} />;
     }
     
     if (!categories || categories.length === 0) {
         return (
             <div className="text-center p-8">
-                <p className="p-4 text-muted-foreground">Keine Gruppenkategorien gefunden.</p>
+                <p className="p-4 text-muted-foreground">Keine Mannschafts-Kategorien gefunden.</p>
                 <Button onClick={() => setIsEditing(true)}>Jetzt erstellen</Button>
             </div>
         );
@@ -307,16 +306,16 @@ export default function GruppenPage() {
             <CardTitle className="text-lg">{selectedCategory?.name || 'Kategorie wählen'}</CardTitle>
           </CardHeader>
           <CardContent>
-            {filteredGroups && filteredGroups.length > 0 ? (
+            {filteredTeams && filteredTeams.length > 0 ? (
                 <div className="flex flex-col gap-2">
-                  {filteredGroups.map((group) => (
-                    <div key={group.id} className="p-3 rounded-md border">
-                      {group.name}
+                  {filteredTeams.map((team) => (
+                    <div key={team.id} className="p-3 rounded-md border">
+                      {team.name}
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-muted-foreground">Keine Gruppen in dieser Kategorie gefunden.</p>
+                <p className="text-muted-foreground">Keine Mannschaften in dieser Kategorie gefunden.</p>
               )}
           </CardContent>
         </Card>
@@ -331,8 +330,8 @@ export default function GruppenPage() {
       <main className="flex-1 p-4 md:p-8">
         <div className="mx-auto max-w-6xl">
           <div className="flex items-center justify-between mb-8">
-            <h1 className="text-3xl font-bold">Gruppen</h1>
-            {isClient && !isEditing && <Button variant="outline" onClick={() => setIsEditing(true)}>Gruppe bearbeiten</Button>}
+            <h1 className="text-3xl font-bold">Mannschaften</h1>
+            {isClient && !isEditing && <Button variant="outline" onClick={() => setIsEditing(true)}>Mannschaft bearbeiten</Button>}
           </div>
           {renderContent()}
         </div>

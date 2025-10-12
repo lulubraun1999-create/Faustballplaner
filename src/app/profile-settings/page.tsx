@@ -3,9 +3,9 @@
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useEffect, useState } from 'react';
-import { doc, setDoc, deleteDoc, Timestamp } from 'firebase/firestore';
-import { useAuth, useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
+import { useEffect, useState, useMemo } from 'react';
+import { doc, setDoc, deleteDoc, Timestamp, collection } from 'firebase/firestore';
+import { useAuth, useUser, useFirestore, useDoc, useCollection, useMemoFirebase } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -21,6 +21,13 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { CalendarIcon, Loader2 } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -56,6 +63,7 @@ const profileSchema = z.object({
     angriff: z.boolean().default(false),
   }).optional(),
   geburtstag: z.date().optional(),
+  teamId: z.string().optional(),
 });
 
 type ProfileFormValues = z.infer<typeof profileSchema>;
@@ -77,9 +85,15 @@ interface UserData {
     geschlecht?: string;
     geburtstag?: Timestamp;
     adminRechte?: boolean;
+    teamId?: string;
 }
 
-function ProfileForm({ defaultValues, userData }: { defaultValues: ProfileFormValues, userData: UserData | null }) {
+interface Team {
+  id: string;
+  name: string;
+}
+
+function ProfileForm({ defaultValues, userData, teams }: { defaultValues: ProfileFormValues, userData: UserData | null, teams: Team[] | null }) {
   const { user } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
@@ -87,6 +101,8 @@ function ProfileForm({ defaultValues, userData }: { defaultValues: ProfileFormVa
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileSchema),
     defaultValues,
+    // The following line is important to update form values when `defaultValues` prop changes
+    values: defaultValues,
   });
 
   const onSubmit = async (values: ProfileFormValues) => {
@@ -96,7 +112,17 @@ function ProfileForm({ defaultValues, userData }: { defaultValues: ProfileFormVa
     }
     try {
       const userDocRef = doc(firestore, "users", user.uid);
-      await setDoc(userDocRef, values, { merge: true });
+      const dataToSave: any = {
+        ...values,
+        geburtstag: values.geburtstag ? Timestamp.fromDate(values.geburtstag) : null,
+      }
+      
+      // The `teamId` should only be set if the user is an admin
+      if (!userData?.adminRechte) {
+        delete dataToSave.teamId;
+      }
+
+      await setDoc(userDocRef, dataToSave, { merge: true });
       toast({ title: 'Erfolg', description: 'Ihre Daten wurden erfolgreich gespeichert.' });
     } catch (error) {
       toast({ variant: 'destructive', title: 'Fehler', description: 'Beim Speichern Ihrer Daten ist ein Fehler aufgetreten.' });
@@ -196,6 +222,33 @@ function ProfileForm({ defaultValues, userData }: { defaultValues: ProfileFormVa
                 <Label htmlFor="rolle">Rolle</Label>
                 <Input id="rolle" defaultValue={userData?.adminRechte ? "Admin" : "Benutzer"} disabled />
             </div>
+
+            {/* Mannschaft - Nur für Admins */}
+            {userData?.adminRechte && (
+              <FormField
+                control={form.control}
+                name="teamId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Mannschaft</FormLabel>
+                     <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Mannschaft auswählen..." />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="none">Keine Mannschaft</SelectItem>
+                        {teams?.map(team => (
+                          <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             {/* Geburtstag */}
              <FormField
@@ -300,7 +353,13 @@ export default function ProfileSettingsPage() {
     return doc(firestore, 'users', user.uid);
   }, [firestore, user]);
 
+  const teamsCollectionRef = useMemoFirebase(() => {
+    if(!firestore) return null;
+    return collection(firestore, 'teams');
+  }, [firestore]);
+
   const { data: userData, isLoading: isUserDataLoading } = useDoc<UserData>(userDocRef);
+  const { data: teams, isLoading: areTeamsLoading } = useCollection<Team>(teamsCollectionRef);
 
   const emailForm = useForm({
     resolver: zodResolver(emailSchema),
@@ -413,7 +472,9 @@ export default function ProfileSettingsPage() {
     }
   };
 
-  if (isUserLoading || isUserDataLoading) {
+  const isLoading = isUserLoading || isUserDataLoading || areTeamsLoading;
+
+  if (isLoading) {
      return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-background">
         <Loader2 className="h-16 w-16 animate-spin text-primary" />
@@ -429,6 +490,7 @@ export default function ProfileSettingsPage() {
     wohnort: userData?.wohnort || '',
     position: userData?.position || { abwehr: false, zuspiel: false, angriff: false },
     geburtstag: userData?.geburtstag?.toDate() || undefined,
+    teamId: userData?.teamId || 'none',
   };
 
   return (
@@ -525,7 +587,7 @@ export default function ProfileSettingsPage() {
           </aside>
 
           <section>
-             <ProfileForm defaultValues={defaultFormValues} userData={userData} />
+             <ProfileForm defaultValues={defaultFormValues} userData={userData} teams={teams}/>
           </section>
         </div>
       </main>

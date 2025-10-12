@@ -32,6 +32,12 @@ interface User {
   email?: string;
   telefon?: string;
   wohnort?: string;
+  teamId?: string;
+}
+
+interface Team {
+    id: string;
+    name: string;
 }
 
 const formatPosition = (position?: { abwehr: boolean; zuspiel: boolean; angriff: boolean; }) => {
@@ -52,10 +58,25 @@ export default function MitgliederPage() {
     return collection(firestore, 'users');
   }, [firestore]);
 
-  const { data: users, isLoading, error } = useCollection<User>(usersCollectionRef);
+  const teamsCollectionRef = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return collection(firestore, 'teams');
+  }, [firestore]);
+
+  const { data: users, isLoading: usersLoading, error: usersError } = useCollection<User>(usersCollectionRef);
+  const { data: teams, isLoading: teamsLoading, error: teamsError } = useCollection<Team>(teamsCollectionRef);
+  
+  const isLoading = usersLoading || teamsLoading || isUserLoading;
+  const error = usersError || teamsError;
+
+  const teamsMap = useMemoFirebase(() => {
+    if (!teams) return new Map();
+    return new Map(teams.map(team => [team.id, team.name]));
+  }, [teams]);
+
 
   const renderContent = () => {
-    if (isLoading || isUserLoading) {
+    if (isLoading) {
       return (
         <div className="flex items-center justify-center py-8">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -70,7 +91,7 @@ export default function MitgliederPage() {
           <ShieldAlert className="h-12 w-12" />
           <div className="space-y-1">
              <p className="font-bold text-lg">Zugriff verweigert</p>
-             <p className="text-muted-foreground">Sie haben nicht die erforderlichen Administratorrechte, um diese Seite anzuzeigen.</p>
+             <p className="text-muted-foreground">Sie haben nicht die erforderlichen Berechtigungen, um diese Seite anzuzeigen.</p>
           </div>
         </div>
       );
@@ -81,6 +102,7 @@ export default function MitgliederPage() {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead>Mannschaft</TableHead>
               <TableHead>Vorname</TableHead>
               <TableHead>Nachname</TableHead>
               <TableHead>Position</TableHead>
@@ -94,6 +116,7 @@ export default function MitgliederPage() {
           <TableBody>
             {users.map((user) => (
               <TableRow key={user.id}>
+                <TableCell>{user.teamId ? teamsMap.get(user.teamId) || 'N/A' : 'N/A'}</TableCell>
                 <TableCell className="font-medium">{user.vorname || 'N/A'}</TableCell>
                 <TableCell className="font-medium">{user.nachname || 'N/A'}</TableCell>
                 <TableCell>{formatPosition(user.position)}</TableCell>
@@ -127,7 +150,7 @@ export default function MitgliederPage() {
             <CardHeader>
               <CardTitle>Mitglieder</CardTitle>
               <CardDescription>
-                Eine Liste aller registrierten Mitglieder im System. Nur für Administratoren sichtbar.
+                Eine Liste aller registrierten Mitglieder im System.
               </CardDescription>
             </CardHeader>
             <CardContent>

@@ -227,6 +227,10 @@
           "type": "string",
           "description": "Date and time when the user registered.",
           "format": "date-time"
+        },
+        "teamId": {
+          "type": "string",
+          "description": "The ID of the team this user belongs to."
         }
       },
       "required": [
@@ -236,11 +240,11 @@
         "registrationDate"
       ]
     },
-    "GroupCategory": {
+    "TeamCategory": {
       "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "GroupCategory",
+      "title": "TeamCategory",
       "type": "object",
-      "description": "Represents a category for groups.",
+      "description": "Represents a category for teams.",
       "properties": {
         "name": {
           "type": "string",
@@ -253,19 +257,19 @@
       },
       "required": ["name", "order"]
     },
-    "Group": {
+    "Team": {
       "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Group",
+      "title": "Team",
       "type": "object",
-      "description": "Represents a single group within a category.",
+      "description": "Represents a single team within a category.",
       "properties": {
         "name": {
           "type": "string",
-          "description": "The name of the group."
+          "description": "The name of the team."
         },
         "categoryId": {
           "type": "string",
-          "description": "The ID of the category this group belongs to."
+          "description": "The ID of the category this team belongs to."
         }
       },
       "required": ["name", "categoryId"]
@@ -380,27 +384,26 @@
         }
       },
       {
-        "path": "/group_categories/{categoryId}",
+        "path": "/team_categories/{categoryId}",
         "definition": {
-          "entityName": "GroupCategory",
+          "entityName": "TeamCategory",
           "schema": {
-            "$ref": "#/backend/entities/GroupCategory"
+            "$ref": "#/backend/entities/TeamCategory"
           },
-          "description": "Collection of group categories."
+          "description": "Collection of team categories."
         }
       },
       {
-        "path": "/groups/{groupId}",
+        "path": "/teams/{teamId}",
         "definition": {
-          "entityName": "Group",
+          "entityName": "Team",
           "schema": {
-            "$ref": "#/backend/entities/Group"
+            "$ref": "#/backend/entities/Team"
           },
-          "description": "Collection of all groups."
+          "description": "Collection of all teams."
         }
       }
     ],
     "reasoning": "The Firestore data structure is designed to support the Werkself Hub application, focusing on news, match data, player information, AI-generated highlights, and a fan forum. The structure emphasizes authorization independence and efficient data retrieval.  \n\nAuthorization Independence is achieved by avoiding `get()` calls in Firestore rules. For instance, user-specific forum posts are stored under the `/users/{userId}/forum_posts/{postId}` path, making ownership explicit and verifiable without needing to access parent document data.  Similarly, although HighlightReels have a relationship to Matches, they are stored under a separate collection `/highlight_reels/{highlightReelId}` with the `matchId` denormalized, removing authorization dependencies based on match data.  The lack of any custom claims enforces DBAC. \n\nQAPs (Queries Are Permissions) are supported via Structural Segregation.  There is no mixing of secured and public data in any collection. For instance, forum posts are accessible only to authenticated users (or potentially publicly, depending on desired configuration), and sensitive user data (if any beyond the auth record) would be kept in `/users/{userId}` which uses path-based authorization, ensuring only the user can access their own data.\n\nThe structure favors path-based ownership (`/users/{userId}/forum_posts/{postId}`) for user-generated content and dedicated collections (e.g., `/news_articles`, `/matches`, `/players`) for global data. Global data is assumed to be read-only for most users, with administrative access controlled at the application level. In the future, if access controls are required for global data, a membership map could be used to control access, with appropriate denormalization."
   }
 }
-    
