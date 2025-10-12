@@ -1,3 +1,4 @@
+
 'use client';
 
 import { collection, Timestamp, doc, updateDoc, deleteDoc, setDoc, query, orderBy } from 'firebase/firestore';
@@ -216,7 +217,8 @@ export default function MitgliederPage() {
             const groupMemberData = {
                 vorname: userToSync.vorname,
                 position: userToSync.position,
-                adminRechte: userToSync.adminRechte
+                adminRechte: userToSync.adminRechte,
+                teamIds: selectedTeamIds // Add teamIds to group_members
             };
 
             // Save to 'members' and 'group_members' collections

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -17,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { Badge } from '@/components/ui/badge';
 
 
 interface TeamCategory {
@@ -30,6 +32,28 @@ interface Team {
   name: string;
   categoryId: string;
 }
+
+interface GroupMember {
+  id: string;
+  vorname: string;
+  position?: {
+    abwehr: boolean;
+    zuspiel: boolean;
+    angriff: boolean;
+  };
+  adminRechte?: boolean;
+  teamIds?: string[];
+}
+
+const formatPosition = (position?: { abwehr: boolean; zuspiel: boolean; angriff: boolean; }) => {
+    if (!position) return 'N/A';
+    const positions = [];
+    if (position.abwehr) positions.push('Abwehr');
+    if (position.zuspiel) positions.push('Zuspiel');
+    if (position.angriff) positions.push('Angriff');
+    return positions.length > 0 ? positions.join(', ') : 'N/A';
+}
+
 
 function ManageTeamsForm({ categories, teams, onDone }: { categories: TeamCategory[], teams: Team[], onDone: () => void }) {
     const firestore = useFirestore();
@@ -224,6 +248,7 @@ function ManageTeamsForm({ categories, teams, onDone }: { categories: TeamCatego
 export default function MannschaftenPage() {
   const firestore = useFirestore();
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isClient, setIsClient] = useState(false);
 
@@ -241,8 +266,16 @@ export default function MannschaftenPage() {
     return collection(firestore, 'teams');
   }, [firestore]);
 
+  const groupMembersQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return collection(firestore, 'group_members');
+  }, [firestore]);
+
+
   const { data: categories, isLoading: categoriesLoading } = useCollection<TeamCategory>(categoriesQuery);
   const { data: teams, isLoading: teamsLoading } = useCollection<Team>(teamsQuery);
+  const { data: groupMembers, isLoading: groupMembersLoading } = useCollection<GroupMember>(groupMembersQuery);
+
   
   useEffect(() => {
     if (categories && categories.length > 0 && !selectedCategoryId) {
@@ -250,12 +283,19 @@ export default function MannschaftenPage() {
     }
   }, [categories, selectedCategoryId]);
 
+  const handleCategoryClick = (categoryId: string) => {
+    setSelectedCategoryId(categoryId);
+    setSelectedTeamId(null); // Reset sub-team selection
+  }
 
   const selectedCategory = categories?.find(c => c.id === selectedCategoryId);
+  const selectedTeam = teams?.find(t => t.id === selectedTeamId);
   const filteredTeams = teams?.filter(g => g.categoryId === selectedCategoryId);
+  const filteredMembers = groupMembers?.filter(member => member.teamIds?.includes(selectedTeamId || ''));
+
 
   const renderContent = () => {
-    if (!isClient || categoriesLoading || teamsLoading) {
+    if (!isClient || categoriesLoading || teamsLoading || groupMembersLoading) {
       return (
         <div className="flex items-center justify-center p-8">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -277,48 +317,79 @@ export default function MannschaftenPage() {
     }
 
     return (
-      <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-8">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">TSV Bayer Leverkusen</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <nav className="flex flex-col gap-1">
-              {categories.map((category) => (
-                <button
-                  key={category.id}
-                  onClick={() => setSelectedCategoryId(category.id)}
-                  className={cn(
-                    'w-full text-left px-3 py-2 rounded-md text-sm transition-colors',
-                    selectedCategoryId === category.id
-                      ? 'bg-muted font-semibold'
-                      : 'hover:bg-muted/50'
-                  )}
-                >
-                  {category.name}
-                </button>
-              ))}
-            </nav>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">{selectedCategory?.name || 'Kategorie wählen'}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {filteredTeams && filteredTeams.length > 0 ? (
-                <div className="flex flex-col gap-2">
-                  {filteredTeams.map((team) => (
-                    <div key={team.id} className="p-3 rounded-md border">
-                      {team.name}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-muted-foreground">Keine Mannschaften in dieser Kategorie gefunden.</p>
-              )}
-          </CardContent>
-        </Card>
+      <div className="space-y-8">
+        <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-8">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">TSV Bayer Leverkusen</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <nav className="flex flex-col gap-1">
+                {categories.map((category) => (
+                  <button
+                    key={category.id}
+                    onClick={() => handleCategoryClick(category.id)}
+                    className={cn(
+                      'w-full text-left px-3 py-2 rounded-md text-sm transition-colors',
+                      selectedCategoryId === category.id
+                        ? 'bg-muted font-semibold'
+                        : 'hover:bg-muted/50'
+                    )}
+                  >
+                    {category.name}
+                  </button>
+                ))}
+              </nav>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">{selectedCategory?.name || 'Kategorie wählen'}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {filteredTeams && filteredTeams.length > 0 ? (
+                  <div className="flex flex-col gap-2">
+                    {filteredTeams.map((team) => (
+                      <button 
+                        key={team.id}
+                        onClick={() => setSelectedTeamId(team.id)}
+                        className={cn("p-3 rounded-md border text-left",
+                            selectedTeamId === team.id ? 'bg-muted ring-2 ring-primary' : 'hover:bg-muted/50'
+                        )}
+                        >
+                        {team.name}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground">Keine Mannschaften in dieser Kategorie gefunden.</p>
+                )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {selectedTeamId && (
+            <Card>
+                <CardHeader>
+                    <CardTitle>Mitglieder von: {selectedTeam?.name}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    {filteredMembers && filteredMembers.length > 0 ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                            {filteredMembers.map(member => (
+                                <Card key={member.id} className="p-4">
+                                    <p className="font-bold text-lg">{member.vorname}</p>
+                                    <p className="text-sm text-muted-foreground">{formatPosition(member.position)}</p>
+                                    {member.adminRechte && <Badge className="mt-2">Admin</Badge>}
+                                </Card>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-muted-foreground">Keine Mitglieder in dieser Mannschaft gefunden.</p>
+                    )}
+                </CardContent>
+            </Card>
+        )}
       </div>
     );
   };
