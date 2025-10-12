@@ -290,6 +290,7 @@ export default function MannschaftenPage() {
   }
 
   const selectedCategory = categories?.find(c => c.id === selectedCategoryId);
+  const filteredTeams = teams?.filter(t => t.categoryId === selectedCategoryId);
   const selectedTeam = teams?.find(t => t.id === selectedTeamId);
   const filteredMembers = groupMembers?.filter(member => member.teamIds?.includes(selectedTeamId || ''));
 
