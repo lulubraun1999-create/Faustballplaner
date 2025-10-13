@@ -68,6 +68,10 @@ const profileSchema = z.object({
   geburtstag: z.date().optional(),
 });
 
+const emailSchema = z.object({
+  newEmail: z.string().email({ message: "Ungültige E-Mail-Adresse." }),
+});
+
 type ProfileFormValues = z.infer<typeof profileSchema>;
 
 interface UserData {
