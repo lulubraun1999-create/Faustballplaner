@@ -382,7 +382,7 @@ export default function MannschaftenPage() {
                                 const positionText = formatPosition(member.position);
                                 const roleText = member.adminRechte ? ", Trainer" : "";
                                 return (
-                                    <div key={member.id} className={cn("py-2", index < filteredMembers.length - 1 && "border-b")}>
+                                    <div key={member.id} className={cn("py-4", index < filteredMembers.length - 1 && "border-b")}>
                                         <p>
                                             {`${member.vorname} ${member.nachname}`}
                                             {positionText && ` - ${positionText}`}
