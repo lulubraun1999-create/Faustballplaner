@@ -13,7 +13,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, ShieldAlert, Edit, Shield, Trash2 } from 'lucide-react';
+import { Loader2, ShieldAlert, Edit, Shield, Trash2, Users } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -38,6 +38,11 @@ import {
   DialogTitle,
   DialogClose,
 } from "@/components/ui/dialog"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 import {
   Select,
   SelectContent,
@@ -90,6 +95,47 @@ const formatPosition = (position?: { abwehr: boolean; zuspiel: boolean; angriff:
     if (position.angriff) positions.push('Angriff');
     return positions.length > 0 ? positions.join(', ') : 'N/A';
 }
+
+const TeamsCell = ({ teamIds, teamsMap }: { teamIds?: string[], teamsMap: Map<string, string> }) => {
+  const userTeams = useMemo(() => {
+    return (teamIds || []).map(id => ({ id, name: teamsMap.get(id) })).filter(team => team.name);
+  }, [teamIds, teamsMap]);
+
+  if (userTeams.length === 0) {
+    return <TableCell>N/A</TableCell>;
+  }
+
+  const firstTeam = userTeams[0];
+  const remainingTeamsCount = userTeams.length - 1;
+
+  return (
+    <TableCell>
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button variant="link" className="p-0 h-auto text-left font-normal text-foreground">
+            {firstTeam.name}
+            {remainingTeamsCount > 0 && (
+              <span className="text-muted-foreground ml-2">
+                +{remainingTeamsCount} weitere
+              </span>
+            )}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-56 p-2">
+          <div className="space-y-1">
+            <p className="font-semibold text-sm mb-2">Alle Mannschaften</p>
+            {userTeams.map(team => (
+              <div key={team.id} className="text-sm p-1.5 rounded-sm bg-muted/50">
+                {team.name}
+              </div>
+            ))}
+          </div>
+        </PopoverContent>
+      </Popover>
+    </TableCell>
+  );
+};
+
 
 export default function MitgliederPage() {
   const firestore = useFirestore();
@@ -268,8 +314,7 @@ export default function MitgliederPage() {
           <TableHeader>
             <TableRow>
               <TableHead>Mannschaft</TableHead>
-              <TableHead>Vorname</TableHead>
-              <TableHead>Nachname</TableHead>
+              <TableHead>Name</TableHead>
               <TableHead>Geschlecht</TableHead>
               <TableHead>Position</TableHead>
               <TableHead>Rolle</TableHead>
@@ -283,9 +328,8 @@ export default function MitgliederPage() {
           <TableBody>
             {users.map((user) => (
               <TableRow key={user.id}>
-                <TableCell>{user.teamIds?.map(id => teamsMap.get(id)).filter(Boolean).join(', ') || 'N/A'}</TableCell>
-                <TableCell className="font-medium">{user.vorname || 'N/A'}</TableCell>
-                <TableCell className="font-medium">{user.nachname || 'N/A'}</TableCell>
+                <TeamsCell teamIds={user.teamIds} teamsMap={teamsMap} />
+                <TableCell className="font-medium">{`${user.vorname || ''} ${user.nachname || ''}`.trim() || 'N/A'}</TableCell>
                 <TableCell>{user.geschlecht || 'N/A'}</TableCell>
                 <TableCell>{formatPosition(user.position)}</TableCell>
                 <TableCell>
@@ -302,7 +346,7 @@ export default function MitgliederPage() {
                 {isAdmin && (
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                        <Button variant="ghost" size="icon" onClick={() => openTeamDialog(user)}><Edit className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => openTeamDialog(user)}><Users className="h-4 w-4" /></Button>
                         <Button variant="ghost" size="icon" onClick={() => openRoleDialog(user)}><Shield className="h-4 w-4" /></Button>
                         <Button variant="ghost" size="icon" className="hover:bg-destructive/10 hover:text-destructive" onClick={() => openDeleteAlert(user)}><Trash2 className="h-4 w-4" /></Button>
                     </div>
@@ -438,5 +482,3 @@ export default function MitgliederPage() {
     </div>
   );
 }
-
-    
