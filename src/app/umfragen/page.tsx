@@ -358,7 +358,12 @@ function PollCard({ poll, allUsers }: { poll: Poll; allUsers: GroupMember[] }) {
         if (!user || !firestore || selectedOptions.length === 0) return;
         
         const responseRef = doc(collection(firestore, 'polls', poll.id, 'responses'));
-        const responseData = {
+        const responseData: {
+            userId: string;
+            selectedOptionIds: string[];
+            respondedAt: any;
+            customOption?: string;
+        } = {
             userId: user.uid,
             selectedOptionIds: selectedOptions,
             respondedAt: serverTimestamp()
@@ -494,11 +499,6 @@ export default function UmfragenPage() {
     return collection(firestore, 'group_members');
   }, [firestore]);
 
-  const pollsQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, 'polls'), orderBy('createdAt', 'desc'));
-  }, [firestore]);
-
   const { data: categories, isLoading: categoriesLoading } = useCollection<TeamCategory>(categoriesQuery);
   const { data: teams, isLoading: teamsLoading } = useCollection<Team>(teamsQuery);
   const { data: allUsers, isLoading: usersLoading } = useCollection<GroupMember>(groupMembersQuery);
@@ -586,7 +586,3 @@ export default function UmfragenPage() {
     </div>
   );
 }
-
-    
-
-    
