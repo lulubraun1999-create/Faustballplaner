@@ -2,15 +2,15 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useForm, useFieldArray, Controller } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useFirestore, useUser, useCollection, useMemoFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { addDoc, collection, serverTimestamp, orderBy, query, Timestamp } from 'firebase/firestore';
+import { addDoc, collection, serverTimestamp, orderBy, query, Timestamp, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -33,10 +33,13 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { Checkbox } from "@/components/ui/checkbox"
-import { PlusCircle, Trash2, Loader2, CalendarIcon } from 'lucide-react';
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { PlusCircle, Trash2, Loader2, CalendarIcon, User, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { format } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import { de } from 'date-fns/locale';
+import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 
 interface TeamCategory {
   id: string;
@@ -48,6 +51,33 @@ interface Team {
   id: string;
   name: string;
   categoryId: string;
+}
+
+interface Poll {
+  id: string;
+  question: string;
+  options: { id: string, text: string }[];
+  allowCustomOptions: boolean;
+  allowMultipleAnswers: boolean;
+  isAnonymous: boolean;
+  expiresAt?: Timestamp | null;
+  archiveAt?: Timestamp | null;
+  targetTeamIds?: string[];
+  createdBy: string;
+  createdAt: Timestamp;
+}
+
+interface PollResponse {
+    id: string;
+    userId: string;
+    selectedOptionIds: string[];
+    customOption?: string;
+    respondedAt: Timestamp;
+}
+
+interface UserData {
+    vorname?: string;
+    nachname?: string;
 }
 
 const pollSchema = z.object({
@@ -103,6 +133,7 @@ function CreatePollForm({ onDone, categories, teams }: { onDone: () => void, cat
     
     const dataToSave = {
         ...values,
+        options: values.options.map((opt, index) => ({ id: `option-${index + 1}`, text: opt.text })),
         expiresAt: values.expiresAt ? Timestamp.fromDate(values.expiresAt) : null,
         archiveAt: values.archiveAt ? Timestamp.fromDate(values.archiveAt) : null,
         createdBy: user.uid,
@@ -123,7 +154,6 @@ function CreatePollForm({ onDone, categories, teams }: { onDone: () => void, cat
           requestResourceData: dataToSave,
         });
         errorEmitter.emit('permission-error', permissionError);
-        // The listener will throw, but we also show a toast as a fallback.
         toast({ variant: 'destructive', title: 'Fehler', description: "Berechtigungsfehler: " + serverError.message });
       })
       .finally(() => {
@@ -174,29 +204,11 @@ function CreatePollForm({ onDone, categories, teams }: { onDone: () => void, cat
         <div>
           <h3 className="mb-4 text-lg font-medium">Einstellungen</h3>
           <div className="space-y-4">
-            <FormField control={form.control} name="allowCustomOptions" render={({ field }) => (
-              <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                <div className="space-y-0.5">
-                  <FormLabel>Eigene Optionen</FormLabel>
-                  <p className="text-[0.8rem] text-muted-foreground">Teilnehmern erlauben, eigene Optionen hinzuzufügen.</p>
-                </div>
-                <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
-              </FormItem>
-            )} />
             <FormField control={form.control} name="allowMultipleAnswers" render={({ field }) => (
               <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
                 <div className="space-y-0.5">
                   <FormLabel>Mehrfachantworten</FormLabel>
                   <p className="text-[0.8rem] text-muted-foreground">Teilnehmern erlauben, mehrere Optionen auszuwählen.</p>
-                </div>
-                <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
-              </FormItem>
-            )} />
-            <FormField control={form.control} name="isAnonymous" render={({ field }) => (
-              <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                <div className="space-y-0.5">
-                  <FormLabel>Anonyme Umfrage</FormLabel>
-                  <p className="text-[0.8rem] text-muted-foreground">Die Namen der Teilnehmer werden nicht erfasst.</p>
                 </div>
                 <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
               </FormItem>
@@ -305,10 +317,165 @@ function CreatePollForm({ onDone, categories, teams }: { onDone: () => void, cat
   );
 }
 
+function PollCard({ poll, allUsers }: { poll: Poll; allUsers: UserData[] }) {
+    const { user } = useUser();
+    const firestore = useFirestore();
+    const { toast } = useToast();
+    const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
+
+    const responsesQuery = useMemoFirebase(() => {
+        if (!firestore) return null;
+        return collection(firestore, 'polls', poll.id, 'responses');
+    }, [firestore, poll.id]);
+
+    const { data: responses, isLoading: responsesLoading } = useCollection<PollResponse>(responsesQuery);
+    
+    const creator = useMemo(() => allUsers.find(u => u.id === poll.createdBy), [allUsers, poll.createdBy]);
+    
+    const userHasVoted = useMemo(() => responses?.some(r => r.userId === user?.uid), [responses, user]);
+
+    const totalVotes = useMemo(() => {
+        if (!responses) return 0;
+        return responses.reduce((acc, response) => acc + response.selectedOptionIds.length, 0);
+    }, [responses]);
+
+    const voteCounts = useMemo(() => {
+        const counts = new Map<string, number>();
+        poll.options.forEach(opt => counts.set(opt.id, 0));
+        if (responses) {
+            for (const response of responses) {
+                for (const optionId of response.selectedOptionIds) {
+                    counts.set(optionId, (counts.get(optionId) || 0) + 1);
+                }
+            }
+        }
+        return counts;
+    }, [responses, poll.options]);
+
+    const handleVote = async () => {
+        if (!user || !firestore || selectedOptions.length === 0) return;
+        
+        const responseRef = doc(collection(firestore, 'polls', poll.id, 'responses'));
+        const responseData = {
+            userId: user.uid,
+            selectedOptionIds: selectedOptions,
+            respondedAt: serverTimestamp()
+        };
+
+        setDoc(responseRef, responseData)
+            .then(() => {
+                toast({ title: 'Stimme wurde gezählt' });
+            })
+            .catch((serverError) => {
+                 const permissionError = new FirestorePermissionError({
+                    path: responseRef.path,
+                    operation: 'create',
+                    requestResourceData: responseData,
+                });
+                errorEmitter.emit('permission-error', permissionError);
+                toast({ variant: 'destructive', title: 'Fehler', description: "Abstimmung fehlgeschlagen: " + serverError.message });
+            });
+    };
+    
+    const handleDeletePoll = async () => {
+        if (!firestore) return;
+        await deleteDoc(doc(firestore, 'polls', poll.id));
+        toast({title: "Umfrage gelöscht"});
+    }
+
+    const handleOptionChange = (optionId: string) => {
+        if (poll.allowMultipleAnswers) {
+            setSelectedOptions(prev => 
+                prev.includes(optionId) ? prev.filter(id => id !== optionId) : [...prev, optionId]
+            );
+        } else {
+            setSelectedOptions([optionId]);
+        }
+    };
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>{poll.question}</CardTitle>
+                <div className="text-sm text-muted-foreground flex items-center gap-4 pt-1">
+                    <div className="flex items-center gap-1.5">
+                        <User className="h-4 w-4" />
+                        <span>{creator ? `${creator.vorname} ${creator.nachname}` : 'Unbekannt'}</span>
+                    </div>
+                     <div className="flex items-center gap-1.5">
+                        <Clock className="h-4 w-4" />
+                        <span>
+                            {poll.createdAt ? formatDistanceToNow(poll.createdAt.toDate(), { locale: de, addSuffix: true }) : '...'}
+                        </span>
+                    </div>
+                </div>
+            </CardHeader>
+            <CardContent>
+                {userHasVoted || poll.expiresAt && poll.expiresAt.toDate() < new Date() ? (
+                    // Results view
+                    <div className="space-y-3">
+                        {poll.options.map(option => {
+                            const votes = voteCounts.get(option.id) || 0;
+                            const percentage = totalVotes > 0 ? (votes / totalVotes) * 100 : 0;
+                            return (
+                                <div key={option.id}>
+                                    <div className="flex justify-between items-center mb-1 text-sm">
+                                        <p className="font-medium">{option.text}</p>
+                                        <p className="text-muted-foreground">{votes} Stimme(n) ({percentage.toFixed(0)}%)</p>
+                                    </div>
+                                    <Progress value={percentage} />
+                                </div>
+                            )
+                        })}
+                    </div>
+                ) : (
+                    // Voting view
+                    <div className="space-y-3">
+                        {poll.allowMultipleAnswers ? (
+                             poll.options.map(option => (
+                                <div key={option.id} className="flex items-center gap-3">
+                                    <Checkbox 
+                                        id={`${poll.id}-${option.id}`}
+                                        checked={selectedOptions.includes(option.id)}
+                                        onCheckedChange={() => handleOptionChange(option.id)}
+                                    />
+                                    <Label htmlFor={`${poll.id}-${option.id}`} className="font-normal flex-1 cursor-pointer">{option.text}</Label>
+                                </div>
+                            ))
+                        ) : (
+                            <RadioGroup value={selectedOptions[0]} onValueChange={handleOptionChange}>
+                                {poll.options.map(option => (
+                                    <div key={option.id} className="flex items-center gap-3">
+                                        <RadioGroupItem value={option.id} id={`${poll.id}-${option.id}`} />
+                                        <Label htmlFor={`${poll.id}-${option.id}`} className="font-normal flex-1 cursor-pointer">{option.text}</Label>
+                                    </div>
+                                ))}
+                            </RadioGroup>
+                        )}
+                    </div>
+                )}
+            </CardContent>
+            <CardFooter className="flex justify-between items-center">
+                 <div className="text-sm text-muted-foreground">
+                    {totalVotes} Gesamtstimmen
+                    {poll.expiresAt && <span className="ml-2">· Endet am {format(poll.expiresAt.toDate(), 'dd.MM.yyyy')}</span>}
+                </div>
+                {!userHasVoted && (!poll.expiresAt || poll.expiresAt.toDate() > new Date()) && (
+                    <Button onClick={handleVote} disabled={selectedOptions.length === 0}>Abstimmen</Button>
+                )}
+                 {user?.uid === poll.createdBy && (
+                    <Button variant="destructive" size="sm" onClick={handleDeletePoll}>Löschen</Button>
+                )}
+            </CardFooter>
+        </Card>
+    )
+}
+
 
 export default function UmfragenPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const firestore = useFirestore();
+  const { user } = useUser();
 
   const categoriesQuery = useMemoFirebase(() => {
     if (!firestore) return null;
@@ -319,16 +486,73 @@ export default function UmfragenPage() {
     if (!firestore) return null;
     return query(collection(firestore, 'teams'), orderBy('name'));
   }, [firestore]);
+  
+  const usersQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return collection(firestore, 'users');
+  }, [firestore]);
+
+  const pollsQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'polls'), orderBy('createdAt', 'desc'));
+  }, [firestore]);
 
   const { data: categories, isLoading: categoriesLoading } = useCollection<TeamCategory>(categoriesQuery);
   const { data: teams, isLoading: teamsLoading } = useCollection<Team>(teamsQuery);
+  const { data: allUsers, isLoading: usersLoading } = useCollection<UserData>(usersQuery);
+  const { data: polls, isLoading: pollsLoading, error } = useCollection<Poll>(pollsQuery);
+
+  const filteredPolls = useMemo(() => {
+      if(!polls || !user) return [];
+      const userTeams = allUsers?.find(u => u.id === user.uid)?.teamIds || [];
+
+      return polls.filter(poll => {
+          // Polls created by user are always visible
+          if (poll.createdBy === user.uid) return true;
+          // Public polls are visible
+          if (!poll.targetTeamIds || poll.targetTeamIds.length === 0) return true;
+          // Targeted polls are visible if user is in one of the teams
+          return poll.targetTeamIds.some(teamId => userTeams.includes(teamId));
+      });
+  }, [polls, user, allUsers]);
+
+  const renderContent = () => {
+    if (pollsLoading || usersLoading) {
+      return (
+        <div className="flex justify-center items-center py-10">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      );
+    }
+    if (error) {
+      return <p className="text-destructive text-center">Fehler beim Laden der Umfragen: {error.message}</p>;
+    }
+    if (!filteredPolls || filteredPolls.length === 0) {
+      return (
+         <Card>
+            <CardContent>
+              <div className="text-center py-10">
+                <p className="text-muted-foreground">Derzeit sind keine für Sie sichtbaren Umfragen verfügbar.</p>
+              </div>
+            </CardContent>
+          </Card>
+      )
+    }
+    return (
+        <div className="space-y-6">
+            {filteredPolls.map(poll => (
+                <PollCard key={poll.id} poll={poll} allUsers={allUsers || []} />
+            ))}
+        </div>
+    )
+  }
 
 
   return (
     <div className="flex min-h-screen w-full flex-col bg-background">
       <Header />
       <main className="flex-1 p-4 md:p-8">
-        <div className="mx-auto max-w-4xl">
+        <div className="mx-auto max-w-2xl">
           <div className="flex items-center justify-between mb-8">
             <h1 className="text-3xl font-bold">Umfragen</h1>
             <Button className="bg-red-600 hover:bg-red-700 text-white" onClick={() => setIsFormOpen(true)}>
@@ -337,19 +561,8 @@ export default function UmfragenPage() {
             </Button>
           </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Aktuelle & Vergangene Umfragen</CardTitle>
-              <CardDescription>
-                Hier sehen Sie alle laufenden und abgeschlossenen Umfragen.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-10">
-                <p className="text-muted-foreground">Derzeit sind keine Umfragen verfügbar.</p>
-              </div>
-            </CardContent>
-          </Card>
+          {renderContent()}
+
         </div>
       </main>
 
@@ -371,3 +584,5 @@ export default function UmfragenPage() {
     </div>
   );
 }
+
+    
