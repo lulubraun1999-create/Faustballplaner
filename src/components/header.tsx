@@ -73,7 +73,7 @@ export function Header() {
 
         <div className="flex items-center justify-end gap-2 flex-1">
             <ModeToggle />
-            <a href="https://www.instagram.com/bayer04fussball/" target="_blank" rel="noopener noreferrer">
+            <a href="https://www.instagram.com/tsvbayer04_faustball" target="_blank" rel="noopener noreferrer">
               <Button variant="ghost" size="icon">
                 <Instagram className="h-[1.2rem] w-[1.2rem]" />
                 <span className="sr-only">Instagram</span>
