@@ -1,16 +1,15 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { doc, Timestamp } from 'firebase/firestore';
 import { useFirestore, useDoc, useMemoFirebase, WithId } from '@/firebase';
 import { Header } from '@/components/header';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
 import Image from 'next/image';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 
@@ -33,12 +32,25 @@ export default function ArticleDetailPage({ params }: { params: { articleId: str
 
   const { data: article, isLoading, error } = useDoc<NewsArticle>(articleRef);
   
-  // Effect to set the initial selected image
-  useState(() => {
+  useEffect(() => {
       if (article?.imageUrls && article.imageUrls.length > 0 && !selectedImage) {
           setSelectedImage(article.imageUrls[0]);
       }
-  });
+  }, [article, selectedImage]);
+  
+  const handleNextImage = () => {
+    if (!article?.imageUrls || article.imageUrls.length <= 1) return;
+    const currentIndex = article.imageUrls.indexOf(selectedImage || '');
+    const nextIndex = (currentIndex + 1) % article.imageUrls.length;
+    setSelectedImage(article.imageUrls[nextIndex]);
+  };
+
+  const handlePrevImage = () => {
+    if (!article?.imageUrls || article.imageUrls.length <= 1) return;
+    const currentIndex = article.imageUrls.indexOf(selectedImage || '');
+    const prevIndex = (currentIndex - 1 + article.imageUrls.length) % article.imageUrls.length;
+    setSelectedImage(article.imageUrls[prevIndex]);
+  };
 
 
   const renderContent = () => {
@@ -76,6 +88,7 @@ export default function ArticleDetailPage({ params }: { params: { articleId: str
     
      // Set initial image if not set yet
     const currentSelectedImage = selectedImage || (article.imageUrls && article.imageUrls[0]) || null;
+    const hasMultipleImages = article.imageUrls && article.imageUrls.length > 1;
 
     return (
       <article>
@@ -88,12 +101,32 @@ export default function ArticleDetailPage({ params }: { params: { articleId: str
             </Button>
             
           {currentSelectedImage && (
-            <div className="relative aspect-video w-full mb-4 overflow-hidden rounded-xl shadow-lg">
+            <div className="relative aspect-video w-full mb-4 overflow-hidden rounded-xl shadow-lg group">
               <Image src={currentSelectedImage} alt={article.title} fill className="object-cover" />
+               {hasMultipleImages && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="absolute left-2 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full opacity-0 group-hover:opacity-100 transition-opacity bg-background/50 hover:bg-background/75"
+                    onClick={handlePrevImage}
+                  >
+                    <ChevronLeft className="h-6 w-6" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full opacity-0 group-hover:opacity-100 transition-opacity bg-background/50 hover:bg-background/75"
+                    onClick={handleNextImage}
+                  >
+                    <ChevronRight className="h-6 w-6" />
+                  </Button>
+                </>
+              )}
             </div>
           )}
 
-          {article.imageUrls && article.imageUrls.length > 1 && (
+          {hasMultipleImages && (
             <div className="flex gap-2 mb-8">
               {article.imageUrls.map((url, index) => (
                 <button key={index} onClick={() => setSelectedImage(url)} className="focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded-md">
