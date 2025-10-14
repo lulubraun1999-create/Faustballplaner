@@ -47,8 +47,8 @@ interface GroupMember {
 const formatPosition = (position?: { abwehr: boolean; zuspiel: boolean; angriff: boolean; }) => {
     if (!position) return '';
     const positions = [];
-    if (position.abwehr) positions.push('Abwehr');
     if (position.zuspiel) positions.push('Zuspiel');
+    if (position.abwehr) positions.push('Abwehr');
     if (position.angriff) positions.push('Angriff');
     return positions.length > 0 ? positions.join(', ') : '';
 }
@@ -377,17 +377,15 @@ export default function MannschaftenPage() {
                 </CardHeader>
                 <CardContent>
                     {filteredMembers && filteredMembers.length > 0 ? (
-                        <div className="flex flex-col">
-                            {filteredMembers.map((member, index) => {
+                        <div className="space-y-2">
+                            {filteredMembers.map((member) => {
                                 const positionText = formatPosition(member.position);
-                                const roleText = member.adminRechte ? ", Trainer" : "";
+                                const roleText = member.adminRechte ? "Trainer" : "";
                                 return (
-                                    <div key={member.id} className={cn("py-4", index < filteredMembers.length - 1 && "border-b")}>
-                                        <p>
-                                            {`${member.vorname} ${member.nachname}`}
-                                            {positionText && ` - ${positionText}`}
-                                            {roleText}
-                                        </p>
+                                    <div key={member.id} className="grid grid-cols-3 gap-4 items-center py-2 border-b">
+                                        <span>{`${member.vorname} ${member.nachname}`}</span>
+                                        <span className="text-muted-foreground">{positionText}</span>
+                                        <span className="text-muted-foreground justify-self-end">{roleText}</span>
                                     </div>
                                 );
                             })}
