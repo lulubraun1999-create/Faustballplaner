@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { collection, query, orderBy, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, Timestamp } from 'firebase/firestore';
@@ -10,7 +10,7 @@ import { useFirestore, useCollection, useMemoFirebase, useUser } from '@/firebas
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -43,7 +43,9 @@ const newsArticleSchema = z.object({
   title: z.string().min(1, 'Titel ist erforderlich'),
   content: z.string().min(1, 'Inhalt ist erforderlich'),
   author: z.string().min(1, 'Autor ist erforderlich'),
-  imageUrl: z.string().url('Ungültige URL').optional().or(z.literal('')),
+  imageUrls: z.array(z.object({
+    value: z.string().url('Ungültige URL').min(1, 'URL ist erforderlich'),
+  })).optional(),
 });
 
 type NewsArticleFormValues = z.infer<typeof newsArticleSchema>;
@@ -54,7 +56,7 @@ interface NewsArticle {
   content: string;
   author: string;
   publicationDate: Timestamp | null;
-  imageUrl?: string;
+  imageUrls?: string[];
 }
 
 interface UserData {
@@ -72,26 +74,36 @@ function NewsForm({ article, onDone }: { article?: NewsArticle, onDone: () => vo
       title: article.title,
       content: article.content,
       author: article.author,
-      imageUrl: article.imageUrl,
+      imageUrls: article.imageUrls?.map(url => ({ value: url })) || [],
     } : {
       title: '',
       content: '',
       author: '',
-      imageUrl: '',
+      imageUrls: [{ value: '' }],
     },
+  });
+  
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: "imageUrls"
   });
 
   const onSubmit = async (values: NewsArticleFormValues) => {
     if (!firestore) return;
     setIsSubmitting(true);
     try {
+      const dataToSave = {
+        ...values,
+        imageUrls: values.imageUrls?.map(item => item.value).filter(url => url) || [],
+      };
+
       if (article) {
         const articleRef = doc(firestore, 'news_articles', article.id);
-        await updateDoc(articleRef, values);
+        await updateDoc(articleRef, dataToSave);
         toast({ title: 'Artikel aktualisiert' });
       } else {
         await addDoc(collection(firestore, 'news_articles'), {
-          ...values,
+          ...dataToSave,
           publicationDate: serverTimestamp(),
         });
         toast({ title: 'Artikel erstellt' });
@@ -128,13 +140,42 @@ function NewsForm({ article, onDone }: { article?: NewsArticle, onDone: () => vo
             <FormMessage />
           </FormItem>
         )} />
-        <FormField control={form.control} name="imageUrl" render={({ field }) => (
-          <FormItem>
-            <FormLabel>Bild-URL</FormLabel>
-            <FormControl><Input placeholder="https://beispiel.com/bild.jpg" {...field} /></FormControl>
-            <FormMessage />
-          </FormItem>
-        )} />
+        
+        <div>
+          <FormLabel>Bild-URLs</FormLabel>
+          <div className="space-y-2 mt-2">
+            {fields.map((field, index) => (
+               <FormField
+                key={field.id}
+                control={form.control}
+                name={`imageUrls.${index}.value`}
+                render={({ field }) => (
+                  <FormItem>
+                    <div className="flex items-center gap-2">
+                        <FormControl>
+                            <Input placeholder="https://beispiel.com/bild.jpg" {...field} />
+                        </FormControl>
+                        <Button type="button" variant="destructive" size="icon" onClick={() => remove(index)}>
+                            <Trash2 className="h-4 w-4" />
+                        </Button>
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            ))}
+             <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => append({ value: "" })}
+            >
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Bild-URL hinzufügen
+            </Button>
+          </div>
+        </div>
+
         <FormField control={form.control} name="content" render={({ field }) => (
           <FormItem>
             <FormLabel>Inhalt</FormLabel>
@@ -244,8 +285,8 @@ export default function AdminNewsPage() {
                     {articles.map((article) => (
                         <TableRow key={article.id}>
                             <TableCell>
-                                {article.imageUrl ? (
-                                    <Image src={article.imageUrl} alt={article.title} width={64} height={48} className="rounded-md object-cover aspect-[4/3]" />
+                                {article.imageUrls && article.imageUrls.length > 0 ? (
+                                    <Image src={article.imageUrls[0]} alt={article.title} width={64} height={48} className="rounded-md object-cover aspect-[4/3]" />
                                 ) : (
                                     <div className="w-16 h-12 rounded-md bg-muted flex items-center justify-center text-xs text-muted-foreground">Kein Bild</div>
                                 )}

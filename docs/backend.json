@@ -28,10 +28,13 @@
           "description": "Date and time when the article was published.",
           "format": "date-time"
         },
-        "imageUrl": {
-          "type": "string",
-          "description": "URL of the image associated with the article.",
-          "format": "uri"
+        "imageUrls": {
+          "type": "array",
+          "description": "URLs of the images associated with the article.",
+          "items": {
+            "type": "string",
+            "format": "uri"
+          }
         }
       },
       "required": [
