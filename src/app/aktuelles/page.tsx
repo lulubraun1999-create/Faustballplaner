@@ -18,7 +18,7 @@ interface NewsArticle {
   title: string;
   content: string;
   author: string;
-  publicationDate: Timestamp;
+  publicationDate: Timestamp | null;
   imageUrl?: string;
 }
 
@@ -59,7 +59,10 @@ export default function AktuellesPage() {
               )}
               <CardTitle>{article.title}</CardTitle>
               <CardDescription>
-                Von {article.author} - {format(article.publicationDate.toDate(), 'dd. MMMM yyyy', { locale: de })}
+                Von {article.author} - {article.publicationDate ? 
+                    format(article.publicationDate.toDate(), 'dd. MMMM yyyy', { locale: de }) :
+                    <span className="text-xs text-muted-foreground">Wird erstellt...</span>
+                }
               </CardDescription>
             </CardHeader>
             <CardContent className="flex-grow">

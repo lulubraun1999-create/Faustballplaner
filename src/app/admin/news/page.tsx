@@ -53,7 +53,7 @@ interface NewsArticle {
   title: string;
   content: string;
   author: string;
-  publicationDate: Timestamp;
+  publicationDate: Timestamp | null;
   imageUrl?: string;
 }
 
@@ -252,7 +252,12 @@ export default function AdminNewsPage() {
                             </TableCell>
                             <TableCell className="font-medium">{article.title}</TableCell>
                             <TableCell><Badge variant="outline">{article.author}</Badge></TableCell>
-                            <TableCell>{format(article.publicationDate.toDate(), 'dd.MM.yyyy', { locale: de })}</TableCell>
+                            <TableCell>
+                                {article.publicationDate ? 
+                                    format(article.publicationDate.toDate(), 'dd.MM.yyyy', { locale: de }) :
+                                    <span className="text-xs text-muted-foreground">Wird erstellt...</span>
+                                }
+                            </TableCell>
                             <TableCell className="text-right">
                                 <div className="flex justify-end gap-2">
                                 <Button variant="ghost" size="icon" onClick={() => handleOpenForm(article)}><Edit className="h-4 w-4"/></Button>
