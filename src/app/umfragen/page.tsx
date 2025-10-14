@@ -75,9 +75,11 @@ interface PollResponse {
     respondedAt: Timestamp;
 }
 
-interface UserData {
+interface GroupMember {
+    id: string;
     vorname?: string;
     nachname?: string;
+    teamIds?: string[];
 }
 
 const pollSchema = z.object({
@@ -317,7 +319,7 @@ function CreatePollForm({ onDone, categories, teams }: { onDone: () => void, cat
   );
 }
 
-function PollCard({ poll, allUsers }: { poll: Poll; allUsers: UserData[] }) {
+function PollCard({ poll, allUsers }: { poll: Poll; allUsers: GroupMember[] }) {
     const { user } = useUser();
     const firestore = useFirestore();
     const { toast } = useToast();
@@ -487,9 +489,9 @@ export default function UmfragenPage() {
     return query(collection(firestore, 'teams'), orderBy('name'));
   }, [firestore]);
   
-  const usersQuery = useMemoFirebase(() => {
+  const groupMembersQuery = useMemoFirebase(() => {
     if (!firestore) return null;
-    return collection(firestore, 'users');
+    return collection(firestore, 'group_members');
   }, [firestore]);
 
   const pollsQuery = useMemoFirebase(() => {
@@ -499,11 +501,11 @@ export default function UmfragenPage() {
 
   const { data: categories, isLoading: categoriesLoading } = useCollection<TeamCategory>(categoriesQuery);
   const { data: teams, isLoading: teamsLoading } = useCollection<Team>(teamsQuery);
-  const { data: allUsers, isLoading: usersLoading } = useCollection<UserData>(usersQuery);
+  const { data: allUsers, isLoading: usersLoading } = useCollection<GroupMember>(groupMembersQuery);
   const { data: polls, isLoading: pollsLoading, error } = useCollection<Poll>(pollsQuery);
 
   const filteredPolls = useMemo(() => {
-      if(!polls || !user) return [];
+      if(!polls || !user || !allUsers) return [];
       const userTeams = allUsers?.find(u => u.id === user.uid)?.teamIds || [];
 
       return polls.filter(poll => {
@@ -584,5 +586,7 @@ export default function UmfragenPage() {
     </div>
   );
 }
+
+    
 
     
