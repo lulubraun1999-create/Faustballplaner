@@ -13,7 +13,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, ShieldAlert, Edit, Shield, Trash2, Users } from 'lucide-react';
+import { Loader2, ShieldAlert, Shield, Trash2, Users } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -105,7 +105,6 @@ const TeamsCell = ({ teamIds, teamsMap }: { teamIds?: string[], teamsMap: Map<st
   }
 
   const firstTeam = userTeams[0];
-  const remainingTeamsCount = userTeams.length - 1;
 
   return (
     <TableCell>
@@ -147,6 +146,7 @@ export default function MitgliederPage() {
   const [selectedRole, setSelectedRole] = useState<boolean | undefined>(undefined);
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedFilterTeamId, setSelectedFilterTeamId] = useState('all');
 
 
   const usersCollectionRef = useMemoFirebase(() => {
@@ -192,6 +192,12 @@ export default function MitgliederPage() {
     }));
   }, [categories, teams]);
   
+  const filteredUsers = useMemo(() => {
+    if (!users) return [];
+    if (selectedFilterTeamId === 'all') return users;
+    return users.filter(user => user.teamIds?.includes(selectedFilterTeamId));
+  }, [users, selectedFilterTeamId]);
+
   // Action handlers
   const openDeleteAlert = (user: User) => {
     setActionUser(user);
@@ -307,6 +313,22 @@ export default function MitgliederPage() {
     
     if (users) {
       return (
+        <>
+          <div className="flex items-center justify-start mb-4">
+                <Select value={selectedFilterTeamId} onValueChange={setSelectedFilterTeamId}>
+                    <SelectTrigger className="w-[280px]">
+                        <SelectValue placeholder="Nach Mannschaft filtern..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">Alle Mannschaften</SelectItem>
+                        {teams?.map((team) => (
+                            <SelectItem key={team.id} value={team.id}>
+                                {team.name}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
         <Table>
           <TableHeader>
             <TableRow>
@@ -323,7 +345,7 @@ export default function MitgliederPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {users.map((user) => (
+            {filteredUsers.map((user) => (
               <TableRow key={user.id}>
                 <TeamsCell teamIds={user.teamIds} teamsMap={teamsMap} />
                 <TableCell className="font-medium">{`${user.vorname || ''} ${user.nachname || ''}`.trim() || 'N/A'}</TableCell>
@@ -353,6 +375,7 @@ export default function MitgliederPage() {
             ))}
           </TableBody>
         </Table>
+        </>
       );
     }
 
