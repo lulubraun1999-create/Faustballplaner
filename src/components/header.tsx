@@ -5,7 +5,7 @@ import { useAuth, useUser } from '@/firebase';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
-import { LogOut, ChevronDown, User as UserIcon } from 'lucide-react';
+import { LogOut, ChevronDown, User as UserIcon, Instagram } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -71,8 +71,14 @@ export function Header() {
           </DropdownMenu>
         </nav>
 
-        <div className="flex items-center justify-end gap-4 flex-1">
+        <div className="flex items-center justify-end gap-2 flex-1">
             <ModeToggle />
+            <a href="https://www.instagram.com/bayer04fussball/" target="_blank" rel="noopener noreferrer">
+              <Button variant="ghost" size="icon">
+                <Instagram className="h-[1.2rem] w-[1.2rem]" />
+                <span className="sr-only">Instagram</span>
+              </Button>
+            </a>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" className="flex items-center gap-2">
