@@ -31,7 +31,7 @@
     "date-fns": "^3.6.0",
     "firebase": "^12.4.0",
     "lucide-react": "^0.378.0",
-    "next": "^14.2.33",
+    "next": "latest",
     "next-themes": "^0.3.0",
     "react": "^18",
     "react-day-picker": "^8.10.1",
