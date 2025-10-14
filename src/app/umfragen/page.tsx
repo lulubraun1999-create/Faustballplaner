@@ -359,14 +359,18 @@ function PollCard({ poll, allUsers }: { poll: Poll; allUsers: GroupMember[] }) {
         
         const responseRef = doc(collection(firestore, 'polls', poll.id, 'responses'));
         
-        const responseData = {
+        const responseData: Omit<PollResponse, 'respondedAt'> = {
             id: responseRef.id,
             userId: user.uid,
             selectedOptionIds: selectedOptions,
-            respondedAt: serverTimestamp(),
         };
 
-        setDoc(responseRef, responseData)
+        const finalResponseData = {
+          ...responseData,
+          respondedAt: serverTimestamp()
+        };
+
+        setDoc(responseRef, finalResponseData)
             .then(() => {
                 toast({ title: 'Stimme wurde gezählt' });
             })
@@ -374,10 +378,9 @@ function PollCard({ poll, allUsers }: { poll: Poll; allUsers: GroupMember[] }) {
                  const permissionError = new FirestorePermissionError({
                     path: responseRef.path,
                     operation: 'create',
-                    requestResourceData: responseData,
+                    requestResourceData: finalResponseData,
                 });
                 errorEmitter.emit('permission-error', permissionError);
-                // No toast here, the global listener will handle it.
             });
     };
     
