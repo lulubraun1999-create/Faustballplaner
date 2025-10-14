@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useFirestore, useUser, useCollection, useMemoFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
@@ -366,7 +366,7 @@ function PollCard({ poll, allUsers }: { poll: Poll; allUsers: GroupMember[] }) {
         } = {
             userId: user.uid,
             selectedOptionIds: selectedOptions,
-            respondedAt: serverTimestamp()
+            respondedAt: serverTimestamp(),
         };
 
         setDoc(responseRef, responseData)
@@ -497,6 +497,11 @@ export default function UmfragenPage() {
   const groupMembersQuery = useMemoFirebase(() => {
     if (!firestore) return null;
     return collection(firestore, 'group_members');
+  }, [firestore]);
+
+  const pollsQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'polls'), orderBy('createdAt', 'desc'));
   }, [firestore]);
 
   const { data: categories, isLoading: categoriesLoading } = useCollection<TeamCategory>(categoriesQuery);
