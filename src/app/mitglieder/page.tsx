@@ -58,7 +58,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface User {
   id: string;
-  name?: string;
   vorname?: string;
   nachname?: string;
   position?: {
@@ -106,7 +105,6 @@ const TeamsCell = ({ teamIds, teamsMap }: { teamIds?: string[], teamsMap: Map<st
   }
 
   const firstTeam = userTeams[0];
-  const remainingTeamsCount = userTeams.length - 1;
 
   return (
     <TableCell>
@@ -114,11 +112,6 @@ const TeamsCell = ({ teamIds, teamsMap }: { teamIds?: string[], teamsMap: Map<st
         <PopoverTrigger asChild>
           <Button variant="link" className="p-0 h-auto text-left font-normal text-foreground">
             {firstTeam.name}
-            {remainingTeamsCount > 0 && (
-              <span className="text-muted-foreground ml-2">
-                +{remainingTeamsCount} weitere
-              </span>
-            )}
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-56 p-2">
@@ -260,8 +253,7 @@ export default function MitgliederPage() {
                 id: userToSync.id,
                 teamIds: selectedTeamIds,
             };
-            delete (memberData as any).name; // remove deprecated field if exists
-
+            
             const groupMemberData = {
                 id: userToSync.id,
                 vorname: userToSync.vorname,
