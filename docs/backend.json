@@ -330,6 +330,51 @@
           "description": "The IDs of the teams this user belongs to."
         }
       }
+    },
+    "Poll": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Poll",
+      "type": "object",
+      "description": "Represents a user-created poll.",
+      "properties": {
+        "id": { "type": "string" },
+        "question": { "type": "string" },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "text": { "type": "string" }
+            },
+            "required": ["id", "text"]
+          }
+        },
+        "allowCustomOptions": { "type": "boolean" },
+        "allowMultipleAnswers": { "type": "boolean" },
+        "isAnonymous": { "type": "boolean" },
+        "expiresAt": { "type": "string", "format": "date-time" },
+        "archiveAt": { "type": "string", "format": "date-time" },
+        "targetTeamIds": { "type": "array", "items": { "type": "string" } },
+        "createdBy": { "type": "string", "description": "User ID of the creator." },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "question", "options", "createdBy", "createdAt"]
+    },
+    "PollResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "PollResponse",
+      "type": "object",
+      "description": "Represents a user's response to a poll.",
+      "properties": {
+        "id": { "type": "string" },
+        "pollId": { "type": "string" },
+        "userId": { "type": "string" },
+        "selectedOptionIds": { "type": "array", "items": { "type": "string" } },
+        "customOption": { "type": "string" },
+        "respondedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "pollId", "userId", "respondedAt"]
     }
   },
   "auth": {
@@ -478,6 +523,22 @@
             "$ref": "#/backend/entities/GroupMember"
           },
           "description": "Collection of lightweight, denormalized user data for quick lookups."
+        }
+      },
+      {
+        "path": "/polls/{pollId}",
+        "definition": {
+          "entityName": "Poll",
+          "schema": { "$ref": "#/backend/entities/Poll" },
+          "description": "Collection of all polls."
+        }
+      },
+      {
+        "path": "/polls/{pollId}/responses/{responseId}",
+        "definition": {
+          "entityName": "PollResponse",
+          "schema": { "$ref": "#/backend/entities/PollResponse" },
+          "description": "Subcollection for responses to a specific poll."
         }
       }
     ],
