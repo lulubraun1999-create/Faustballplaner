@@ -5,7 +5,7 @@ import { useState, useMemo } from 'react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useFirestore, useUser, useCollection, useMemoFirebase } from '@/firebase';
+import { useFirestore, useUser, useCollection, useMemoFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { addDoc, collection, serverTimestamp, orderBy, query, Timestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Header } from '@/components/header';
@@ -94,27 +94,41 @@ function CreatePollForm({ onDone, categories, teams }: { onDone: () => void, cat
     }));
   }, [categories, teams]);
 
-  const onSubmit = async (values: PollFormValues) => {
+  const onSubmit = (values: PollFormValues) => {
     if (!user || !firestore) {
       toast({ variant: 'destructive', title: 'Nicht authentifiziert' });
       return;
     }
     setIsSubmitting(true);
-    try {
-      await addDoc(collection(firestore, 'polls'), {
+    
+    const dataToSave = {
         ...values,
         expiresAt: values.expiresAt ? Timestamp.fromDate(values.expiresAt) : null,
         archiveAt: values.archiveAt ? Timestamp.fromDate(values.archiveAt) : null,
         createdBy: user.uid,
         createdAt: serverTimestamp(),
+      };
+      
+    const pollsCollection = collection(firestore, 'polls');
+
+    addDoc(pollsCollection, dataToSave)
+      .then(() => {
+        toast({ title: 'Umfrage veröffentlicht' });
+        onDone();
+      })
+      .catch((serverError) => {
+        const permissionError = new FirestorePermissionError({
+          path: pollsCollection.path,
+          operation: 'create',
+          requestResourceData: dataToSave,
+        });
+        errorEmitter.emit('permission-error', permissionError);
+        // The listener will throw, but we also show a toast as a fallback.
+        toast({ variant: 'destructive', title: 'Fehler', description: "Berechtigungsfehler: " + serverError.message });
+      })
+      .finally(() => {
+        setIsSubmitting(false);
       });
-      toast({ title: 'Umfrage veröffentlicht' });
-      onDone();
-    } catch (error: any) {
-      toast({ variant: 'destructive', title: 'Fehler', description: error.message });
-    } finally {
-      setIsSubmitting(false);
-    }
   };
 
   return (
