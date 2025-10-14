@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2 } from 'lucide-react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -23,49 +24,31 @@ interface NewsArticle {
 }
 
 const ArticleCard = ({ article }: { article: NewsArticle }) => {
-  const [selectedImage, setSelectedImage] = useState(article.imageUrls?.[0] || '');
-
   return (
-     <Card className="flex flex-col">
-        <CardHeader>
-          {selectedImage && (
-            <div className="relative aspect-video w-full mb-4 overflow-hidden rounded-lg">
-              <Image src={selectedImage} alt={article.title} fill className="object-cover" />
-            </div>
-          )}
-           {article.imageUrls && article.imageUrls.length > 1 && (
-            <div className="flex gap-2">
-              {article.imageUrls.map((url, index) => (
-                <button key={index} onClick={() => setSelectedImage(url)}>
-                  <Image
-                    src={url}
-                    alt={`${article.title} thumbnail ${index + 1}`}
-                    width={80}
-                    height={60}
-                    className={cn(
-                      "object-cover rounded-md aspect-video cursor-pointer border-2",
-                      selectedImage === url ? "border-primary" : "border-transparent"
-                    )}
-                  />
-                </button>
-              ))}
-            </div>
-          )}
-          <CardTitle>{article.title}</CardTitle>
-          <CardDescription>
-            Von {article.author} - {article.publicationDate ? 
-                format(article.publicationDate.toDate(), 'dd. MMMM yyyy', { locale: de }) :
-                <span className="text-xs text-muted-foreground">Wird erstellt...</span>
-            }
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex-grow">
-          <p className="text-sm line-clamp-4">{article.content}</p>
-        </CardContent>
-        <CardFooter>
-          <Button variant="link" className="p-0">Weiterlesen</Button>
-        </CardFooter>
-      </Card>
+     <Link href={`/aktuelles/${article.id}`} className="flex">
+        <Card className="flex flex-col w-full hover:border-primary transition-colors">
+            <CardHeader>
+            {article.imageUrls && article.imageUrls.length > 0 && (
+                <div className="relative aspect-video w-full mb-4 overflow-hidden rounded-lg">
+                <Image src={article.imageUrls[0]} alt={article.title} fill className="object-cover" />
+                </div>
+            )}
+            <CardTitle>{article.title}</CardTitle>
+            <CardDescription>
+                Von {article.author} - {article.publicationDate ? 
+                    format(article.publicationDate.toDate(), 'dd. MMMM yyyy', { locale: de }) :
+                    <span className="text-xs text-muted-foreground">Wird erstellt...</span>
+                }
+            </CardDescription>
+            </CardHeader>
+            <CardContent className="flex-grow">
+            <p className="text-sm line-clamp-4">{article.content}</p>
+            </CardContent>
+            <CardFooter>
+            <Button variant="link" className="p-0">Weiterlesen</Button>
+            </CardFooter>
+        </Card>
+    </Link>
   )
 }
 

@@ -17,6 +17,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, PlusCircle, Trash2, Edit } from 'lucide-react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import {
@@ -291,7 +292,11 @@ export default function AdminNewsPage() {
                                     <div className="w-16 h-12 rounded-md bg-muted flex items-center justify-center text-xs text-muted-foreground">Kein Bild</div>
                                 )}
                             </TableCell>
-                            <TableCell className="font-medium">{article.title}</TableCell>
+                            <TableCell className="font-medium">
+                                <Link href={`/aktuelles/${article.id}`} className="hover:underline">
+                                    {article.title}
+                                </Link>
+                            </TableCell>
                             <TableCell><Badge variant="outline">{article.author}</Badge></TableCell>
                             <TableCell>
                                 {article.publicationDate ? 
