@@ -358,12 +358,9 @@ function PollCard({ poll, allUsers }: { poll: Poll; allUsers: GroupMember[] }) {
         if (!user || !firestore || selectedOptions.length === 0) return;
         
         const responseRef = doc(collection(firestore, 'polls', poll.id, 'responses'));
-        const responseData: {
-            userId: string;
-            selectedOptionIds: string[];
-            respondedAt: any;
-            customOption?: string;
-        } = {
+        
+        const responseData = {
+            id: responseRef.id,
             userId: user.uid,
             selectedOptionIds: selectedOptions,
             respondedAt: serverTimestamp(),
@@ -380,7 +377,7 @@ function PollCard({ poll, allUsers }: { poll: Poll; allUsers: GroupMember[] }) {
                     requestResourceData: responseData,
                 });
                 errorEmitter.emit('permission-error', permissionError);
-                toast({ variant: 'destructive', title: 'Fehler', description: "Abstimmung fehlgeschlagen: " + serverError.message });
+                // No toast here, the global listener will handle it.
             });
     };
     
@@ -498,7 +495,7 @@ export default function UmfragenPage() {
     if (!firestore) return null;
     return collection(firestore, 'group_members');
   }, [firestore]);
-
+  
   const pollsQuery = useMemoFirebase(() => {
     if (!firestore) return null;
     return query(collection(firestore, 'polls'), orderBy('createdAt', 'desc'));
@@ -591,3 +588,5 @@ export default function UmfragenPage() {
     </div>
   );
 }
+
+    
