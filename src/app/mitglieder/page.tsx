@@ -105,26 +105,31 @@ const TeamsCell = ({ teamIds, teamsMap }: { teamIds?: string[], teamsMap: Map<st
   }
 
   const firstTeam = userTeams[0];
+  const remainingTeamsCount = userTeams.length - 1;
 
   return (
     <TableCell>
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button variant="link" className="p-0 h-auto text-left font-normal text-foreground">
-            {firstTeam.name}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-56 p-2">
-          <div className="space-y-1">
-            <p className="font-semibold text-sm mb-2">Alle Mannschaften</p>
-            {userTeams.map(team => (
-              <div key={team.id} className="text-sm p-1.5 rounded-sm bg-muted/50">
-                {team.name}
-              </div>
-            ))}
-          </div>
-        </PopoverContent>
-      </Popover>
+      {userTeams.length > 1 ? (
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="link" className="p-0 h-auto text-left font-normal text-foreground">
+              {firstTeam.name}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-56 p-2">
+            <div className="space-y-1">
+              <p className="font-semibold text-sm mb-2">Alle Mannschaften</p>
+              {userTeams.map(team => (
+                <div key={team.id} className="text-sm p-1.5 rounded-sm bg-muted/50">
+                  {team.name}
+                </div>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
+      ) : (
+         <span>{firstTeam.name}</span>
+      )}
     </TableCell>
   );
 };
@@ -358,7 +363,7 @@ export default function MitgliederPage() {
     <div className="flex min-h-screen w-full flex-col bg-background">
       <Header />
       <main className="flex-1 p-4 md:p-8">
-        <div className="mx-auto max-w-6xl">
+        <div className="mx-auto max-w-screen-2xl">
           <Card>
             <CardHeader>
               <CardTitle>Mitglieder</CardTitle>
