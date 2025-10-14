@@ -50,7 +50,7 @@ const formatPosition = (position?: { abwehr: boolean; zuspiel: boolean; angriff:
     if (position.zuspiel) positions.push('Zuspiel');
     if (position.abwehr) positions.push('Abwehr');
     if (position.angriff) positions.push('Angriff');
-    return positions.length > 0 ? positions.join(', ') : '';
+    return positions.join(', ');
 }
 
 
