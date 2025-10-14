@@ -108,27 +108,23 @@ const TeamsCell = ({ teamIds, teamsMap }: { teamIds?: string[], teamsMap: Map<st
 
   return (
     <TableCell>
-      {userTeams.length > 1 ? (
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="link" className="p-0 h-auto text-left font-normal text-foreground">
-              {firstTeam.name}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-56 p-2">
-            <div className="space-y-1">
-              <p className="font-semibold text-sm mb-2">Alle Mannschaften</p>
-              {userTeams.map(team => (
-                <div key={team.id} className="text-sm p-1.5 rounded-sm bg-muted/50">
-                  {team.name}
-                </div>
-              ))}
-            </div>
-          </PopoverContent>
-        </Popover>
-      ) : (
-         <span>{firstTeam.name}</span>
-      )}
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button variant="link" className="p-0 h-auto text-left font-normal text-foreground">
+            {firstTeam.name}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-56 p-2">
+          <div className="space-y-1">
+            <p className="font-semibold text-sm mb-2">Alle Mannschaften</p>
+            {userTeams.map(team => (
+              <div key={team.id} className="text-sm p-1.5 rounded-sm bg-muted/50">
+                {team.name}
+              </div>
+            ))}
+          </div>
+        </PopoverContent>
+      </Popover>
     </TableCell>
   );
 };
@@ -321,7 +317,7 @@ export default function MitgliederPage() {
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem value="all">Alle Mannschaften</SelectItem>
-                        {teams?.map((team) => (
+                        {teams?.slice().sort((a, b) => a.name.localeCompare(b.name)).map((team) => (
                             <SelectItem key={team.id} value={team.id}>
                                 {team.name}
                             </SelectItem>
