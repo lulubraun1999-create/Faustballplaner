@@ -320,30 +320,7 @@ export default function MannschaftenPage() {
 
     return (
       <div className="space-y-8">
-        <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-8">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">TSV Bayer Leverkusen</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <nav className="flex flex-col gap-1">
-                {categories.map((category) => (
-                  <button
-                    key={category.id}
-                    onClick={() => handleCategoryClick(category.id)}
-                    className={cn(
-                      'w-full text-left px-3 py-2 rounded-md text-sm transition-colors',
-                      selectedCategoryId === category.id
-                        ? 'bg-muted font-semibold'
-                        : 'hover:bg-muted/50'
-                    )}
-                  >
-                    {category.name}
-                  </button>
-                ))}
-              </nav>
-            </CardContent>
-          </Card>
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_280px] gap-8">
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">{selectedCategory?.name || 'Kategorie wählen'}</CardTitle>
@@ -366,6 +343,29 @@ export default function MannschaftenPage() {
                 ) : (
                   <p className="text-muted-foreground">Keine Mannschaften in dieser Kategorie gefunden.</p>
                 )}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">TSV Bayer Leverkusen</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <nav className="flex flex-col gap-1">
+                {categories.map((category) => (
+                  <button
+                    key={category.id}
+                    onClick={() => handleCategoryClick(category.id)}
+                    className={cn(
+                      'w-full text-left px-3 py-2 rounded-md text-sm transition-colors',
+                      selectedCategoryId === category.id
+                        ? 'bg-muted font-semibold'
+                        : 'hover:bg-muted/50'
+                    )}
+                  >
+                    {category.name}
+                  </button>
+                ))}
+              </nav>
             </CardContent>
           </Card>
         </div>
