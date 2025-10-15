@@ -3,13 +3,14 @@
 
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useFirestore, useUser, useCollection, useDoc, useMemoFirebase } from '@/firebase';
-import { collection, query, orderBy, addDoc, serverTimestamp, Timestamp, doc, deleteDoc } from 'firebase/firestore';
+import { collection, query, orderBy, addDoc, serverTimestamp, Timestamp, doc, deleteDoc, where, getDocs, setDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Send, Loader2, Users, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { format, isToday, isYesterday } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -39,6 +40,10 @@ interface ChatRoom {
   name: string;
 }
 
+interface UserChatStatus {
+    lastSeen: Timestamp;
+}
+
 const getInitials = (name: string) => {
   if (!name) return '??';
   const nameParts = name.split(' ');
@@ -48,6 +53,26 @@ const getInitials = (name: string) => {
   return name.substring(0, 2).toUpperCase();
 };
 
+const ChatRoomButton = ({ room, activeRoom, setActiveRoom, unreadCount }: { room: ChatRoom, activeRoom: ChatRoom, setActiveRoom: (room: ChatRoom) => void, unreadCount: number }) => {
+    return (
+        <Button
+            variant={activeRoom.id === room.id ? 'secondary' : 'ghost'}
+            className="justify-between w-full"
+            onClick={() => setActiveRoom(room)}
+        >
+            <div className="flex items-center gap-2">
+                {room.id === 'trainers' && <Users className="mr-2 h-4 w-4" />}
+                <span>{room.name}</span>
+            </div>
+            {unreadCount > 0 && (
+                <Badge className="h-6 w-6 shrink-0 items-center justify-center rounded-full p-0">
+                    {unreadCount}
+                </Badge>
+            )}
+        </Button>
+    )
+}
+
 export default function ChatPage() {
   const firestore = useFirestore();
   const { user } = useUser();
@@ -56,6 +81,7 @@ export default function ChatPage() {
   const [newMessage, setNewMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
 
 
   const currentUserDocRef = useMemoFirebase(() => {
@@ -65,7 +91,14 @@ export default function ChatPage() {
 
   const { data: currentUserData, isLoading: isUserLoading } = useDoc<UserData>(currentUserDocRef);
   const { data: teams, isLoading: areTeamsLoading } = useCollection<Team>(useMemoFirebase(() => firestore ? collection(firestore, 'teams') : null, [firestore]));
+  
+  const userChatStatusCollectionRef = useMemoFirebase(() => {
+      if(!firestore || !user) return null;
+      return collection(firestore, 'users', user.uid, 'chat_status');
+  }, [firestore, user]);
 
+  const { data: chatStatuses } = useCollection<UserChatStatus>(userChatStatusCollectionRef);
+  
   const chatRooms = useMemo(() => {
     const rooms: ChatRoom[] = [{ id: 'general', name: 'Alle' }];
     if (currentUserData?.adminRechte) {
@@ -80,6 +113,49 @@ export default function ChatPage() {
     }
     return rooms;
   }, [currentUserData, teams]);
+
+  useEffect(() => {
+    if (!firestore || !user || chatRooms.length <= 1) return;
+
+    const fetchUnreadCounts = async () => {
+        const counts: Record<string, number> = {};
+        for(const room of chatRooms) {
+            const status = chatStatuses?.find(s => s.id === room.id);
+            const lastSeen = status?.lastSeen || new Timestamp(0,0);
+            
+            const messagesRef = collection(firestore, 'chat_rooms', room.id, 'messages');
+            const q = query(messagesRef, where('timestamp', '>', lastSeen));
+            
+            const snapshot = await getDocs(q);
+            // Don't count user's own messages as unread
+            const unreadMessages = snapshot.docs.filter(doc => doc.data().userId !== user.uid);
+            counts[room.id] = unreadMessages.length;
+        }
+        setUnreadCounts(counts);
+    };
+
+    fetchUnreadCounts();
+    // Re-fetch when new messages arrive in any of the user's rooms
+    const unsubscribes = chatRooms.map(room => {
+        const messagesRef = collection(firestore, 'chat_rooms', room.id, 'messages');
+        return onSnapshot(query(messagesRef, where('timestamp', '>', new Timestamp(Date.now() / 1000, 0))), () => {
+            fetchUnreadCounts();
+        });
+    });
+
+    return () => unsubscribes.forEach(unsub => unsub());
+
+}, [firestore, user, chatRooms, chatStatuses]);
+
+
+  useEffect(() => {
+    if(!firestore || !user || !activeRoom) return;
+
+    const statusRef = doc(firestore, 'users', user.uid, 'chat_status', activeRoom.id);
+    setDoc(statusRef, { lastSeen: serverTimestamp() }, { merge: true });
+
+  }, [firestore, user, activeRoom]);
+
   
   const messagesQuery = useMemoFirebase(() => {
     if (!firestore || !activeRoom) return null;
@@ -170,15 +246,13 @@ export default function ChatPage() {
                </div>
              ) : (
                 chatRooms.map(room => (
-                  <Button
-                    key={room.id}
-                    variant={activeRoom.id === room.id ? 'secondary' : 'ghost'}
-                    className="justify-start"
-                    onClick={() => setActiveRoom(room)}
-                  >
-                    {room.id === 'trainers' && <Users className="mr-2 h-4 w-4" />}
-                    {room.name}
-                  </Button>
+                  <ChatRoomButton
+                      key={room.id}
+                      room={room}
+                      activeRoom={activeRoom}
+                      setActiveRoom={setActiveRoom}
+                      unreadCount={unreadCounts[room.id] || 0}
+                  />
                 ))
              )}
            </nav>
