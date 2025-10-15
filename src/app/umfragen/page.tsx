@@ -431,6 +431,26 @@ function PollCard({ poll, allUsers }: { poll: Poll; allUsers: GroupMember[] }) {
             });
     }
 
+    const handleDeleteVote = () => {
+        if (!firestore || !userResponse) return;
+        const responseRef = doc(firestore, 'polls', poll.id, 'responses', userResponse.id);
+        deleteDoc(responseRef)
+            .then(() => {
+                toast({ title: "Stimme gelöscht" });
+                // Reset state to voting view
+                setViewMode('vote');
+                setSelectedOptions([]);
+                setCustomOption('');
+            })
+            .catch((serverError) => {
+                const permissionError = new FirestorePermissionError({
+                    path: responseRef.path,
+                    operation: 'delete',
+                });
+                errorEmitter.emit('permission-error', permissionError);
+            });
+    };
+
     const handleOptionChange = (optionId: string) => {
         if (poll.allowMultipleAnswers) {
             setSelectedOptions(prev => 
@@ -528,11 +548,22 @@ function PollCard({ poll, allUsers }: { poll: Poll; allUsers: GroupMember[] }) {
                     {totalVotes} Gesamtstimme(n)
                     {poll.expiresAt && <span className="ml-2">· Endet am {format(poll.expiresAt.toDate(), 'dd.MM.yyyy')}</span>}
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center">
+                     {userResponse && viewMode === 'results' && (
+                        <Button variant="ghost" size="icon" className="hover:bg-destructive/10 hover:text-destructive" onClick={handleDeleteVote}>
+                            <Trash2 className="h-4 w-4"/>
+                            <span className="sr-only">Stimme löschen</span>
+                        </Button>
+                    )}
                     {userResponse && !isPollExpired && viewMode === 'results' && (
                         <Button variant="outline" size="sm" onClick={() => setViewMode('vote')}>
                             <Edit className="mr-2 h-4 w-4"/>
                             Stimme bearbeiten
+                        </Button>
+                    )}
+                     {viewMode === 'results' && userResponse == null && (
+                        <Button variant="outline" size="sm" onClick={() => setViewMode('vote')}>
+                            Zur Abstimmung
                         </Button>
                     )}
                     {viewMode === 'vote' && (
@@ -669,5 +700,3 @@ export default function UmfragenPage() {
     </div>
   );
 }
-
-    
