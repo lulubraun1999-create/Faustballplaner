@@ -717,7 +717,7 @@ const EventCard = ({ event, allUsers, locations, teams, onEdit, onDelete }: { ev
             return event.title;
         }
         const teamNames = event.targetTeamIds.map(id => teams.find(t => t.id === id)?.name).filter(Boolean).join(', ');
-        return `${event.title} für ${teamNames}`;
+        return teamNames ? `${event.title} für ${teamNames}` : event.title;
     }
 
     const attendees = useMemo(() => {
@@ -949,7 +949,7 @@ export default function TerminePage() {
   
   const groupMembersQuery = useMemoFirebase(() => {
     if (!firestore) return null;
-    return collection(firestore, 'group_members');
+    return query(collection(firestore, 'group_members'));
   }, [firestore]);
 
 
@@ -1147,7 +1147,7 @@ export default function TerminePage() {
                 <Button variant="outline" size="sm" onClick={goToNextWeek}><ChevronRight className="h-4 w-4"/></Button>
             </div>
             {isAdmin && (
-              <Button className="bg-red-600 hover:bg-red-700 text-white" onClick={() => handleOpenForm()}>
+              <Button variant="outline" onClick={() => handleOpenForm()}>
                 <PlusCircle className="mr-2 h-4 w-4" />
                 Neuer Termin
               </Button>
@@ -1202,7 +1202,7 @@ export default function TerminePage() {
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           {isLoading ? (
-             <div className="flex items-center justify-center p-8"><Loader2 className="animate-spin h-8 w-8 text-primary"/></div>
+             <div className="flex items-center justify-center p-8"><Loader2 className="h-8 w-8 animate-spin text-primary"/></div>
           ) : (
              <EventForm onDone={handleFormDone} event={selectedEvent} categories={categories || []} teams={teams || []} locations={locations || []} isAdmin={isAdmin}/>
           )}
@@ -1228,3 +1228,5 @@ export default function TerminePage() {
     </div>
   );
 }
+
+    

@@ -703,9 +703,9 @@ export default function UmfragenPage() {
         <div className="mx-auto max-w-2xl">
           <div className="flex items-center justify-between mb-8">
             <h1 className="text-3xl font-bold">Umfragen</h1>
-            <Button className="bg-red-600 hover:bg-red-700 text-white" onClick={() => setIsFormOpen(true)}>
+            <Button variant="outline" onClick={() => setIsFormOpen(true)}>
               <PlusCircle className="mr-2 h-4 w-4" />
-              Neue Umfrage erstellen
+              Neue Umfrage
             </Button>
           </div>
 
@@ -733,4 +733,5 @@ export default function UmfragenPage() {
   );
 }
 
+    
     

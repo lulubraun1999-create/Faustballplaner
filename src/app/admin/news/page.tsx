@@ -342,7 +342,7 @@ export default function AdminNewsPage() {
           <div className="flex items-center justify-between mb-8">
             <h1 className="text-3xl font-bold">News verwalten</h1>
             {isClient && isAdmin && (
-                <Button onClick={() => handleOpenForm()} className="bg-red-600 hover:bg-red-700 text-white">
+                <Button variant="outline" onClick={() => handleOpenForm()}>
                     <PlusCircle className="mr-2 h-4 w-4" />
                     Neuen Artikel erstellen
                 </Button>
@@ -379,5 +379,7 @@ export default function AdminNewsPage() {
     </div>
   );
 }
+
+    
 
     
