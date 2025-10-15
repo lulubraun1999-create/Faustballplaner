@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Calendar } from '@/components/ui/calendar';
 import { de } from 'date-fns/locale';
 import { useFirestore, useCollection, useMemoFirebase, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { collection, query, where, Timestamp, orderBy, doc, setDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, Timestamp, orderBy, doc, setDoc, serverTimestamp, onSnapshot, addDoc } from 'firebase/firestore';
 import { Loader2, CalendarIcon, Clock, MapPin, Repeat, Check, XIcon, Users } from 'lucide-react';
 import {
   format,
@@ -18,6 +18,7 @@ import {
   addMonths,
   isWithinInterval,
   isSameMonth,
+  startOfDay,
 } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -52,6 +53,7 @@ interface Event {
 interface EventResponse {
     id: string;
     userId: string;
+    eventDate: Timestamp;
     status: 'attending' | 'declined';
     respondedAt: Timestamp;
 }
@@ -94,10 +96,24 @@ const EventCard = ({ event }: { event: DisplayEvent }) => {
 
     const responsesQuery = useMemoFirebase(() => {
         if (!firestore) return null;
+        // Query for all responses for this event ID, we will filter by date on the client
         return query(collection(firestore, 'events', event.id, 'responses'));
     }, [firestore, event.id]);
 
-    const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
+    const { data: allResponses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
+    
+    // Filter responses for this specific instance date
+    const responsesForThisInstance = useMemo(() => {
+        if (!allResponses) return [];
+        return allResponses.filter(r => 
+            r.eventDate && isSameDay(r.eventDate.toDate(), event.displayDate)
+        );
+    }, [allResponses, event.displayDate]);
+    
+    const userResponse = useMemo(() => {
+         return responsesForThisInstance.find(r => r.userId === user?.uid);
+    }, [responsesForThisInstance, user]);
+
 
     const recurrenceText = getRecurrenceText(event.recurrence);
     const startDate = event.displayDate;
@@ -117,18 +133,29 @@ const EventCard = ({ event }: { event: DisplayEvent }) => {
         timeString = `${format(startDate, 'HH:mm')} Uhr`;
     }
 
-    const userResponse = responses?.find(r => r.userId === user?.uid);
-    const attendingCount = responses?.filter(r => r.status === 'attending').length || 0;
+    const attendingCount = responsesForThisInstance.filter(r => r.status === 'attending').length || 0;
 
     const handleRsvp = (status: 'attending' | 'declined') => {
         if (!user || !firestore) return;
 
-        const responseRef = doc(firestore, 'events', event.id, 'responses', user.uid);
+        const responseCollectionRef = collection(firestore, 'events', event.id, 'responses');
+        const eventDateAsTimestamp = Timestamp.fromDate(startOfDay(event.displayDate));
+        
         const data = {
             userId: user.uid,
             status: status,
-            respondedAt: serverTimestamp()
+            respondedAt: serverTimestamp(),
+            eventDate: eventDateAsTimestamp,
+            eventId: event.id
         };
+        
+        // If user already responded for this date, we could update, but for simplicity
+        // and to avoid complex queries for the doc ID, we can create a new response.
+        // A better approach would be to manage a unique doc ID per user per date.
+        // For now, let's assume we create a new one, or update if we find one.
+        // Let's create a predictable doc ID
+        const responseDocId = `${user.uid}_${eventDateAsTimestamp.toMillis()}`;
+        const responseRef = doc(responseCollectionRef, responseDocId);
 
         setDoc(responseRef, data, { merge: true })
             .catch(serverError => {
@@ -142,7 +169,7 @@ const EventCard = ({ event }: { event: DisplayEvent }) => {
     };
 
     return (
-        <Card key={event.id}>
+        <Card key={`${event.id}-${event.displayDate.toISOString()}`}>
             <CardHeader>
                 <CardTitle>{event.title}</CardTitle>
                 <div className="text-sm text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 pt-1">
@@ -419,3 +446,5 @@ export default function KalenderPage() {
     </div>
   );
 }
+
+    

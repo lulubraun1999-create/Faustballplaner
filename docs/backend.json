@@ -410,15 +410,16 @@
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "EventResponse",
       "type": "object",
-      "description": "Represents a user's RSVP response to an event.",
+      "description": "Represents a user's RSVP response to a specific date of an event.",
       "properties": {
         "id": { "type": "string" },
         "eventId": { "type": "string" },
         "userId": { "type": "string" },
+        "eventDate": { "type": "string", "format": "date-time", "description": "The specific date of the event instance this response is for." },
         "status": { "type": "string", "enum": ["attending", "declined"] },
         "respondedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["id", "eventId", "userId", "status", "respondedAt"]
+      "required": ["id", "eventId", "userId", "eventDate", "status", "respondedAt"]
     },
      "ChatMessage": {
       "$schema": "http://json-schema.org/draft-07/schema#",
@@ -674,3 +675,4 @@
     
     
   
+    
