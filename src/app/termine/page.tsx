@@ -31,7 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 
@@ -649,7 +649,7 @@ function EventForm({ onDone, event, categories, teams, locations, isAdmin }: { o
   );
 }
 
-const EventCard = ({ event, allUsers, locations, onEdit, onDelete }: { event: DisplayEvent; allUsers: GroupMember[], locations: Location[], onEdit: (event: Event) => void, onDelete: (event: Event) => void }) => {
+const EventCard = ({ event, allUsers, locations, teams, onEdit, onDelete }: { event: DisplayEvent; allUsers: GroupMember[]; locations: Location[]; teams: Team[]; onEdit: (event: Event) => void; onDelete: (event: Event) => void }) => {
     const { user } = useUser();
     const firestore = useFirestore();
     const location = locations.find(l => l.id === event.locationId);
@@ -711,6 +711,14 @@ const EventCard = ({ event, allUsers, locations, onEdit, onDelete }: { event: Di
       const responder = allUsers.find(u => u.id === userId);
       return responder ? `${responder.vorname || ''} ${responder.nachname || ''}`.trim() : 'Unbekannt';
     };
+    
+    const getEventTitle = () => {
+        if (!event.targetTeamIds || event.targetTeamIds.length === 0) {
+            return event.title;
+        }
+        const teamNames = event.targetTeamIds.map(id => teams.find(t => t.id === id)?.name).filter(Boolean).join(', ');
+        return `${event.title} für ${teamNames}`;
+    }
 
     const attendees = useMemo(() => {
         return (responsesForThisInstance || [])
@@ -766,7 +774,7 @@ const EventCard = ({ event, allUsers, locations, onEdit, onDelete }: { event: Di
         <Card key={event.id}>
             <CardHeader>
                  <div className="flex justify-between items-start">
-                    <CardTitle>{event.title}</CardTitle>
+                    <CardTitle>{getEventTitle()}</CardTitle>
                     {isAdmin && (
                         <div className="flex items-center">
                             <Button variant="ghost" size="icon" onClick={() => onEdit(event)}><Edit className="h-4 w-4"/></Button>
@@ -893,6 +901,13 @@ export default function TerminePage() {
   const [eventToDelete, setEventToDelete] = useState<Event | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('termineFilter');
+      return saved ? JSON.parse(saved) : [];
+    }
+    return [];
+  });
 
   const firestore = useFirestore();
   const { user } = useUser();
@@ -902,6 +917,10 @@ export default function TerminePage() {
   const currentWeekStart = startOfWeek(currentDate, { weekStartsOn });
   const currentWeekEnd = add(currentWeekStart, { days: 6 });
   const weekDays = eachDayOfInterval({ start: currentWeekStart, end: currentWeekEnd });
+
+  useEffect(() => {
+    localStorage.setItem('termineFilter', JSON.stringify(selectedTeamIds));
+  }, [selectedTeamIds]);
 
   const eventsQuery = useMemoFirebase(() => {
     if (!firestore) return null;
@@ -946,13 +965,27 @@ export default function TerminePage() {
 
   const isAdmin = currentUserData?.adminRechte === true;
   
+  const groupedTeams = useMemo(() => {
+    if (!categories || !teams) return [];
+    return categories.map(category => ({
+      ...category,
+      teams: teams.filter(team => team.categoryId === category.id).sort((a,b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
+    }));
+  }, [categories, teams]);
+  
   const eventsForWeek = useMemo(() => {
     if (!eventsData) return new Map();
+
+    const filteredByTeam = eventsData.filter(event => {
+        if (selectedTeamIds.length === 0) return true;
+        if (!event.targetTeamIds || event.targetTeamIds.length === 0) return true;
+        return event.targetTeamIds.some(id => selectedTeamIds.includes(id));
+    });
 
     const weeklyEventsMap = new Map<string, DisplayEvent[]>();
     const interval = { start: startOfDay(currentWeekStart), end: startOfDay(currentWeekEnd) };
 
-    for (const event of eventsData) {
+    for (const event of filteredByTeam) {
       const originalStartDate = event.date.toDate();
       const recurrenceEndDate = event.recurrenceEndDate?.toDate();
 
@@ -971,9 +1004,11 @@ export default function TerminePage() {
       let limit = 100; // Safety break
       
       // Fast-forward to the current week's interval if the event starts before
-      if (currentDate < interval.start) {
-        // This is a simplified fast-forward; for monthly it could be more complex
-        while(currentDate < interval.start && limit > 0) {
+      while(currentDate < interval.start && limit > 0) {
+          if (recurrenceEndDate && currentDate > recurrenceEndDate) {
+            limit = 0; // Stop if the recurrence end date is passed
+            continue;
+          }
            switch (event.recurrence) {
             case 'weekly': currentDate = addWeeks(currentDate, 1); break;
             case 'biweekly': currentDate = addWeeks(currentDate, 2); break;
@@ -981,7 +1016,6 @@ export default function TerminePage() {
             default: limit = 0; break;
            }
            limit--;
-        }
       }
 
       limit = 100; // Reset limit
@@ -1013,7 +1047,7 @@ export default function TerminePage() {
     });
 
     return weeklyEventsMap;
-  }, [eventsData, currentWeekStart, currentWeekEnd]);
+  }, [eventsData, currentWeekStart, currentWeekEnd, selectedTeamIds]);
 
 
   const handleOpenForm = (event?: Event) => {
@@ -1084,6 +1118,7 @@ export default function TerminePage() {
                                         event={event}
                                         allUsers={allUsers || []}
                                         locations={locations || []}
+                                        teams={teams || []}
                                         onEdit={handleOpenForm}
                                         onDelete={setEventToDelete}
                                     />
@@ -1103,7 +1138,7 @@ export default function TerminePage() {
     <div className="flex min-h-screen w-full flex-col bg-background">
       <Header />
       <main className="flex-1 p-4 md:p-8">
-        <div className="mx-auto max-w-4xl">
+        <div className="mx-auto max-w-7xl">
           <div className="flex items-center justify-between mb-8 flex-wrap gap-4">
             <h1 className="text-3xl font-bold">Termine</h1>
             <div className="flex items-center gap-2">
@@ -1121,8 +1156,45 @@ export default function TerminePage() {
            <div className="mb-4 text-center text-xl font-semibold">
                 {format(currentWeekStart, 'dd. MMM', { locale: de })} - {format(currentWeekEnd, 'dd. MMM yyyy', { locale: de })}
             </div>
-
-          {renderContent()}
+            
+             <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-8">
+                 <Card>
+                    <CardHeader>
+                        <CardTitle>Nach Mannschaften filtern</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                       {isLoading ? <Loader2 className="animate-spin" /> : (
+                         <Accordion type="multiple" className="w-full" defaultValue={groupedTeams.map(g => g.id)}>
+                            {groupedTeams.map(category => (
+                                <AccordionItem value={category.id} key={category.id}>
+                                    <AccordionTrigger>{category.name}</AccordionTrigger>
+                                    <AccordionContent>
+                                    {category.teams.map(team => (
+                                        <div key={team.id} className="flex items-center space-x-2 p-1">
+                                            <Checkbox
+                                                id={team.id}
+                                                checked={selectedTeamIds.includes(team.id)}
+                                                onCheckedChange={(checked) => {
+                                                    return checked
+                                                    ? setSelectedTeamIds([...selectedTeamIds, team.id])
+                                                    : setSelectedTeamIds(selectedTeamIds.filter((id) => id !== team.id))
+                                                }}
+                                            />
+                                            <Label htmlFor={team.id} className="font-normal cursor-pointer">{team.name}</Label>
+                                        </div>
+                                    ))}
+                                    </AccordionContent>
+                                </AccordionItem>
+                            ))}
+                        </Accordion>
+                       )}
+                    </CardContent>
+                </Card>
+                 
+                <div>
+                  {renderContent()}
+                </div>
+            </div>
 
         </div>
       </main>
