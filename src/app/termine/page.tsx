@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -10,7 +10,7 @@ import { addDoc, collection, serverTimestamp, orderBy, query, Timestamp, doc, up
 import { useToast } from '@/hooks/use-toast';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
@@ -18,17 +18,33 @@ import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { PlusCircle, Trash2, Loader2, CalendarIcon, Edit, Clock, MapPin } from 'lucide-react';
+import { PlusCircle, Trash2, Loader2, CalendarIcon, Edit, Clock, MapPin, Users, Repeat } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
+import { Switch } from '@/components/ui/switch';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 
 interface Event {
   id: string;
   title: string;
   date: Timestamp;
-  endTime?: string;
+  endTime?: Timestamp;
+  isAllDay?: boolean;
+  recurrence?: 'none' | 'weekly' | 'biweekly' | 'monthly';
+  targetTeamIds?: string[];
+  rsvpDeadline?: Timestamp;
   location?: string;
+  meetingPoint?: string;
   description?: string;
   createdBy: string;
   createdAt: Timestamp;
@@ -38,18 +54,46 @@ interface UserData {
   adminRechte?: boolean;
 }
 
+interface TeamCategory {
+  id: string;
+  name: string;
+  order: number;
+}
+
+interface Team {
+  id:string;
+  name: string;
+  categoryId: string;
+}
+
 const eventSchema = z.object({
   title: z.string().min(1, 'Titel ist erforderlich.'),
-  date: z.date({ required_error: 'Datum ist erforderlich.' }),
-  startTime: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Ungültige Zeit (HH:mm).'),
-  endTime: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Ungültige Zeit (HH:mm).').optional().or(z.literal('')),
+  date: z.date({ required_error: 'Startdatum ist erforderlich.' }),
+  startTime: z.string().optional(),
+  endTime: z.string().optional(),
+  endDate: z.date().optional(),
+  isAllDay: z.boolean().default(false),
+  recurrence: z.enum(['none', 'weekly', 'biweekly', 'monthly']).default('none'),
+  targetTeamIds: z.array(z.string()).optional(),
+  rsvpDeadlineDate: z.date().optional(),
+  rsvpDeadlineTime: z.string().optional(),
   location: z.string().optional(),
+  meetingPoint: z.string().optional(),
   description: z.string().optional(),
+}).refine(data => {
+    if(data.endDate && data.date > data.endDate) {
+        return false;
+    }
+    return true;
+}, {
+    message: "Das End-Datum darf nicht vor dem Start-Datum liegen.",
+    path: ["endDate"],
 });
+
 
 type EventFormValues = z.infer<typeof eventSchema>;
 
-function EventForm({ onDone, event }: { onDone: () => void, event?: Event }) {
+function EventForm({ onDone, event, categories, teams }: { onDone: () => void, event?: Event, categories: TeamCategory[], teams: Team[] }) {
   const { user } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
@@ -57,13 +101,22 @@ function EventForm({ onDone, event }: { onDone: () => void, event?: Event }) {
 
   const getInitialFormValues = () => {
     if (event) {
-      const eventDate = event.date.toDate();
+      const startDate = event.date.toDate();
+      const endDate = event.endTime?.toDate();
+      const rsvpDate = event.rsvpDeadline?.toDate();
       return {
         title: event.title,
-        date: eventDate,
-        startTime: format(eventDate, 'HH:mm'),
-        endTime: event.endTime || '',
+        date: startDate,
+        startTime: event.isAllDay ? '' : format(startDate, 'HH:mm'),
+        endDate: endDate,
+        endTime: endDate && !event.isAllDay ? format(endDate, 'HH:mm') : '',
+        isAllDay: event.isAllDay || false,
+        recurrence: event.recurrence || 'none',
+        targetTeamIds: event.targetTeamIds || [],
+        rsvpDeadlineDate: rsvpDate,
+        rsvpDeadlineTime: rsvpDate ? format(rsvpDate, 'HH:mm') : '',
         location: event.location || '',
+        meetingPoint: event.meetingPoint || '',
         description: event.description || '',
       };
     }
@@ -71,8 +124,15 @@ function EventForm({ onDone, event }: { onDone: () => void, event?: Event }) {
       title: '',
       date: undefined,
       startTime: '',
+      endDate: undefined,
       endTime: '',
+      isAllDay: false,
+      recurrence: 'none' as const,
+      targetTeamIds: [],
+      rsvpDeadlineDate: undefined,
+      rsvpDeadlineTime: '',
       location: '',
+      meetingPoint: '',
       description: '',
     };
   };
@@ -81,6 +141,16 @@ function EventForm({ onDone, event }: { onDone: () => void, event?: Event }) {
     resolver: zodResolver(eventSchema),
     defaultValues: getInitialFormValues(),
   });
+  
+  const isAllDay = form.watch('isAllDay');
+
+  const groupedTeams = useMemo(() => {
+    if (!categories || !teams) return [];
+    return categories.map(category => ({
+      ...category,
+      teams: teams.filter(team => team.categoryId === category.id).sort((a,b) => a.name.localeCompare(b.name))
+    }));
+  }, [categories, teams]);
 
   const onSubmit = async (values: EventFormValues) => {
     if (!user || !firestore) {
@@ -88,21 +158,45 @@ function EventForm({ onDone, event }: { onDone: () => void, event?: Event }) {
       return;
     }
     setIsSubmitting(true);
+    
+    const combineDateAndTime = (date: Date, time?: string): Date => {
+        const newDate = new Date(date);
+        if(time) {
+            const [hours, minutes] = time.split(':').map(Number);
+            newDate.setHours(hours, minutes, 0, 0);
+        } else {
+            newDate.setHours(0,0,0,0);
+        }
+        return newDate;
+    }
 
-    const [hours, minutes] = values.startTime.split(':').map(Number);
-    const eventDate = new Date(values.date);
-    eventDate.setHours(hours);
-    eventDate.setMinutes(minutes);
+    const startDate = combineDateAndTime(values.date, values.isAllDay ? undefined : values.startTime);
+    let endDate : Date | null = null;
+    if (values.endDate) {
+        endDate = combineDateAndTime(values.endDate, values.isAllDay ? undefined : values.endTime);
+    }
+    
+    let rsvpDeadline: Timestamp | null = null;
+    if(values.rsvpDeadlineDate && values.rsvpDeadlineTime) {
+        const rsvpDate = combineDateAndTime(values.rsvpDeadlineDate, values.rsvpDeadlineTime);
+        rsvpDeadline = Timestamp.fromDate(rsvpDate);
+    }
 
     const dataToSave = {
-      ...values,
-      date: Timestamp.fromDate(eventDate),
-      endTime: values.endTime || null,
+      title: values.title,
+      date: Timestamp.fromDate(startDate),
+      endTime: endDate ? Timestamp.fromDate(endDate) : null,
+      isAllDay: values.isAllDay,
+      recurrence: values.recurrence,
+      targetTeamIds: values.targetTeamIds || [],
+      rsvpDeadline: rsvpDeadline,
+      location: values.location || '',
+      meetingPoint: values.meetingPoint || '',
+      description: values.description || '',
       createdBy: user.uid,
       createdAt: event ? event.createdAt : serverTimestamp(),
     };
-    // remove startTime as it's merged into date
-    delete (dataToSave as any).startTime;
+    
 
     try {
       if (event) {
@@ -136,46 +230,172 @@ function EventForm({ onDone, event }: { onDone: () => void, event?: Event }) {
           </FormItem>
         )} />
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <FormField control={form.control} name="date" render={({ field }) => (
-            <FormItem className="flex flex-col md:col-span-1">
-              <FormLabel>Datum</FormLabel>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <FormControl>
-                    <Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                      {field.value ? format(field.value, 'dd.MM.yyyy') : <span>Wähle ein Datum</span>}
-                      <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                    </Button>
-                  </FormControl>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus locale={de} />
-                </PopoverContent>
-              </Popover>
-              <FormMessage />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+            <FormField control={form.control} name="date" render={({ field }) => (
+                <FormItem className="flex flex-col">
+                    <FormLabel>Beginn</FormLabel>
+                    <Popover>
+                        <PopoverTrigger asChild>
+                        <FormControl>
+                            <Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                            {field.value ? format(field.value, 'dd.MM.yyyy') : <span>Datum</span>}
+                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                            </Button>
+                        </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus locale={de} />
+                        </PopoverContent>
+                    </Popover>
+                    <FormMessage />
+                </FormItem>
+            )} />
+            {!isAllDay && <FormField control={form.control} name="startTime" render={({ field }) => (
+                <FormItem>
+                    <FormLabel className="text-transparent">Zeit</FormLabel>
+                    <FormControl><Input type="time" {...field} /></FormControl>
+                    <FormMessage />
+                </FormItem>
+            )} />}
+        </div>
+        
+         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+            <FormField control={form.control} name="endDate" render={({ field }) => (
+                <FormItem className="flex flex-col">
+                    <FormLabel>Ende</FormLabel>
+                    <Popover>
+                        <PopoverTrigger asChild>
+                        <FormControl>
+                            <Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                            {field.value ? format(field.value, 'dd.MM.yyyy') : <span>Datum (optional)</span>}
+                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                            </Button>
+                        </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar mode="single" selected={field.value} onSelect={field.onChange} locale={de} />
+                        </PopoverContent>
+                    </Popover>
+                    <FormMessage />
+                </FormItem>
+            )} />
+            {!isAllDay && <FormField control={form.control} name="endTime" render={({ field }) => (
+                <FormItem>
+                    <FormLabel className="text-transparent">Zeit</FormLabel>
+                    <FormControl><Input type="time" {...field} /></FormControl>
+                    <FormMessage />
+                </FormItem>
+            )} />}
+        </div>
+        
+        <FormField control={form.control} name="isAllDay" render={({ field }) => (
+            <FormItem className="flex flex-row items-center gap-3 space-y-0 rounded-lg border p-4">
+                 <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                <div className="space-y-0.5">
+                  <FormLabel>Ganztägiger Termin</FormLabel>
+                  <p className="text-[0.8rem] text-muted-foreground">Wenn aktiviert, werden die Zeitfelder ignoriert.</p>
+                </div>
             </FormItem>
-          )} />
-          <FormField control={form.control} name="startTime" render={({ field }) => (
+        )} />
+        
+        <FormField control={form.control} name="recurrence" render={({ field }) => (
             <FormItem>
-              <FormLabel>Beginn</FormLabel>
-              <FormControl><Input type="time" {...field} /></FormControl>
-              <FormMessage />
+                <FormLabel>Wiederholung</FormLabel>
+                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                    <SelectTrigger>
+                        <SelectValue placeholder="Wähle eine Wiederholungsregel" />
+                    </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                        <SelectItem value="none">Keine Wiederholung</SelectItem>
+                        <SelectItem value="weekly">Wöchentlich</SelectItem>
+                        <SelectItem value="biweekly">Alle 2 Wochen</SelectItem>
+                        <SelectItem value="monthly">Monatlich</SelectItem>
+                    </SelectContent>
+                </Select>
+                <FormMessage />
             </FormItem>
-          )} />
-          <FormField control={form.control} name="endTime" render={({ field }) => (
+        )} />
+        
+        <FormField control={form.control} name="targetTeamIds" render={() => (
             <FormItem>
-              <FormLabel>Ende (optional)</FormLabel>
-              <FormControl><Input type="time" {...field} /></FormControl>
+              <div className="mb-4">
+                <FormLabel className="text-base">Zielgruppen</FormLabel>
+                <p className="text-sm text-muted-foreground">Wähle die Mannschaften aus, für die dieser Termin gilt. Wenn keine ausgewählt ist, ist er für alle sichtbar.</p>
+              </div>
+              <Accordion type="multiple" className="w-full">
+                {groupedTeams.map(category => (
+                  <AccordionItem value={category.id} key={category.id}>
+                    <AccordionTrigger>{category.name}</AccordionTrigger>
+                    <AccordionContent>
+                      {category.teams.map(team => (
+                        <FormField key={team.id} control={form.control} name="targetTeamIds" render={({ field }) => (
+                            <FormItem key={team.id} className="flex flex-row items-start space-x-3 space-y-0 p-2">
+                              <FormControl>
+                                <Checkbox
+                                  checked={field.value?.includes(team.id)}
+                                  onCheckedChange={(checked) => {
+                                    return checked
+                                      ? field.onChange([...(field.value || []), team.id])
+                                      : field.onChange(field.value?.filter((value) => value !== team.id));
+                                  }}
+                                />
+                              </FormControl>
+                              <FormLabel className="font-normal">{team.name}</FormLabel>
+                            </FormItem>
+                          )}
+                        />
+                      ))}
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
               <FormMessage />
             </FormItem>
-          )} />
+        )} />
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+            <FormField control={form.control} name="rsvpDeadlineDate" render={({ field }) => (
+                <FormItem className="flex flex-col">
+                    <FormLabel>Rückmeldung bis</FormLabel>
+                    <Popover>
+                        <PopoverTrigger asChild>
+                        <FormControl>
+                            <Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                            {field.value ? format(field.value, 'dd.MM.yyyy') : <span>Datum (optional)</span>}
+                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                            </Button>
+                        </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar mode="single" selected={field.value} onSelect={field.onChange} locale={de} />
+                        </PopoverContent>
+                    </Popover>
+                    <FormMessage />
+                </FormItem>
+            )} />
+            <FormField control={form.control} name="rsvpDeadlineTime" render={({ field }) => (
+                <FormItem>
+                    <FormLabel className="text-transparent">Zeit</FormLabel>
+                    <FormControl><Input type="time" {...field} /></FormControl>
+                    <FormMessage />
+                </FormItem>
+            )} />
         </div>
         
         <FormField control={form.control} name="location" render={({ field }) => (
           <FormItem>
             <FormLabel>Ort</FormLabel>
             <FormControl><Input placeholder="z.B. Fritz-Jacobi-Anlage" {...field} /></FormControl>
+            <FormMessage />
+          </FormItem>
+        )} />
+
+        <FormField control={form.control} name="meetingPoint" render={({ field }) => (
+          <FormItem>
+            <FormLabel>Treffpunkt (optional)</FormLabel>
+            <FormControl><Input placeholder="z.B. Vor dem Vereinsheim" {...field} /></FormControl>
             <FormMessage />
           </FormItem>
         )} />
@@ -219,8 +439,22 @@ export default function TerminePage() {
     return doc(firestore, 'users', user.uid);
   }, [firestore, user]);
 
+  const categoriesQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'team_categories'), orderBy('order'));
+  }, [firestore]);
+
+  const teamsQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'teams'), orderBy('name'));
+  }, [firestore]);
+  
   const { data: currentUserData, isLoading: isUserLoading } = useDoc<UserData>(currentUserDocRef);
-  const { data: events, isLoading, error } = useCollection<Event>(eventsQuery);
+  const { data: events, isLoading: eventsLoading, error } = useCollection<Event>(eventsQuery);
+  const { data: categories, isLoading: categoriesLoading } = useCollection<TeamCategory>(categoriesQuery);
+  const { data: teams, isLoading: teamsLoading } = useCollection<Team>(teamsQuery);
+  
+  const isLoading = isUserLoading || eventsLoading || categoriesLoading || teamsLoading;
 
   const isAdmin = currentUserData?.adminRechte === true;
 
@@ -247,9 +481,19 @@ export default function TerminePage() {
       setIsDeleting(false);
     }
   };
+  
+  const getRecurrenceText = (recurrence?: string) => {
+    switch (recurrence) {
+      case 'weekly': return 'Wöchentlich';
+      case 'biweekly': return 'Alle 2 Wochen';
+      case 'monthly': return 'Monatlich';
+      default: return null;
+    }
+  };
+
 
   const renderContent = () => {
-    if (isLoading || isUserLoading) {
+    if (isLoading) {
       return (
         <div className="flex justify-center items-center py-10">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -272,40 +516,67 @@ export default function TerminePage() {
     }
     return (
         <div className="space-y-4">
-            {events.map(event => (
-                <Card key={event.id}>
-                    <CardHeader>
-                        <CardTitle>{event.title}</CardTitle>
-                        <div className="text-sm text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 pt-1">
-                            <div className="flex items-center gap-1.5">
-                                <CalendarIcon className="h-4 w-4" />
-                                <span>{format(event.date.toDate(), 'eeee, dd.MM.yyyy', { locale: de })}</span>
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                                <Clock className="h-4 w-4" />
-                                <span>{format(event.date.toDate(), 'HH:mm')} Uhr {event.endTime ? `- ${event.endTime} Uhr` : ''}</span>
-                            </div>
-                            {event.location && (
+            {events.map(event => {
+                const recurrenceText = getRecurrenceText(event.recurrence);
+                const startDate = event.date.toDate();
+                const endDate = event.endTime?.toDate();
+
+                let timeString;
+                if (event.isAllDay) {
+                    timeString = "Ganztägig";
+                } else if (endDate) {
+                    timeString = `${format(startDate, 'HH:mm')} - ${format(endDate, 'HH:mm')} Uhr`;
+                } else {
+                    timeString = `${format(startDate, 'HH:mm')} Uhr`;
+                }
+
+                let dateString = format(startDate, 'eeee, dd.MM.yyyy', { locale: de });
+                if(endDate && format(startDate, 'yyyyMMdd') !== format(endDate, 'yyyyMMdd')) {
+                    dateString += ` - ${format(endDate, 'eeee, dd.MM.yyyy', { locale: de })}`;
+                }
+
+                return (
+                    <Card key={event.id}>
+                        <CardHeader>
+                            <CardTitle>{event.title}</CardTitle>
+                            <div className="text-sm text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 pt-1">
                                 <div className="flex items-center gap-1.5">
-                                    <MapPin className="h-4 w-4" />
-                                    <span>{event.location}</span>
+                                    <CalendarIcon className="h-4 w-4" />
+                                    <span>{dateString}</span>
                                 </div>
-                            )}
-                        </div>
-                    </CardHeader>
-                    {event.description && (
-                        <CardContent>
-                            <p className="whitespace-pre-wrap">{event.description}</p>
-                        </CardContent>
-                    )}
-                    {isAdmin && (
-                        <CardFooter className="flex justify-end gap-2">
-                             <Button variant="ghost" size="icon" onClick={() => handleOpenForm(event)}><Edit className="h-4 w-4"/></Button>
-                             <Button variant="ghost" size="icon" className="hover:bg-destructive/10 hover:text-destructive" onClick={() => setEventToDelete(event)}><Trash2 className="h-4 w-4" /></Button>
-                        </CardFooter>
-                    )}
-                </Card>
-            ))}
+                                <div className="flex items-center gap-1.5">
+                                    <Clock className="h-4 w-4" />
+                                    <span>{timeString}</span>
+                                </div>
+                                {event.location && (
+                                    <div className="flex items-center gap-1.5">
+                                        <MapPin className="h-4 w-4" />
+                                        <span>{event.location}</span>
+                                    </div>
+                                )}
+                                {recurrenceText && (
+                                    <div className="flex items-center gap-1.5">
+                                        <Repeat className="h-4 w-4" />
+                                        <span>{recurrenceText}</span>
+                                    </div>
+                                )}
+                            </div>
+                        </CardHeader>
+                        {(event.description || event.meetingPoint) && (
+                            <CardContent className="space-y-2">
+                                {event.meetingPoint && <p><span className="font-semibold">Treffpunkt:</span> {event.meetingPoint}</p>}
+                                {event.description && <p className="whitespace-pre-wrap">{event.description}</p>}
+                            </CardContent>
+                        )}
+                        {isAdmin && (
+                            <CardFooter className="flex justify-end gap-2">
+                                <Button variant="ghost" size="icon" onClick={() => handleOpenForm(event)}><Edit className="h-4 w-4"/></Button>
+                                <Button variant="ghost" size="icon" className="hover:bg-destructive/10 hover:text-destructive" onClick={() => setEventToDelete(event)}><Trash2 className="h-4 w-4" /></Button>
+                            </CardFooter>
+                        )}
+                    </Card>
+                )
+            })}
         </div>
     );
   };
@@ -331,8 +602,12 @@ export default function TerminePage() {
       </main>
 
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <DialogContent className="sm:max-w-xl">
-          <EventForm onDone={handleFormDone} event={selectedEvent} />
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          {isLoading ? (
+             <div className="flex items-center justify-center p-8"><Loader2 className="animate-spin h-8 w-8 text-primary"/></div>
+          ) : (
+             <EventForm onDone={handleFormDone} event={selectedEvent} categories={categories || []} teams={teams || []} />
+          )}
         </DialogContent>
       </Dialog>
       
