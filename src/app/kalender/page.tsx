@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Calendar } from '@/components/ui/calendar';
 import { de } from 'date-fns/locale';
 import { useFirestore, useCollection, useMemoFirebase, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { collection, query, where, Timestamp, orderBy, doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, Timestamp, orderBy, doc, setDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { Loader2, CalendarIcon, Clock, MapPin, Repeat, Check, XIcon, Users } from 'lucide-react';
 import {
   format,
@@ -215,20 +215,6 @@ export default function KalenderPage() {
     return query(collection(firestore, 'events'));
   }, [firestore]);
   
-  const eventResponsesQuery = useMemoFirebase(() => {
-    if(!firestore || !events) return null;
-    // This is a simplification. For a large number of events, you'd want to query responses more selectively.
-    const eventIds = events.map(e => e.id);
-    if(eventIds.length === 0) return null;
-    // Firestore 'in' queries are limited to 30 values.
-    // This will break if there are more than 30 events loaded.
-    // A better approach would be to fetch responses for each event individually when it's displayed.
-    const q = query(collection(firestore, `events/${eventIds[0]}/responses`)); // Example, needs better logic
-    // For now, we will fetch responses per-event inside the useffect
-    return null;
-  }, [firestore, events]);
-
-
   const { data: categories, isLoading: categoriesLoading } = useCollection<TeamCategory>(categoriesQuery);
   const { data: teams, isLoading: teamsLoading } = useCollection<Team>(teamsQuery);
   const { data: eventsData, isLoading: eventsLoading, error } = useCollection<Event>(eventsQuery);
@@ -450,4 +436,4 @@ export default function KalenderPage() {
   );
 }
 
-  
+    
