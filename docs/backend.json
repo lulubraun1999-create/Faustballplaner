@@ -416,7 +416,7 @@
         "eventId": { "type": "string" },
         "userId": { "type": "string" },
         "eventDate": { "type": "string", "format": "date-time", "description": "The specific date of the event instance this response is for." },
-        "status": { "type": "string", "enum": ["attending", "declined"] },
+        "status": { "type": "string", "enum": ["attending", "declined", "uncertain"] },
         "respondedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "eventId", "userId", "eventDate", "status", "respondedAt"]
@@ -675,4 +675,6 @@
     
     
   
+    
+
     

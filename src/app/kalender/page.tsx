@@ -8,7 +8,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { de } from 'date-fns/locale';
 import { useFirestore, useCollection, useMemoFirebase, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { collection, query, where, Timestamp, orderBy, doc, setDoc, serverTimestamp, onSnapshot, addDoc } from 'firebase/firestore';
-import { Loader2, CalendarIcon, Clock, MapPin, Repeat, Check, XIcon, Users } from 'lucide-react';
+import { Loader2, CalendarIcon, Clock, MapPin, Repeat, Check, XIcon, Users, HelpCircle } from 'lucide-react';
 import {
   format,
   isSameDay,
@@ -24,15 +24,14 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Label } from '@/components/ui/label';
 
 
 interface Event {
@@ -55,7 +54,7 @@ interface EventResponse {
     id: string;
     userId: string;
     eventDate: Timestamp;
-    status: 'attending' | 'declined';
+    status: 'attending' | 'declined' | 'uncertain';
     respondedAt: Timestamp;
 }
 
@@ -140,37 +139,51 @@ const EventCard = ({ event, allUsers }: { event: DisplayEvent; allUsers: GroupMe
 
     const attendingCount = responsesForThisInstance.filter(r => r.status === 'attending').length || 0;
     const declinedCount = responsesForThisInstance.filter(r => r.status === 'declined').length || 0;
+    const uncertainCount = responsesForThisInstance.filter(r => r.status === 'uncertain').length || 0;
+
+    const getResponderName = (userId: string) => {
+      const responder = allUsers.find(u => u.id === userId);
+      return responder ? `${responder.vorname || ''} ${responder.nachname || ''}`.trim() : 'Unbekannt';
+    };
 
     const attendees = useMemo(() => {
         return responsesForThisInstance
             .filter(r => r.status === 'attending')
-            .map(r => allUsers.find(u => u.id === r.userId)?.vorname || 'Unbekannt')
+            .map(r => getResponderName(r.userId))
             .sort();
     }, [responsesForThisInstance, allUsers]);
 
     const decliners = useMemo(() => {
         return responsesForThisInstance
             .filter(r => r.status === 'declined')
-            .map(r => allUsers.find(u => u.id === r.userId)?.vorname || 'Unbekannt')
+            .map(r => getResponderName(r.userId))
+            .sort();
+    }, [responsesForThisInstance, allUsers]);
+    
+    const uncertains = useMemo(() => {
+        return responsesForThisInstance
+            .filter(r => r.status === 'uncertain')
+            .map(r => getResponderName(r.userId))
             .sort();
     }, [responsesForThisInstance, allUsers]);
 
 
-    const handleRsvp = (status: 'attending' | 'declined') => {
+    const handleRsvp = (status: 'attending' | 'declined' | 'uncertain') => {
         if (!user || !firestore) return;
 
         const responseCollectionRef = collection(firestore, 'events', event.id, 'responses');
         const eventDateAsTimestamp = Timestamp.fromDate(startOfDay(event.displayDate));
         
-        const data: Omit<EventResponse, 'id'> & { respondedAt: any } = {
+        const responseDocId = userResponse?.id || doc(responseCollectionRef).id;
+        
+        const data: Omit<EventResponse, 'id'| 'respondedAt'> & { respondedAt: any } = {
             userId: user.uid,
             status: status,
             respondedAt: serverTimestamp(),
             eventDate: eventDateAsTimestamp,
-            eventId: event.id
+            eventId: event.id,
         };
         
-        const responseDocId = userResponse?.id || doc(responseCollectionRef).id;
         const responseRef = doc(responseCollectionRef, responseDocId);
 
         setDoc(responseRef, data, { merge: true })
@@ -216,9 +229,13 @@ const EventCard = ({ event, allUsers }: { event: DisplayEvent; allUsers: GroupMe
              <CardFooter className="flex-col sm:flex-row items-start sm:items-center sm:justify-between gap-4">
                  <Popover>
                     <PopoverTrigger asChild>
-                         <Button variant="link" className="p-0 h-auto text-muted-foreground" disabled={responsesLoading || (attendingCount === 0 && declinedCount === 0)}>
+                         <Button variant="link" className="p-0 h-auto text-muted-foreground" disabled={responsesLoading || (attendingCount === 0 && declinedCount === 0 && uncertainCount === 0)}>
                              {responsesLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Users className="h-4 w-4 mr-2" />}
-                            <span>{attendingCount} Zusagen, {declinedCount} Absagen</span>
+                            <span className="flex gap-2">
+                                <span className="text-green-600">{attendingCount} Zusagen</span>
+                                <span className="text-red-600">{declinedCount} Absagen</span>
+                                {uncertainCount > 0 && <span className="text-yellow-600">{uncertainCount} Unsicher</span>}
+                            </span>
                          </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-64">
@@ -230,6 +247,14 @@ const EventCard = ({ event, allUsers }: { event: DisplayEvent; allUsers: GroupMe
                                         {attendees.map((name, i) => <li key={i}>{name}</li>)}
                                     </ul>
                                 ) : <p className="text-xs text-muted-foreground">Noch keine Zusagen.</p>}
+                            </div>
+                            <div>
+                                <h4 className="font-semibold text-sm mb-2">Unsicher ({uncertains.length})</h4>
+                                {uncertains.length > 0 ? (
+                                    <ul className="list-disc list-inside text-sm space-y-1">
+                                        {uncertains.map((name, i) => <li key={i}>{name}</li>)}
+                                    </ul>
+                                ) : <p className="text-xs text-muted-foreground">Keine unsicheren Antworten.</p>}
                             </div>
                              <div>
                                 <h4 className="font-semibold text-sm mb-2">Absagen ({decliners.length})</h4>
@@ -253,6 +278,15 @@ const EventCard = ({ event, allUsers }: { event: DisplayEvent; allUsers: GroupMe
                         <Check className="mr-2 h-4 w-4" />
                         Zusagen
                     </Button>
+                     <Button 
+                        size="sm"
+                        variant={userResponse?.status === 'uncertain' ? 'secondary' : 'outline'}
+                        onClick={() => handleRsvp('uncertain')}
+                        className={cn(userResponse?.status === 'uncertain' && 'bg-yellow-500 hover:bg-yellow-600 text-black')}
+                    >
+                        <HelpCircle className="mr-2 h-4 w-4" />
+                        Unsicher
+                    </Button>
                     <Button 
                         size="sm"
                         variant={userResponse?.status === 'declined' ? 'destructive' : 'outline'}
@@ -271,7 +305,7 @@ const EventCard = ({ event, allUsers }: { event: DisplayEvent; allUsers: GroupMe
 export default function KalenderPage() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  const [selectedTeamId, setSelectedTeamId] = useState<string>('all');
+  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
   
   const firestore = useFirestore();
 
@@ -319,9 +353,9 @@ export default function KalenderPage() {
     if (!eventsData) return [];
 
     const filteredByTeam = eventsData.filter(event => {
-        if (selectedTeamId === 'all') return true;
-        if (!event.targetTeamIds || event.targetTeamIds.length === 0) return true;
-        return event.targetTeamIds.includes(selectedTeamId);
+        if (selectedTeamIds.length === 0) return true; // Show all if no filter
+        if (!event.targetTeamIds || event.targetTeamIds.length === 0) return true; // Show events for all teams
+        return event.targetTeamIds.some(id => selectedTeamIds.includes(id));
     });
 
     const visibleEvents: DisplayEvent[] = [];
@@ -382,7 +416,7 @@ export default function KalenderPage() {
       }
     }
     return visibleEvents;
-  }, [eventsData, currentMonth, selectedTeamId]);
+  }, [eventsData, currentMonth, selectedTeamIds]);
 
   const eventDates = useMemo(() => {
     return allVisibleEvents.map(event => event.displayDate);
@@ -407,26 +441,33 @@ export default function KalenderPage() {
             <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] lg:grid-cols-[320px_1fr] gap-8">
                 <Card>
                     <CardHeader>
-                        <CardTitle>Filter</CardTitle>
+                        <CardTitle>Nach Mannschaften filtern</CardTitle>
                     </CardHeader>
                     <CardContent>
                        {isLoading ? <Loader2 className="animate-spin" /> : (
-                         <Select value={selectedTeamId} onValueChange={setSelectedTeamId}>
-                           <SelectTrigger>
-                             <SelectValue placeholder="Mannschaft auswählen..." />
-                           </SelectTrigger>
-                           <SelectContent>
-                             <SelectItem value="all">Alle Mannschaften</SelectItem>
-                             {groupedTeams.map(category => (
-                               <SelectGroup key={category.id}>
-                                 <SelectLabel>{category.name}</SelectLabel>
-                                 {category.teams.map(team => (
-                                   <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
-                                 ))}
-                               </SelectGroup>
-                             ))}
-                           </SelectContent>
-                         </Select>
+                         <Accordion type="multiple" className="w-full">
+                            {groupedTeams.map(category => (
+                                <AccordionItem value={category.id} key={category.id}>
+                                    <AccordionTrigger>{category.name}</AccordionTrigger>
+                                    <AccordionContent>
+                                    {category.teams.map(team => (
+                                        <div key={team.id} className="flex items-center space-x-2 p-1">
+                                            <Checkbox
+                                                id={team.id}
+                                                checked={selectedTeamIds.includes(team.id)}
+                                                onCheckedChange={(checked) => {
+                                                    return checked
+                                                    ? setSelectedTeamIds([...selectedTeamIds, team.id])
+                                                    : setSelectedTeamIds(selectedTeamIds.filter((id) => id !== team.id))
+                                                }}
+                                            />
+                                            <Label htmlFor={team.id} className="font-normal cursor-pointer">{team.name}</Label>
+                                        </div>
+                                    ))}
+                                    </AccordionContent>
+                                </AccordionItem>
+                            ))}
+                        </Accordion>
                        )}
                     </CardContent>
                 </Card>
@@ -488,3 +529,5 @@ export default function KalenderPage() {
     </div>
   );
 }
+
+    
