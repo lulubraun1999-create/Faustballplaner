@@ -325,6 +325,7 @@ function PollCard({ poll, allUsers }: { poll: Poll; allUsers: GroupMember[] }) {
     const { toast } = useToast();
     const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
     const [customOption, setCustomOption] = useState<string>('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const responsesQuery = useMemoFirebase(() => {
         if (!firestore) return null;
@@ -355,10 +356,11 @@ function PollCard({ poll, allUsers }: { poll: Poll; allUsers: GroupMember[] }) {
         return counts;
     }, [responses, poll.options]);
 
-    const handleVote = async () => {
+    const handleVote = () => {
         if (!user || !firestore || (selectedOptions.length === 0 && !customOption)) {
             return;
         }
+        setIsSubmitting(true);
 
         const responseRef = doc(collection(firestore, 'polls', poll.id, 'responses'));
         
@@ -383,6 +385,9 @@ function PollCard({ poll, allUsers }: { poll: Poll; allUsers: GroupMember[] }) {
                     requestResourceData: responseData,
                 });
                 errorEmitter.emit('permission-error', permissionError);
+            })
+            .finally(() => {
+                setIsSubmitting(false);
             });
     };
     
@@ -486,7 +491,9 @@ function PollCard({ poll, allUsers }: { poll: Poll; allUsers: GroupMember[] }) {
                     {poll.expiresAt && <span className="ml-2">· Endet am {format(poll.expiresAt.toDate(), 'dd.MM.yyyy')}</span>}
                 </div>
                 {!userHasVoted && (!poll.expiresAt || poll.expiresAt.toDate() > new Date()) && (
-                    <Button onClick={handleVote} disabled={selectedOptions.length === 0 && !customOption}>Abstimmen</Button>
+                    <Button onClick={handleVote} disabled={isSubmitting || (selectedOptions.length === 0 && !customOption)}>
+                         {isSubmitting ? <Loader2 className="animate-spin" /> : 'Abstimmen'}
+                    </Button>
                 )}
                  {user?.uid === poll.createdBy && (
                     <Button variant="destructive" size="sm" onClick={handleDeletePoll}>Löschen</Button>
