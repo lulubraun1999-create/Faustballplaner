@@ -1,12 +1,12 @@
 
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useFirestore, useUser, useCollection, useMemoFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { addDoc, collection, serverTimestamp, orderBy, query, Timestamp, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { addDoc, collection, serverTimestamp, orderBy, query, Timestamp, doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
@@ -34,7 +34,7 @@ import {
 } from "@/components/ui/accordion"
 import { Checkbox } from "@/components/ui/checkbox"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { PlusCircle, Trash2, Loader2, CalendarIcon, User, Clock } from 'lucide-react';
+import { PlusCircle, Trash2, Loader2, CalendarIcon, User, Clock, Edit } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, formatDistanceToNow } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -48,7 +48,7 @@ interface TeamCategory {
 }
 
 interface Team {
-  id: string;
+  id:string;
   name: string;
   categoryId: string;
 }
@@ -326,6 +326,7 @@ function PollCard({ poll, allUsers }: { poll: Poll; allUsers: GroupMember[] }) {
     const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
     const [customOption, setCustomOption] = useState<string>('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [viewMode, setViewMode] = useState<'vote' | 'results'>('vote');
 
     const responsesQuery = useMemoFirebase(() => {
         if (!firestore) return null;
@@ -336,11 +337,24 @@ function PollCard({ poll, allUsers }: { poll: Poll; allUsers: GroupMember[] }) {
     
     const creator = useMemo(() => allUsers.find(u => u.id === poll.createdBy), [allUsers, poll.createdBy]);
     
-    const userHasVoted = useMemo(() => responses?.some(r => r.userId === user?.uid), [responses, user]);
+    const userResponse = useMemo(() => responses?.find(r => r.userId === user?.uid), [responses, user]);
+
+    useEffect(() => {
+        if (userResponse) {
+            setViewMode('results');
+            setSelectedOptions(userResponse.selectedOptionIds || []);
+            setCustomOption(userResponse.customOption || '');
+        } else {
+             setViewMode('vote');
+             setSelectedOptions([]);
+             setCustomOption('');
+        }
+    }, [userResponse]);
+
 
     const totalVotes = useMemo(() => {
         if (!responses) return 0;
-        return responses.reduce((acc, response) => acc + response.selectedOptionIds.length, 0);
+        return responses.length;
     }, [responses]);
 
     const voteCounts = useMemo(() => {
@@ -362,9 +376,7 @@ function PollCard({ poll, allUsers }: { poll: Poll; allUsers: GroupMember[] }) {
         }
         setIsSubmitting(true);
 
-        const responseRef = doc(collection(firestore, 'polls', poll.id, 'responses'));
-        
-        let responseData: { [key: string]: any } = {
+        const responseData: { [key: string]: any } = {
             userId: user.uid,
             selectedOptionIds: selectedOptions,
             respondedAt: serverTimestamp(),
@@ -374,14 +386,26 @@ function PollCard({ poll, allUsers }: { poll: Poll; allUsers: GroupMember[] }) {
             responseData.customOption = customOption;
         }
 
-        setDoc(responseRef, responseData)
+        let promise;
+        if (userResponse) {
+            // Update existing response
+            const responseRef = doc(firestore, 'polls', poll.id, 'responses', userResponse.id);
+            promise = updateDoc(responseRef, responseData);
+        } else {
+            // Create new response
+            const responseRef = doc(collection(firestore, 'polls', poll.id, 'responses'));
+            promise = setDoc(responseRef, responseData);
+        }
+
+        promise
             .then(() => {
-                toast({ title: 'Stimme wurde gezählt' });
+                toast({ title: userResponse ? 'Stimme aktualisiert' : 'Stimme wurde gezählt' });
+                setViewMode('results');
             })
             .catch((serverError) => {
                  const permissionError = new FirestorePermissionError({
-                    path: responseRef.path,
-                    operation: 'create',
+                    path: `polls/${poll.id}/responses/${userResponse ? userResponse.id : ''}`,
+                    operation: userResponse ? 'update' : 'create',
                     requestResourceData: responseData,
                 });
                 errorEmitter.emit('permission-error', permissionError);
@@ -416,6 +440,68 @@ function PollCard({ poll, allUsers }: { poll: Poll; allUsers: GroupMember[] }) {
             setSelectedOptions([optionId]);
         }
     };
+    
+    const isPollExpired = poll.expiresAt && poll.expiresAt.toDate() < new Date();
+
+    const renderVotingView = () => (
+         <div className="space-y-3">
+            {poll.allowMultipleAnswers ? (
+                 poll.options.map(option => (
+                    <div key={option.id} className="flex items-center gap-3">
+                        <Checkbox 
+                            id={`${poll.id}-${option.id}`}
+                            checked={selectedOptions.includes(option.id)}
+                            onCheckedChange={() => handleOptionChange(option.id)}
+                        />
+                        <Label htmlFor={`${poll.id}-${option.id}`} className="font-normal flex-1 cursor-pointer">{option.text}</Label>
+                    </div>
+                ))
+            ) : (
+                <RadioGroup value={selectedOptions[0]} onValueChange={handleOptionChange}>
+                    {poll.options.map(option => (
+                        <div key={option.id} className="flex items-center gap-3">
+                            <RadioGroupItem value={option.id} id={`${poll.id}-${option.id}`} />
+                            <Label htmlFor={`${poll.id}-${option.id}`} className="font-normal flex-1 cursor-pointer">{option.text}</Label>
+                        </div>
+                    ))}
+                </RadioGroup>
+            )}
+            {poll.allowCustomOptions && (
+                <div className="flex items-center gap-3 pt-2">
+                    <Checkbox
+                        id={`${poll.id}-custom`}
+                        onCheckedChange={(checked) => {
+                            if(!checked) setCustomOption('');
+                        }}
+                    />
+                    <Input 
+                        placeholder="Eigene Antwort" 
+                        value={customOption} 
+                        onChange={(e) => setCustomOption(e.target.value)}
+                        className="flex-1"
+                    />
+                </div>
+            )}
+        </div>
+    );
+    
+    const renderResultsView = () => (
+        <div className="space-y-3">
+            {poll.options.map(option => {
+                const votes = voteCounts.get(option.id) || 0;
+                const percentage = totalVotes > 0 ? (votes / totalVotes) * 100 : 0;
+                return (
+                    <div key={option.id}>
+                        <div className="flex justify-between items-center mb-1 text-sm">
+                            <p className={cn("font-medium", userResponse?.selectedOptionIds.includes(option.id) && "text-primary")}>{option.text}</p>
+                            <p className="text-muted-foreground">{votes} Stimme(n) ({percentage.toFixed(0)}%)</p>
+                        </div>
+                        <Progress value={percentage} />
+                    </div>
+                )
+            })}
+        </div>
+    );
 
     return (
         <Card>
@@ -435,79 +521,35 @@ function PollCard({ poll, allUsers }: { poll: Poll; allUsers: GroupMember[] }) {
                 </div>
             </CardHeader>
             <CardContent>
-                {userHasVoted || (poll.expiresAt && poll.expiresAt.toDate() < new Date()) ? (
-                    // Results view
-                    <div className="space-y-3">
-                        {poll.options.map(option => {
-                            const votes = voteCounts.get(option.id) || 0;
-                            const percentage = totalVotes > 0 ? (votes / totalVotes) * 100 : 0;
-                            return (
-                                <div key={option.id}>
-                                    <div className="flex justify-between items-center mb-1 text-sm">
-                                        <p className="font-medium">{option.text}</p>
-                                        <p className="text-muted-foreground">{votes} Stimme(n) ({percentage.toFixed(0)}%)</p>
-                                    </div>
-                                    <Progress value={percentage} />
-                                </div>
-                            )
-                        })}
-                    </div>
-                ) : (
-                    // Voting view
-                    <div className="space-y-3">
-                        {poll.allowMultipleAnswers ? (
-                             poll.options.map(option => (
-                                <div key={option.id} className="flex items-center gap-3">
-                                    <Checkbox 
-                                        id={`${poll.id}-${option.id}`}
-                                        checked={selectedOptions.includes(option.id)}
-                                        onCheckedChange={() => handleOptionChange(option.id)}
-                                    />
-                                    <Label htmlFor={`${poll.id}-${option.id}`} className="font-normal flex-1 cursor-pointer">{option.text}</Label>
-                                </div>
-                            ))
-                        ) : (
-                            <RadioGroup value={selectedOptions[0]} onValueChange={handleOptionChange}>
-                                {poll.options.map(option => (
-                                    <div key={option.id} className="flex items-center gap-3">
-                                        <RadioGroupItem value={option.id} id={`${poll.id}-${option.id}`} />
-                                        <Label htmlFor={`${poll.id}-${option.id}`} className="font-normal flex-1 cursor-pointer">{option.text}</Label>
-                                    </div>
-                                ))}
-                            </RadioGroup>
-                        )}
-                        {poll.allowCustomOptions && (
-                            <div className="flex items-center gap-3 pt-2">
-                                <Checkbox
-                                    id={`${poll.id}-custom`}
-                                    onCheckedChange={(checked) => {
-                                        if(!checked) setCustomOption('');
-                                    }}
-                                />
-                                <Input 
-                                    placeholder="Eigene Antwort" 
-                                    value={customOption} 
-                                    onChange={(e) => setCustomOption(e.target.value)}
-                                    className="flex-1"
-                                />
-                            </div>
-                        )}
-                    </div>
-                )}
+               {viewMode === 'vote' ? renderVotingView() : renderResultsView() }
             </CardContent>
-            <CardFooter className="flex justify-between items-center">
+            <CardFooter className="flex-col sm:flex-row items-start sm:items-center sm:justify-between gap-4">
                  <div className="text-sm text-muted-foreground">
-                    {totalVotes} Gesamtstimmen
+                    {totalVotes} Gesamtstimme(n)
                     {poll.expiresAt && <span className="ml-2">· Endet am {format(poll.expiresAt.toDate(), 'dd.MM.yyyy')}</span>}
                 </div>
-                {!userHasVoted && (!poll.expiresAt || poll.expiresAt.toDate() > new Date()) && (
-                    <Button onClick={handleVote} disabled={isSubmitting || (selectedOptions.length === 0 && !customOption)}>
-                         {isSubmitting ? <Loader2 className="animate-spin" /> : 'Abstimmen'}
-                    </Button>
-                )}
-                 {user?.uid === poll.createdBy && (
-                    <Button variant="destructive" size="sm" onClick={handleDeletePoll}>Löschen</Button>
-                )}
+                <div className="flex gap-2">
+                    {userResponse && !isPollExpired && viewMode === 'results' && (
+                        <Button variant="outline" size="sm" onClick={() => setViewMode('vote')}>
+                            <Edit className="mr-2 h-4 w-4"/>
+                            Stimme bearbeiten
+                        </Button>
+                    )}
+                    {viewMode === 'vote' && (
+                        <>
+                           {userResponse && <Button variant="ghost" size="sm" onClick={() => setViewMode('results')}>Abbrechen</Button>}
+                           <Button onClick={handleVote} disabled={isSubmitting || (selectedOptions.length === 0 && !customOption) || isPollExpired}>
+                                {isSubmitting ? <Loader2 className="animate-spin" /> : (userResponse ? "Stimme aktualisieren" : "Abstimmen")}
+                            </Button>
+                        </>
+                    )}
+                    {viewMode === 'vote' && !userResponse && (
+                         <Button variant="secondary" size="sm" onClick={() => setViewMode('results')}>Ergebnisse anzeigen</Button>
+                    )}
+                     {user?.uid === poll.createdBy && (
+                        <Button variant="destructive" size="icon" onClick={handleDeletePoll}><Trash2 className="h-4 w-4"/></Button>
+                    )}
+                </div>
             </CardFooter>
         </Card>
     )
@@ -546,7 +588,8 @@ export default function UmfragenPage() {
 
   const filteredPolls = useMemo(() => {
       if(!polls || !user || !allUsers) return [];
-      const userTeams = allUsers?.find(u => u.id === user.uid)?.teamIds || [];
+      const currentUserData = allUsers.find(u => u.id === user.uid);
+      const userTeams = currentUserData?.teamIds || [];
 
       return polls.filter(poll => {
           // Polls created by user are always visible
@@ -626,3 +669,5 @@ export default function UmfragenPage() {
     </div>
   );
 }
+
+    
