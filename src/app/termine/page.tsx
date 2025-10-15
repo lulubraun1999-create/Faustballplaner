@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useFirestore, useUser, useCollection, useDoc, useMemoFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { addDoc, collection, serverTimestamp, orderBy, query, Timestamp, doc, updateDoc, deleteDoc, setDoc } from 'firebase/firestore';
+import { addDoc, collection, serverTimestamp, orderBy, query, Timestamp, doc, updateDoc, deleteDoc, setDoc, where } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
@@ -303,7 +303,7 @@ function EventForm({ onDone, event, categories, teams, locations, isAdmin }: { o
     }
 
     const startDate = combineDateAndTime(values.date, values.isAllDay ? undefined : values.startTime);
-    let endDate : Date | null = null;
+    let endDate : Date | undefined = undefined;
     if (values.endDate) {
         endDate = combineDateAndTime(values.endDate, values.isAllDay ? undefined : values.endTime);
     }
@@ -314,7 +314,7 @@ function EventForm({ onDone, event, categories, teams, locations, isAdmin }: { o
         rsvpDeadline = Timestamp.fromDate(rsvpDate);
     }
 
-    const dataToSave: Omit<Event, 'id' | 'createdAt' | 'createdBy'> & { createdAt: any, createdBy: string } = {
+    const dataToSave: Omit<Event, 'id' | 'createdAt' | 'createdBy' | 'endTime'> & { endTime?: Timestamp | null, createdAt: any, createdBy: string } = {
       title: values.title,
       date: Timestamp.fromDate(startDate),
       endTime: endDate ? Timestamp.fromDate(endDate) : null,
@@ -332,7 +332,7 @@ function EventForm({ onDone, event, categories, teams, locations, isAdmin }: { o
     
     if (event) {
       const eventRef = doc(firestore, 'events', event.id);
-      updateDoc(eventRef, dataToSave)
+      updateDoc(eventRef, dataToSave as { [x: string]: any; })
         .then(() => {
           toast({ title: 'Termin aktualisiert' });
           onDone();
@@ -403,7 +403,7 @@ function EventForm({ onDone, event, categories, teams, locations, isAdmin }: { o
             )} />
             {!isAllDay && <FormField control={form.control} name="startTime" render={({ field }) => (
                 <FormItem>
-                    <FormLabel className="text-transparent">Zeit</FormLabel>
+                    <FormLabel>Zeit</FormLabel>
                     <FormControl><Input type="time" {...field} /></FormControl>
                     <FormMessage />
                 </FormItem>
@@ -432,7 +432,7 @@ function EventForm({ onDone, event, categories, teams, locations, isAdmin }: { o
             )} />
             {!isAllDay && <FormField control={form.control} name="endTime" render={({ field }) => (
                 <FormItem>
-                    <FormLabel className="text-transparent">Zeit</FormLabel>
+                    <FormLabel>Zeit</FormLabel>
                     <FormControl><Input type="time" {...field} /></FormControl>
                     <FormMessage />
                 </FormItem>
@@ -551,7 +551,7 @@ function EventForm({ onDone, event, categories, teams, locations, isAdmin }: { o
             )} />
             <FormField control={form.control} name="rsvpDeadlineTime" render={({ field }) => (
                 <FormItem>
-                    <FormLabel className="text-transparent">Zeit</FormLabel>
+                    <FormLabel>Zeit</FormLabel>
                     <FormControl><Input type="time" {...field} /></FormControl>
                     <FormMessage />
                 </FormItem>
@@ -667,6 +667,22 @@ const EventCard = ({ event, allUsers, locations, onEdit, onDelete }: { event: Di
          return responsesForThisInstance?.find(r => r.userId === user?.uid);
     }, [responsesForThisInstance, user]);
 
+    const getRecurrenceText = (event: Event) => {
+        const recurrence = event.recurrence;
+        const recurrenceEndDate = event.recurrenceEndDate?.toDate();
+        let text = '';
+        switch (recurrence) {
+            case 'weekly': text = 'Wöchentlich'; break;
+            case 'biweekly': text = 'Alle 2 Wochen'; break;
+            case 'monthly': text = 'Monatlich'; break;
+            default: return null;
+        }
+        if (recurrenceEndDate) {
+            text += ` bis ${format(recurrenceEndDate, 'dd.MM.yyyy')}`;
+        }
+        return text;
+    };
+    
     const recurrenceText = getRecurrenceText(event);
     const startDate = event.displayDate;
     const endDate = event.endTime?.toDate();
@@ -745,26 +761,18 @@ const EventCard = ({ event, allUsers, locations, onEdit, onDelete }: { event: Di
             });
     };
 
-    const getRecurrenceText = (event: Event) => {
-        const recurrence = event.recurrence;
-        const recurrenceEndDate = event.recurrenceEndDate?.toDate();
-        let text = '';
-        switch (recurrence) {
-            case 'weekly': text = 'Wöchentlich'; break;
-            case 'biweekly': text = 'Alle 2 Wochen'; break;
-            case 'monthly': text = 'Monatlich'; break;
-            default: return null;
-        }
-        if (recurrenceEndDate) {
-            text += ` bis ${format(recurrenceEndDate, 'dd.MM.yyyy')}`;
-        }
-        return text;
-    };
-
     return (
         <Card key={event.id}>
             <CardHeader>
-                <CardTitle>{event.title}</CardTitle>
+                 <div className="flex justify-between items-start">
+                    <CardTitle>{event.title}</CardTitle>
+                    {isAdmin && (
+                        <div className="flex items-center">
+                            <Button variant="ghost" size="icon" onClick={() => onEdit(event)}><Edit className="h-4 w-4"/></Button>
+                            <Button variant="ghost" size="icon" className="hover:bg-destructive/10 hover:text-destructive" onClick={() => onDelete(event)}><Trash2 className="h-4 w-4" /></Button>
+                        </div>
+                    )}
+                </div>
                  <div className="text-sm text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:flex-wrap gap-x-4 gap-y-1 pt-1">
                     <div className="flex items-center gap-1.5">
                         <Clock className="h-4 w-4 flex-shrink-0" />
@@ -773,7 +781,7 @@ const EventCard = ({ event, allUsers, locations, onEdit, onDelete }: { event: Di
                     {location && (
                         <div className="flex items-center gap-1.5">
                             <MapPin className="h-4 w-4 flex-shrink-0" />
-                            {location.name ? (
+                             {location.name ? (
                                 <Popover>
                                     <PopoverTrigger asChild>
                                         <button className="hover:underline cursor-pointer">{location.name}</button>
@@ -871,12 +879,6 @@ const EventCard = ({ event, allUsers, locations, onEdit, onDelete }: { event: Di
                         <XIcon className="mr-2 h-4 w-4" />
                         Absagen
                     </Button>
-                     {isAdmin && (
-                        <>
-                            <Button variant="ghost" size="icon" onClick={() => onEdit(event)}><Edit className="h-4 w-4"/></Button>
-                            <Button variant="ghost" size="icon" className="hover:bg-destructive/10 hover:text-destructive" onClick={() => onDelete(event)}><Trash2 className="h-4 w-4" /></Button>
-                        </>
-                    )}
                 </div>
             </CardFooter>
         </Card>
@@ -947,12 +949,13 @@ export default function TerminePage() {
     if (!eventsData) return new Map();
 
     const weeklyEventsMap = new Map<string, DisplayEvent[]>();
-    const interval = { start: currentWeekStart, end: currentWeekEnd };
+    const interval = { start: startOfDay(currentWeekStart), end: startOfDay(currentWeekEnd) };
 
     for (const event of eventsData) {
       const originalStartDate = event.date.toDate();
       const recurrenceEndDate = event.recurrenceEndDate?.toDate();
 
+      // Handle non-recurring events
       if (event.recurrence === 'none' || !event.recurrence) {
         if (isWithinInterval(originalStartDate, interval)) {
           const dayKey = format(originalStartDate, 'yyyy-MM-dd');
@@ -961,35 +964,44 @@ export default function TerminePage() {
         }
         continue;
       }
-
+      
+      // Handle recurring events
       let currentDate = originalStartDate;
-      let limit = 200; // safety break
+      let limit = 100; // Safety break
+      
+      // Fast-forward to the current week's interval if the event starts before
+      if (currentDate < interval.start) {
+        // This is a simplified fast-forward; for monthly it could be more complex
+        while(currentDate < interval.start && limit > 0) {
+           switch (event.recurrence) {
+            case 'weekly': currentDate = addWeeks(currentDate, 1); break;
+            case 'biweekly': currentDate = addWeeks(currentDate, 2); break;
+            case 'monthly': currentDate = add(currentDate, { months: 1 }); break;
+            default: limit = 0; break;
+           }
+           limit--;
+        }
+      }
+
+      limit = 100; // Reset limit
       while (currentDate <= interval.end && limit > 0) {
+        // Stop if recurrence end date is passed
         if (recurrenceEndDate && currentDate > recurrenceEndDate) {
-            limit = 0; // Stop if the recurrence end date is passed
+            limit = 0;
             continue;
         }
-
-        if (currentDate >= interval.start) {
+        
+        if (isWithinInterval(currentDate, interval)) {
              const dayKey = format(currentDate, 'yyyy-MM-dd');
              if (!weeklyEventsMap.has(dayKey)) weeklyEventsMap.set(dayKey, []);
              weeklyEventsMap.get(dayKey)?.push({ ...event, displayDate: currentDate });
         }
 
         switch (event.recurrence) {
-            case 'weekly':
-                currentDate = addWeeks(currentDate, 1);
-                break;
-            case 'biweekly':
-                currentDate = addWeeks(currentDate, 2);
-                break;
-            case 'monthly':
-                // This logic is simplified for weekly view; for full accuracy, needs more complex date-math
-                currentDate = add(currentDate, { months: 1 });
-                break;
-            default:
-                limit = 0;
-                break;
+            case 'weekly': currentDate = addWeeks(currentDate, 1); break;
+            case 'biweekly': currentDate = addWeeks(currentDate, 2); break;
+            case 'monthly': currentDate = add(currentDate, { months: 1 }); break;
+            default: limit = 0; break;
         }
         limit--;
       }
@@ -1050,39 +1062,35 @@ export default function TerminePage() {
     if (error) {
       return <p className="text-destructive text-center">Fehler beim Laden der Termine: {error.message}</p>;
     }
-    if (eventsForWeek.size === 0) {
-      return (
-         <Card>
-            <CardContent>
-              <div className="text-center py-10">
-                <p className="text-muted-foreground">Keine Termine für diese Woche gefunden.</p>
-              </div>
-            </CardContent>
-          </Card>
-      );
-    }
+    
     return (
         <div className="space-y-8">
             {weekDays.map(day => {
                 const dayKey = format(day, 'yyyy-MM-dd');
                 const dayEvents = eventsForWeek.get(dayKey) || [];
-                if(dayEvents.length === 0) return null;
-
+                const isToday = isSameDay(day, new Date());
+                
                 return (
                     <div key={dayKey}>
-                        <h2 className="font-bold text-lg mb-2 sticky top-16 bg-background py-2 border-b">{format(day, 'eeee, dd. MMMM', {locale: de})}</h2>
-                        <div className="space-y-4">
-                            {dayEvents.map(event => (
-                                <EventCard
-                                    key={`${event.id}-${event.displayDate.toISOString()}`}
-                                    event={event}
-                                    allUsers={allUsers || []}
-                                    locations={locations || []}
-                                    onEdit={handleOpenForm}
-                                    onDelete={setEventToDelete}
-                                />
-                            ))}
-                        </div>
+                        <h2 className={cn("font-bold text-lg mb-2 sticky top-16 bg-background py-2 border-b", isToday && "text-primary")}>
+                            {format(day, 'eeee, dd. MMMM', {locale: de})}
+                        </h2>
+                        {dayEvents.length > 0 ? (
+                             <div className="space-y-4">
+                                {dayEvents.map(event => (
+                                    <EventCard
+                                        key={`${event.id}-${event.displayDate.toISOString()}`}
+                                        event={event}
+                                        allUsers={allUsers || []}
+                                        locations={locations || []}
+                                        onEdit={handleOpenForm}
+                                        onDelete={setEventToDelete}
+                                    />
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="text-sm text-muted-foreground">Keine Termine für diesen Tag.</p>
+                        )}
                     </div>
                 )
             })}
@@ -1098,9 +1106,9 @@ export default function TerminePage() {
           <div className="flex items-center justify-between mb-8 flex-wrap gap-4">
             <h1 className="text-3xl font-bold">Termine</h1>
             <div className="flex items-center gap-2">
-                <Button variant="outline" onClick={goToPreviousWeek}><ChevronLeft className="h-4 w-4 mr-2"/> Vorherige Woche</Button>
+                <Button variant="outline" size="sm" onClick={goToPreviousWeek}><ChevronLeft className="h-4 w-4"/></Button>
                 <Button variant="outline" onClick={goToToday}>Heute</Button>
-                <Button variant="outline" onClick={goToNextWeek}>Nächste Woche <ChevronRight className="h-4 w-4 ml-2"/></Button>
+                <Button variant="outline" size="sm" onClick={goToNextWeek}><ChevronRight className="h-4 w-4"/></Button>
             </div>
             {isAdmin && (
               <Button className="bg-red-600 hover:bg-red-700 text-white" onClick={() => handleOpenForm()}>
@@ -1147,5 +1155,3 @@ export default function TerminePage() {
     </div>
   );
 }
-
-    
