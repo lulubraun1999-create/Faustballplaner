@@ -36,7 +36,7 @@ export function Header() {
     }
   };
   
-  const verwaltungPaths = ["/mannschaften", "/mitglieder", "/admin/news", "/umfragen", "/termine"];
+  const verwaltungPaths = ["/mannschaften", "/mitglieder", "/admin/news", "/umfragen", "/termine", "/aktuelles"];
   const isVerwaltungActive = verwaltungPaths.some(p => pathname.startsWith(p));
 
 
@@ -50,12 +50,6 @@ export function Header() {
         </div>
 
         <nav className="hidden md:flex items-center justify-center gap-4 text-sm font-medium flex-1">
-          <Link 
-            href="/aktuelles" 
-            className={cn("transition-colors hover:text-foreground/80", pathname === '/aktuelles' ? 'text-foreground' : 'text-muted-foreground')}
-          >
-            Aktuelles
-          </Link>
           <Link 
             href="/chat" 
             className={cn("transition-colors hover:text-foreground/80", pathname === '/chat' ? 'text-foreground' : 'text-muted-foreground')}
@@ -71,6 +65,9 @@ export function Header() {
               <ChevronDown className="h-4 w-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent>
+              <DropdownMenuItem asChild>
+                <Link href="/aktuelles">Aktuelles</Link>
+              </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link href="/mannschaften">Mannschaften</Link>
               </DropdownMenuItem>
