@@ -59,7 +59,6 @@ interface EventResponse {
 
 interface DisplayEvent extends Event {
   displayDate: Date;
-  responses: EventResponse[];
 }
 
 interface TeamCategory {
@@ -93,6 +92,13 @@ const EventCard = ({ event }: { event: DisplayEvent }) => {
     const { user } = useUser();
     const firestore = useFirestore();
 
+    const responsesQuery = useMemoFirebase(() => {
+        if (!firestore) return null;
+        return query(collection(firestore, 'events', event.id, 'responses'));
+    }, [firestore, event.id]);
+
+    const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
+
     const recurrenceText = getRecurrenceText(event.recurrence);
     const startDate = event.displayDate;
     const endDate = event.endTime?.toDate();
@@ -106,8 +112,8 @@ const EventCard = ({ event }: { event: DisplayEvent }) => {
         timeString = `${format(startDate, 'HH:mm')} Uhr`;
     }
 
-    const userResponse = event.responses.find(r => r.userId === user?.uid);
-    const attendingCount = event.responses.filter(r => r.status === 'attending').length;
+    const userResponse = responses?.find(r => r.userId === user?.uid);
+    const attendingCount = responses?.filter(r => r.status === 'attending').length || 0;
 
     const handleRsvp = (status: 'attending' | 'declined') => {
         if (!user || !firestore) return;
@@ -161,8 +167,12 @@ const EventCard = ({ event }: { event: DisplayEvent }) => {
             )}
              <CardFooter className="flex-col sm:flex-row items-start sm:items-center sm:justify-between gap-4">
                 <div className="text-sm text-muted-foreground flex items-center gap-1.5">
-                    <Users className="h-4 w-4" />
-                    <span>{attendingCount} Zusagen</span>
+                    {responsesLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : (
+                      <>
+                        <Users className="h-4 w-4" />
+                        <span>{attendingCount} Zusagen</span>
+                      </>
+                    )}
                 </div>
                 <div className="flex items-center gap-2">
                     <Button 
@@ -211,7 +221,6 @@ export default function KalenderPage() {
 
   const eventsQuery = useMemoFirebase(() => {
     if (!firestore) return null;
-    // Fetch all events. Filtering based on recurrence will be handled client-side.
     return query(collection(firestore, 'events'));
   }, [firestore]);
   
@@ -219,49 +228,14 @@ export default function KalenderPage() {
   const { data: teams, isLoading: teamsLoading } = useCollection<Team>(teamsQuery);
   const { data: eventsData, isLoading: eventsLoading, error } = useCollection<Event>(eventsQuery);
   
-  const [eventResponses, setEventResponses] = useState<Record<string, EventResponse[]>>({});
-  const [responsesLoading, setResponsesLoading] = useState(true);
 
-  useEffect(() => {
-    if (!firestore || !eventsData) {
-        setResponsesLoading(false);
-        return;
-    };
-    
-    setResponsesLoading(true);
-    const allUnsubscribes: (() => void)[] = [];
-    const newResponses: Record<string, EventResponse[]> = {};
-    let promises: Promise<void>[] = [];
-
-    eventsData.forEach(event => {
-        const responsesQuery = query(collection(firestore, 'events', event.id, 'responses'));
-        const promise = new Promise<void>(resolve => {
-            const unsubscribe = onSnapshot(responsesQuery, (snapshot) => {
-                newResponses[event.id] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as EventResponse));
-                resolve();
-            });
-            allUnsubscribes.push(unsubscribe);
-        });
-        promises.push(promise);
-    });
-
-    Promise.all(promises).then(() => {
-        setEventResponses(newResponses);
-        setResponsesLoading(false);
-    })
-
-    return () => allUnsubscribes.forEach(unsub => unsub());
-
-  }, [firestore, eventsData]);
-
-
-  const isLoading = categoriesLoading || teamsLoading || eventsLoading || responsesLoading;
+  const isLoading = categoriesLoading || teamsLoading || eventsLoading;
 
  const groupedTeams = useMemo(() => {
     if (!categories || !teams) return [];
     return categories.map(category => ({
       ...category,
-      teams: teams.filter(team => team.categoryId === category.id).sort((a,b) => a.name.localeCompare(b.name))
+      teams: teams.filter(team => team.categoryId === category.id).sort((a,b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
     }));
   }, [categories, teams]);
 
@@ -271,9 +245,7 @@ export default function KalenderPage() {
 
     const filteredByTeam = eventsData.filter(event => {
         if (selectedTeamId === 'all') return true;
-        // Show events that are not targeted to any specific team (public events).
         if (!event.targetTeamIds || event.targetTeamIds.length === 0) return true;
-        // Show events targeted to the selected team.
         return event.targetTeamIds.includes(selectedTeamId);
     });
 
@@ -282,11 +254,10 @@ export default function KalenderPage() {
 
     for (const event of filteredByTeam) {
       const originalStartDate = event.date.toDate();
-      const responses = eventResponses[event.id] || [];
 
       if (event.recurrence === 'none' || !event.recurrence) {
         if (isWithinInterval(originalStartDate, interval)) {
-          visibleEvents.push({ ...event, displayDate: originalStartDate, responses });
+          visibleEvents.push({ ...event, displayDate: originalStartDate });
         }
         continue;
       }
@@ -295,7 +266,6 @@ export default function KalenderPage() {
       
       if (event.recurrence === 'weekly' || event.recurrence === 'biweekly') {
         const step = event.recurrence === 'weekly' ? 1 : 2;
-        // Fast-forward to the current view interval
         if (currentDate < interval.start) {
             const weeksDiff = Math.floor((interval.start.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24 * 7));
             const stepsToSkip = Math.floor(weeksDiff / step);
@@ -307,7 +277,7 @@ export default function KalenderPage() {
              currentDate = addWeeks(currentDate, step);
          }
         while (currentDate <= interval.end) {
-            visibleEvents.push({ ...event, displayDate: currentDate, responses });
+            visibleEvents.push({ ...event, displayDate: currentDate });
             currentDate = addWeeks(currentDate, step);
         }
       } else if (event.recurrence === 'monthly') {
@@ -322,14 +292,14 @@ export default function KalenderPage() {
          }
         while (currentDate <= interval.end) {
             if (isSameMonth(currentDate, interval.start)) {
-                visibleEvents.push({ ...event, displayDate: currentDate, responses });
+                visibleEvents.push({ ...event, displayDate: currentDate });
             }
             currentDate = addMonths(currentDate, 1);
         }
       }
     }
     return visibleEvents;
-  }, [eventsData, currentMonth, selectedTeamId, eventResponses]);
+  }, [eventsData, currentMonth, selectedTeamId]);
 
   const eventDates = useMemo(() => {
     return allVisibleEvents.map(event => event.displayDate);
@@ -435,5 +405,3 @@ export default function KalenderPage() {
     </div>
   );
 }
-
-    
