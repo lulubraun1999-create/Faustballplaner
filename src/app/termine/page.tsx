@@ -295,7 +295,7 @@ function EventForm({ onDone, event, categories, teams, locations, isAdmin }: { o
         rsvpDeadline = Timestamp.fromDate(rsvpDate);
     }
 
-    const dataToSave: Omit<Event, 'id' | 'createdAt'> & { createdAt: any } = {
+    const dataToSave: Omit<Event, 'id' | 'createdAt' | 'createdBy'> & { createdAt: any, createdBy: string } = {
       title: values.title,
       date: Timestamp.fromDate(startDate),
       endTime: endDate ? Timestamp.fromDate(endDate) : null,
@@ -792,7 +792,6 @@ export default function TerminePage() {
                                                     <button className="hover:underline cursor-pointer">{location.name}</button>
                                                 </PopoverTrigger>
                                                 <PopoverContent className="w-auto p-3">
-                                                    <div className="font-semibold">{location.name}</div>
                                                     <div>{location.address}</div>
                                                     <div>{location.city}</div>
                                                 </PopoverContent>

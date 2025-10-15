@@ -186,7 +186,7 @@ const EventCard = ({ event, allUsers, locations }: { event: DisplayEvent; allUse
         
         const responseDocId = userResponse?.id || doc(responseCollectionRef).id;
         
-        const data: Omit<EventResponse, 'id'| 'respondedAt'> & { respondedAt: any } = {
+        const data: Omit<EventResponse, 'id'| 'respondedAt' | 'eventId'> & { respondedAt: any, eventId: string } = {
             userId: user.uid,
             status: status,
             respondedAt: serverTimestamp(),
@@ -225,7 +225,6 @@ const EventCard = ({ event, allUsers, locations }: { event: DisplayEvent; allUse
                                         <button className="hover:underline cursor-pointer">{location.name}</button>
                                     </PopoverTrigger>
                                     <PopoverContent className="w-auto p-3">
-                                        <div className="font-semibold">{location.name}</div>
                                         <div>{location.address}</div>
                                         <div>{location.city}</div>
                                     </PopoverContent>
