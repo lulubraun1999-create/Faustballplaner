@@ -786,14 +786,20 @@ export default function TerminePage() {
                                 {location && (
                                     <div className="flex items-center gap-1.5">
                                         <MapPin className="h-4 w-4 flex-shrink-0" />
-                                        <a
-                                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${location.name}, ${location.address}, ${location.city}`)}`}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="hover:underline"
-                                        >
-                                            {location.name}
-                                        </a>
+                                         {location.name ? (
+                                            <Popover>
+                                                <PopoverTrigger asChild>
+                                                    <button className="hover:underline cursor-pointer">{location.name}</button>
+                                                </PopoverTrigger>
+                                                <PopoverContent className="w-auto p-3">
+                                                    <div className="font-semibold">{location.name}</div>
+                                                    <div>{location.address}</div>
+                                                    <div>{location.city}</div>
+                                                </PopoverContent>
+                                            </Popover>
+                                        ) : (
+                                            <span>{location.address}, {location.city}</span>
+                                        )}
                                     </div>
                                 )}
                                 {recurrenceText && (

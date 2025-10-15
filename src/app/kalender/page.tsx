@@ -219,7 +219,20 @@ const EventCard = ({ event, allUsers, locations }: { event: DisplayEvent; allUse
                     {location && (
                         <div className="flex items-center gap-1.5">
                             <MapPin className="h-4 w-4 flex-shrink-0" />
-                            <span>{location.name}, {location.address}, {location.city}</span>
+                            {location.name ? (
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <button className="hover:underline cursor-pointer">{location.name}</button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto p-3">
+                                        <div className="font-semibold">{location.name}</div>
+                                        <div>{location.address}</div>
+                                        <div>{location.city}</div>
+                                    </PopoverContent>
+                                </Popover>
+                            ) : (
+                                <span>{location.address}, {location.city}</span>
+                            )}
                         </div>
                     )}
                     {recurrenceText && (
