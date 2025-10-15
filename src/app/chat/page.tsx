@@ -217,15 +217,15 @@ export default function ChatPage() {
   const handleDeleteMessage = async (messageId: string) => {
     if (!firestore || !activeRoom) return;
     const messageRef = doc(firestore, 'chat_rooms', activeRoom.id, 'messages', messageId);
-    try {
-        await deleteDoc(messageRef);
-    } catch (error: any) {
-        toast({
-            variant: 'destructive',
-            title: 'Fehler beim Löschen',
-            description: error.message
+    
+    deleteDoc(messageRef)
+        .catch((serverError) => {
+            const permissionError = new FirestorePermissionError({
+                path: messageRef.path,
+                operation: 'delete',
+            });
+            errorEmitter.emit('permission-error', permissionError);
         });
-    }
   }
 
   const groupMessagesByDate = (messages: ChatMessage[]) => {
@@ -370,3 +370,5 @@ export default function ChatPage() {
     </div>
   );
 }
+
+    
