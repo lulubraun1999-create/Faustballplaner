@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { useFirestore, useUser, useCollection, useDoc, useMemoFirebase } from '@/firebase';
+import { useFirestore, useUser, useCollection, useDoc, useMemoFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { collection, query, orderBy, addDoc, serverTimestamp, Timestamp, doc, deleteDoc, where, getDocs, setDoc, onSnapshot } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Header } from '@/components/header';
@@ -115,42 +115,47 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (!firestore || !user || chatRooms.length <= 1) return;
-  
-    const fetchUnreadCounts = async () => {
-      const counts: Record<string, number> = {};
-      const chatStatusRef = collection(firestore, 'users', user.uid, 'chat_status');
-      const statusSnapshot = await getDocs(chatStatusRef);
-      const statuses = new Map(statusSnapshot.docs.map(doc => [doc.id, doc.data() as UserChatStatus]));
-  
-      for (const room of chatRooms) {
-        const status = statuses.get(room.id);
-        const lastSeen = status?.lastSeen || new Timestamp(0, 0);
-  
-        const messagesRef = collection(firestore, 'chat_rooms', room.id, 'messages');
-        const q = query(messagesRef, where('timestamp', '>', lastSeen));
-  
-        try {
-          const messageSnapshot = await getDocs(q);
-          const unreadMessages = messageSnapshot.docs.filter(doc => doc.data().userId !== user.uid);
-          counts[room.id] = unreadMessages.length;
-        } catch (error) {
-          console.error(`Error fetching messages for room ${room.id}:`, error);
-          counts[room.id] = 0;
+
+    const unsubscribes: (() => void)[] = [];
+
+    const fetchAndListen = async () => {
+        const counts: Record<string, number> = {};
+        for (const room of chatRooms) {
+            try {
+                // Get last seen timestamp
+                const statusRef = doc(firestore, 'users', user.uid, 'chat_status', room.id);
+                const statusSnapshot = await getDocs(query(collection(firestore, 'users', user.uid, 'chat_status'), where('__name__', '==', room.id)));
+                const lastSeen = statusSnapshot.docs.length > 0 ? (statusSnapshot.docs[0].data() as UserChatStatus).lastSeen : new Timestamp(0, 0);
+
+                // Count unread messages
+                const messagesRef = collection(firestore, 'chat_rooms', room.id, 'messages');
+                const q = query(messagesRef, where('timestamp', '>', lastSeen), where('userId', '!=', user.uid));
+                const messageSnapshot = await getDocs(q);
+                counts[room.id] = messageSnapshot.size;
+
+                // Set up listener for new messages
+                const liveQuery = query(messagesRef, where('timestamp', '>', Timestamp.now()));
+                const unsubscribe = onSnapshot(liveQuery, (snapshot) => {
+                    const newMessages = snapshot.docs.filter(doc => doc.data().userId !== user.uid);
+                    if (newMessages.length > 0) {
+                        setUnreadCounts(prevCounts => ({
+                            ...prevCounts,
+                            [room.id]: (prevCounts[room.id] || 0) + newMessages.length,
+                        }));
+                    }
+                });
+                unsubscribes.push(unsubscribe);
+
+            } catch (error) {
+                console.error(`Error processing room ${room.id}:`, error);
+                counts[room.id] = 0;
+            }
         }
-      }
-      setUnreadCounts(counts);
+        setUnreadCounts(counts);
     };
-  
-    fetchUnreadCounts();
-  
-    const unsubscribes = chatRooms.map(room => {
-      const messagesRef = collection(firestore, 'chat_rooms', room.id, 'messages');
-      const q = query(messagesRef, where('timestamp', '>', new Timestamp(Date.now() / 1000, 0)));
-      return onSnapshot(q, () => {
-        fetchUnreadCounts();
-      });
-    });
-  
+
+    fetchAndListen();
+
     return () => unsubscribes.forEach(unsub => unsub());
   }, [firestore, user, chatRooms]);
 
@@ -189,18 +194,23 @@ export default function ChatPage() {
       roomId: activeRoom.id,
     };
     
-    try {
-        await addDoc(collection(firestore, 'chat_rooms', activeRoom.id, 'messages'), messageData);
-        setNewMessage('');
-    } catch(error: any) {
-        toast({
-            variant: 'destructive',
-            title: 'Fehler beim Senden',
-            description: error.message
+    const messagesCollection = collection(firestore, 'chat_rooms', activeRoom.id, 'messages');
+
+    addDoc(messagesCollection, messageData)
+        .then(() => {
+            setNewMessage('');
+        })
+        .catch((serverError) => {
+            const permissionError = new FirestorePermissionError({
+                path: messagesCollection.path,
+                operation: 'create',
+                requestResourceData: messageData,
+            });
+            errorEmitter.emit('permission-error', permissionError);
+        })
+        .finally(() => {
+            setIsSending(false);
         });
-    } finally {
-        setIsSending(false);
-    }
   };
 
   const handleDeleteMessage = async (messageId: string) => {
@@ -294,7 +304,7 @@ export default function ChatPage() {
                                             </div>
                                         )}
 
-                                        {isCurrentUser && currentUserData?.adminRechte && (
+                                        {isCurrentUser && (
                                             <Button
                                                 variant="ghost"
                                                 size="icon"
@@ -345,5 +355,3 @@ export default function ChatPage() {
     </div>
   );
 }
-
-    
