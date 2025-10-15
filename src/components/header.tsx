@@ -2,7 +2,7 @@
 "use client";
 
 import { useAuth, useUser } from '@/firebase';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { LogOut, ChevronDown, User as UserIcon, Instagram } from 'lucide-react';
@@ -16,11 +16,13 @@ import {
 } from "@/components/ui/dropdown-menu"
 import Link from 'next/link';
 import { ModeToggle } from './mode-toggle';
+import { cn } from '@/lib/utils';
 
 export function Header() {
   const auth = useAuth();
   const { user } = useUser();
   const router = useRouter();
+  const pathname = usePathname();
   const { toast } = useToast();
 
   const handleLogout = async () => {
@@ -33,6 +35,10 @@ export function Header() {
       router.push('/login');
     }
   };
+  
+  const verwaltungPaths = ["/mannschaften", "/mitglieder", "/admin/news", "/umfragen", "/termine"];
+  const isVerwaltungActive = verwaltungPaths.some(p => pathname.startsWith(p));
+
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -44,14 +50,23 @@ export function Header() {
         </div>
 
         <nav className="hidden md:flex items-center justify-center gap-4 text-sm font-medium flex-1">
-          <Link href="/aktuelles" className="text-foreground transition-colors hover:text-foreground/80">
+          <Link 
+            href="/aktuelles" 
+            className={cn("transition-colors hover:text-foreground/80", pathname === '/aktuelles' ? 'text-foreground' : 'text-muted-foreground')}
+          >
             Aktuelles
           </Link>
-          <Link href="#" className="text-muted-foreground transition-colors hover:text-foreground/80">
+          <Link 
+            href="#" 
+            className={cn("transition-colors hover:text-foreground/80", pathname === '/chat' ? 'text-foreground' : 'text-muted-foreground')}
+            >
             Chat
           </Link>
            <DropdownMenu>
-            <DropdownMenuTrigger className="flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground/80 focus:outline-none">
+            <DropdownMenuTrigger className={cn(
+                "flex items-center gap-1 transition-colors hover:text-foreground/80 focus:outline-none",
+                isVerwaltungActive ? 'text-foreground' : 'text-muted-foreground'
+            )}>
               Verwaltung
               <ChevronDown className="h-4 w-4" />
             </DropdownMenuTrigger>
@@ -106,5 +121,3 @@ export function Header() {
     </header>
   );
 }
-
-    
