@@ -327,7 +327,14 @@ const EventCard = ({ event, allUsers, locations }: { event: DisplayEvent; allUse
 export default function KalenderPage() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
-  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
+  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>(() => {
+    // Initialize from localStorage on client
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('kalenderFilter');
+      return saved ? JSON.parse(saved) : [];
+    }
+    return [];
+  });
   
   const firestore = useFirestore();
 
@@ -338,6 +345,11 @@ export default function KalenderPage() {
   useEffect(() => {
     setSelectedDate(new Date());
   }, []);
+
+  // Save filter to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('kalenderFilter', JSON.stringify(selectedTeamIds));
+  }, [selectedTeamIds]);
 
   const categoriesQuery = useMemoFirebase(() => {
     if (!firestore) return null;
