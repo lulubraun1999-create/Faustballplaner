@@ -152,7 +152,7 @@ function EventForm({ onDone, event, categories, teams }: { onDone: () => void, e
     }));
   }, [categories, teams]);
 
-  const onSubmit = async (values: EventFormValues) => {
+  const onSubmit = (values: EventFormValues) => {
     if (!user || !firestore) {
       toast({ variant: 'destructive', title: 'Nicht authentifiziert' });
       return;
@@ -485,18 +485,25 @@ export default function TerminePage() {
     setSelectedEvent(undefined);
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     if (!firestore || !eventToDelete) return;
     setIsDeleting(true);
-    try {
-      await deleteDoc(doc(firestore, 'events', eventToDelete.id));
-      toast({ title: 'Termin gelöscht' });
-      setEventToDelete(null);
-    } catch (error: any) {
-      toast({ variant: 'destructive', title: 'Fehler beim Löschen', description: error.message });
-    } finally {
-      setIsDeleting(false);
-    }
+    const eventDocRef = doc(firestore, 'events', eventToDelete.id);
+    deleteDoc(eventDocRef)
+      .then(() => {
+        toast({ title: 'Termin gelöscht' });
+        setEventToDelete(null);
+      })
+      .catch((serverError) => {
+        const permissionError = new FirestorePermissionError({
+          path: eventDocRef.path,
+          operation: 'delete',
+        });
+        errorEmitter.emit('permission-error', permissionError);
+      })
+      .finally(() => {
+        setIsDeleting(false);
+      });
   };
   
   const getRecurrenceText = (recurrence?: string) => {
@@ -647,3 +654,5 @@ export default function TerminePage() {
     </div>
   );
 }
+
+    
