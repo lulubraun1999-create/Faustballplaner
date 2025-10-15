@@ -324,6 +324,7 @@ function PollCard({ poll, allUsers }: { poll: Poll; allUsers: GroupMember[] }) {
     const firestore = useFirestore();
     const { toast } = useToast();
     const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
+    const [customOption, setCustomOption] = useState<string>('');
 
     const responsesQuery = useMemoFirebase(() => {
         if (!firestore) return null;
@@ -355,22 +356,28 @@ function PollCard({ poll, allUsers }: { poll: Poll; allUsers: GroupMember[] }) {
     }, [responses, poll.options]);
 
     const handleVote = async () => {
-        if (!user || !firestore || selectedOptions.length === 0) return;
+        if (!user || !firestore || (selectedOptions.length === 0 && !customOption) ) return;
         
         const responseRef = doc(collection(firestore, 'polls', poll.id, 'responses'));
         
-        const responseData: Omit<PollResponse, 'respondedAt'> = {
+        const responseData: {
+          id: string;
+          userId: string;
+          selectedOptionIds: string[];
+          customOption?: string;
+          respondedAt: Timestamp;
+        } = {
             id: responseRef.id,
             userId: user.uid,
             selectedOptionIds: selectedOptions,
+            respondedAt: serverTimestamp() as Timestamp
         };
+        
+        if (poll.allowCustomOptions && customOption) {
+            responseData.customOption = customOption;
+        }
 
-        const finalResponseData = {
-          ...responseData,
-          respondedAt: serverTimestamp()
-        };
-
-        setDoc(responseRef, finalResponseData)
+        setDoc(responseRef, responseData)
             .then(() => {
                 toast({ title: 'Stimme wurde gezählt' });
             })
@@ -378,7 +385,7 @@ function PollCard({ poll, allUsers }: { poll: Poll; allUsers: GroupMember[] }) {
                  const permissionError = new FirestorePermissionError({
                     path: responseRef.path,
                     operation: 'create',
-                    requestResourceData: finalResponseData,
+                    requestResourceData: responseData,
                 });
                 errorEmitter.emit('permission-error', permissionError);
             });
@@ -418,7 +425,7 @@ function PollCard({ poll, allUsers }: { poll: Poll; allUsers: GroupMember[] }) {
                 </div>
             </CardHeader>
             <CardContent>
-                {userHasVoted || poll.expiresAt && poll.expiresAt.toDate() < new Date() ? (
+                {userHasVoted || (poll.expiresAt && poll.expiresAt.toDate() < new Date()) ? (
                     // Results view
                     <div className="space-y-3">
                         {poll.options.map(option => {
@@ -459,6 +466,22 @@ function PollCard({ poll, allUsers }: { poll: Poll; allUsers: GroupMember[] }) {
                                 ))}
                             </RadioGroup>
                         )}
+                        {poll.allowCustomOptions && (
+                            <div className="flex items-center gap-3 pt-2">
+                                <Checkbox
+                                    id={`${poll.id}-custom`}
+                                    onCheckedChange={(checked) => {
+                                        if(!checked) setCustomOption('');
+                                    }}
+                                />
+                                <Input 
+                                    placeholder="Eigene Antwort" 
+                                    value={customOption} 
+                                    onChange={(e) => setCustomOption(e.target.value)}
+                                    className="flex-1"
+                                />
+                            </div>
+                        )}
                     </div>
                 )}
             </CardContent>
@@ -468,7 +491,7 @@ function PollCard({ poll, allUsers }: { poll: Poll; allUsers: GroupMember[] }) {
                     {poll.expiresAt && <span className="ml-2">· Endet am {format(poll.expiresAt.toDate(), 'dd.MM.yyyy')}</span>}
                 </div>
                 {!userHasVoted && (!poll.expiresAt || poll.expiresAt.toDate() > new Date()) && (
-                    <Button onClick={handleVote} disabled={selectedOptions.length === 0}>Abstimmen</Button>
+                    <Button onClick={handleVote} disabled={selectedOptions.length === 0 && !customOption}>Abstimmen</Button>
                 )}
                  {user?.uid === poll.createdBy && (
                     <Button variant="destructive" size="sm" onClick={handleDeletePoll}>Löschen</Button>
