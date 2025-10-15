@@ -5,7 +5,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useFirestore, useUser, useCollection, useMemoFirebase } from '@/firebase';
+import { useFirestore, useUser, useCollection, useDoc, useMemoFirebase } from '@/firebase';
 import { addDoc, collection, serverTimestamp, orderBy, query, Timestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Header } from '@/components/header';
@@ -214,15 +214,14 @@ export default function TerminePage() {
     return query(collection(firestore, 'events'), orderBy('date', 'desc'));
   }, [firestore]);
   
-  const usersCollectionRef = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return collection(firestore, 'users');
-  }, [firestore]);
+  const currentUserDocRef = useMemoFirebase(() => {
+    if (!firestore || !user) return null;
+    return doc(firestore, 'users', user.uid);
+  }, [firestore, user]);
 
-  const { data: users } = useCollection<UserData>(usersCollectionRef);
+  const { data: currentUserData, isLoading: isUserLoading } = useDoc<UserData>(currentUserDocRef);
   const { data: events, isLoading, error } = useCollection<Event>(eventsQuery);
 
-  const currentUserData = users?.find(u => u.id === user?.uid);
   const isAdmin = currentUserData?.adminRechte === true;
 
   const handleOpenForm = (event?: Event) => {
@@ -250,7 +249,7 @@ export default function TerminePage() {
   };
 
   const renderContent = () => {
-    if (isLoading) {
+    if (isLoading || isUserLoading) {
       return (
         <div className="flex justify-center items-center py-10">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />

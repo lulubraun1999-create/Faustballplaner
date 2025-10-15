@@ -2,7 +2,7 @@
 'use client';
 
 import { collection, Timestamp, doc, updateDoc, deleteDoc, setDoc, query, orderBy } from 'firebase/firestore';
-import { useFirestore, useCollection, useMemoFirebase, useUser } from '@/firebase';
+import { useFirestore, useCollection, useMemoFirebase, useUser, useDoc } from '@/firebase';
 import { Header } from '@/components/header';
 import {
   Table,
@@ -132,7 +132,7 @@ const TeamsCell = ({ teamIds, teamsMap }: { teamIds?: string[], teamsMap: Map<st
 
 export default function MitgliederPage() {
   const firestore = useFirestore();
-  const { user: currentUser, isUserLoading } = useUser();
+  const { user: authUser, isUserLoading: isAuthLoading } = useUser();
   const { toast } = useToast();
   
   const [actionUser, setActionUser] = useState<User | null>(null);
@@ -144,11 +144,18 @@ export default function MitgliederPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedFilterTeamId, setSelectedFilterTeamId] = useState('all');
 
+  const currentUserDocRef = useMemoFirebase(() => {
+    if (!firestore || !authUser) return null;
+    return doc(firestore, 'users', authUser.uid);
+  }, [firestore, authUser]);
+
+  const { data: currentUserData, isLoading: isUserDocLoading } = useDoc<User>(currentUserDocRef);
+  const isAdmin = currentUserData?.adminRechte === true;
 
   const usersCollectionRef = useMemoFirebase(() => {
-    if (!firestore) return null;
+    if (!firestore || !isAdmin) return null; // Only fetch all users if admin
     return collection(firestore, 'users');
-  }, [firestore]);
+  }, [firestore, isAdmin]);
 
   const teamsCollectionRef = useMemoFirebase(() => {
     if (!firestore) return null;
@@ -165,20 +172,13 @@ export default function MitgliederPage() {
   const { data: categories, isLoading: categoriesLoading, error: categoriesError } = useCollection<TeamCategory>(categoriesQuery);
 
   
-  const isLoading = usersLoading || teamsLoading || isUserLoading || categoriesLoading;
+  const isLoading = isAuthLoading || isUserDocLoading || usersLoading || teamsLoading || categoriesLoading;
   const error = usersError || teamsError || categoriesError;
 
   const teamsMap = useMemo(() => {
     if (!teams) return new Map();
     return new Map(teams.map(team => [team.id, team.name]));
   }, [teams]);
-  
-  const currentUserData = useMemo(() => {
-      if(!currentUser || !users) return null;
-      return users.find(u => u.id === currentUser.uid);
-  }, [currentUser, users]);
-
-  const isAdmin = currentUserData?.adminRechte === true;
   
   const groupedTeams = useMemo(() => {
     if (!categories || !teams) return [];
@@ -295,13 +295,13 @@ export default function MitgliederPage() {
       );
     }
 
-    if (error) {
+    if (error || !isAdmin) {
       return (
         <div className="text-center py-8 text-destructive flex flex-col items-center gap-4">
           <ShieldAlert className="h-12 w-12" />
           <div className="space-y-1">
              <p className="font-bold text-lg">Zugriff verweigert</p>
-             <p className="text-muted-foreground">Sie haben nicht die erforderlichen Berechtigungen, um diese Seite anzuzeigen.</p>
+             <p className="text-muted-foreground">{error?.message || 'Sie haben nicht die erforderlichen Berechtigungen, um diese Seite anzuzeigen.'}</p>
           </div>
         </div>
       );
@@ -498,3 +498,5 @@ export default function MitgliederPage() {
     </div>
   );
 }
+
+    

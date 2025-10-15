@@ -6,7 +6,7 @@ import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { collection, query, orderBy, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, Timestamp } from 'firebase/firestore';
-import { useFirestore, useCollection, useMemoFirebase, useUser } from '@/firebase';
+import { useFirestore, useCollection, useDoc, useMemoFirebase, useUser } from '@/firebase';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -208,14 +208,13 @@ export default function AdminNewsPage() {
     setIsClient(true);
   }, []);
   
-  const usersCollectionRef = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return collection(firestore, 'users');
-  }, [firestore]);
+  const currentUserDocRef = useMemoFirebase(() => {
+    if (!firestore || !user) return null;
+    return doc(firestore, 'users', user.uid);
+  }, [firestore, user]);
 
-  const { data: users } = useCollection<UserData>(usersCollectionRef);
-
-  const currentUserData = users?.find(u => u.id === user?.uid);
+  const { data: currentUserData, isLoading: isUserLoading } = useDoc<UserData>(currentUserDocRef);
+  
   const isAdmin = currentUserData?.adminRechte === true;
 
   const newsQuery = useMemoFirebase(() => {
@@ -251,7 +250,7 @@ export default function AdminNewsPage() {
 
 
   const renderContent = () => {
-    if (isLoading) {
+    if (isLoading || isUserLoading) {
       return (
         <div className="flex justify-center items-center py-10">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -319,7 +318,7 @@ export default function AdminNewsPage() {
     );
   }
   
-  if (isClient && !isAdmin) {
+  if (isClient && !isUserLoading && !isAdmin) {
        return (
         <div className="flex min-h-screen w-full flex-col bg-background">
             <Header />
@@ -380,3 +379,5 @@ export default function AdminNewsPage() {
     </div>
   );
 }
+
+    
