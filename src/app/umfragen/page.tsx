@@ -362,7 +362,7 @@ function PollCard({ poll, allUsers }: { poll: Poll; allUsers: GroupMember[] }) {
 
         const responseRef = doc(collection(firestore, 'polls', poll.id, 'responses'));
         
-        const responseData: any = {
+        const responseData: { [key: string]: any } = {
             userId: user.uid,
             selectedOptionIds: selectedOptions,
             respondedAt: serverTimestamp(),
@@ -377,7 +377,7 @@ function PollCard({ poll, allUsers }: { poll: Poll; allUsers: GroupMember[] }) {
                 toast({ title: 'Stimme wurde gezählt' });
             })
             .catch((serverError) => {
-                const permissionError = new FirestorePermissionError({
+                 const permissionError = new FirestorePermissionError({
                     path: responseRef.path,
                     operation: 'create',
                     requestResourceData: responseData,
