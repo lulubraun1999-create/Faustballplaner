@@ -23,7 +23,16 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
 
 interface Event {
   id: string;
@@ -74,7 +83,7 @@ const getRecurrenceText = (recurrence?: string) => {
 export default function KalenderPage() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
+  const [selectedTeamId, setSelectedTeamId] = useState<string>('all');
   
   const firestore = useFirestore();
 
@@ -116,12 +125,11 @@ export default function KalenderPage() {
     if (!events) return [];
 
     const filteredByTeam = events.filter(event => {
-        // If no teams are selected in the filter, show all events.
-        if (selectedTeamIds.length === 0) return true;
+        if (selectedTeamId === 'all') return true;
         // Show events that are not targeted to any specific team (public events).
         if (!event.targetTeamIds || event.targetTeamIds.length === 0) return true;
-        // Show events that are targeted to at least one of the selected teams.
-        return event.targetTeamIds.some(teamId => selectedTeamIds.includes(teamId));
+        // Show events targeted to the selected team.
+        return event.targetTeamIds.includes(selectedTeamId);
     });
 
     const visibleEvents: DisplayEvent[] = [];
@@ -175,7 +183,7 @@ export default function KalenderPage() {
       }
     }
     return visibleEvents;
-  }, [events, currentMonth, selectedTeamIds]);
+  }, [events, currentMonth, selectedTeamId]);
 
   const eventDates = useMemo(() => {
     return allVisibleEvents.map(event => event.displayDate);
@@ -187,16 +195,6 @@ export default function KalenderPage() {
       .filter(event => isSameDay(event.displayDate, selectedDate))
       .sort((a, b) => a.displayDate.getTime() - b.displayDate.getTime());
   }, [selectedDate, allVisibleEvents]);
-  
-  const handleTeamFilterChange = (teamId: string, checked: boolean) => {
-    setSelectedTeamIds(prev => {
-        if (checked) {
-            return [...prev, teamId];
-        } else {
-            return prev.filter(id => id !== teamId);
-        }
-    });
-  };
 
 
   return (
@@ -214,25 +212,22 @@ export default function KalenderPage() {
                     </CardHeader>
                     <CardContent>
                        {isLoading ? <Loader2 className="animate-spin" /> : (
-                         <Accordion type="multiple" className="w-full" defaultValue={groupedTeams.map(g => g.id)}>
-                            {groupedTeams.map(category => (
-                            <AccordionItem value={category.id} key={category.id}>
-                                <AccordionTrigger>{category.name}</AccordionTrigger>
-                                <AccordionContent className="space-y-2">
-                                {category.teams.map(team => (
-                                    <div key={team.id} className="flex items-center space-x-2 pl-2">
-                                        <Checkbox 
-                                            id={`team-${team.id}`}
-                                            checked={selectedTeamIds.includes(team.id)}
-                                            onCheckedChange={(checked) => handleTeamFilterChange(team.id, !!checked)}
-                                        />
-                                        <Label htmlFor={`team-${team.id}`} className="font-normal">{team.name}</Label>
-                                    </div>
-                                ))}
-                                </AccordionContent>
-                            </AccordionItem>
-                            ))}
-                        </Accordion>
+                         <Select value={selectedTeamId} onValueChange={setSelectedTeamId}>
+                           <SelectTrigger>
+                             <SelectValue placeholder="Mannschaft auswählen..." />
+                           </SelectTrigger>
+                           <SelectContent>
+                             <SelectItem value="all">Alle Mannschaften</SelectItem>
+                             {groupedTeams.map(category => (
+                               <SelectGroup key={category.id}>
+                                 <SelectLabel>{category.name}</SelectLabel>
+                                 {category.teams.map(team => (
+                                   <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
+                                 ))}
+                               </SelectGroup>
+                             ))}
+                           </SelectContent>
+                         </Select>
                        )}
                     </CardContent>
                 </Card>
@@ -337,3 +332,5 @@ export default function KalenderPage() {
     </div>
   );
 }
+
+    
