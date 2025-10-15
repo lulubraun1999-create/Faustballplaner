@@ -43,7 +43,7 @@ interface Event {
   recurrence?: 'none' | 'weekly' | 'biweekly' | 'monthly';
   targetTeamIds?: string[];
   rsvpDeadline?: Timestamp;
-  location?: string;
+  locationId?: string;
   meetingPoint?: string;
   description?: string;
   createdBy: string;
@@ -66,6 +66,13 @@ interface Team {
   categoryId: string;
 }
 
+interface Location {
+  id: string;
+  name: string;
+  address: string;
+  city: string;
+}
+
 const eventSchema = z.object({
   title: z.string().min(1, 'Titel ist erforderlich.'),
   date: z.date({ required_error: 'Startdatum ist erforderlich.' }),
@@ -77,7 +84,7 @@ const eventSchema = z.object({
   targetTeamIds: z.array(z.string()).optional(),
   rsvpDeadlineDate: z.date().optional(),
   rsvpDeadlineTime: z.string().optional(),
-  location: z.string().optional(),
+  locationId: z.string().optional(),
   meetingPoint: z.string().optional(),
   description: z.string().optional(),
 }).refine(data => {
@@ -93,11 +100,81 @@ const eventSchema = z.object({
 
 type EventFormValues = z.infer<typeof eventSchema>;
 
-function EventForm({ onDone, event, categories, teams }: { onDone: () => void, event?: Event, categories: TeamCategory[], teams: Team[] }) {
+const locationSchema = z.object({
+    name: z.string().min(1, 'Name ist erforderlich.'),
+    address: z.string().min(1, 'Adresse ist erforderlich.'),
+    city: z.string().min(1, 'Ort ist erforderlich.'),
+});
+type LocationFormValues = z.infer<typeof locationSchema>;
+
+function AddLocationForm({ onDone }: { onDone: () => void }) {
+    const firestore = useFirestore();
+    const { toast } = useToast();
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    
+    const form = useForm<LocationFormValues>({
+        resolver: zodResolver(locationSchema),
+        defaultValues: { name: '', address: '', city: '' },
+    });
+
+    const onSubmit = (values: LocationFormValues) => {
+        if (!firestore) return;
+        setIsSubmitting(true);
+        addDoc(collection(firestore, 'locations'), values)
+            .then(() => {
+                toast({ title: 'Ort hinzugefügt' });
+                onDone();
+            })
+            .catch(error => {
+                 toast({ variant: 'destructive', title: 'Fehler', description: error.message });
+            })
+            .finally(() => setIsSubmitting(false));
+    };
+
+    return (
+        <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <DialogHeader>
+                    <DialogTitle>Neuen Ort hinzufügen</DialogTitle>
+                </DialogHeader>
+                 <FormField control={form.control} name="name" render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>Name des Ortes</FormLabel>
+                        <FormControl><Input placeholder="z.B. Fritz-Jacobi-Anlage" {...field} /></FormControl>
+                        <FormMessage />
+                    </FormItem>
+                )} />
+                 <FormField control={form.control} name="address" render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>Straße und Hausnummer</FormLabel>
+                        <FormControl><Input placeholder="z.B. Kalkstr. 45" {...field} /></FormControl>
+                        <FormMessage />
+                    </FormItem>
+                )} />
+                 <FormField control={form.control} name="city" render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>Stadt</FormLabel>
+                        <FormControl><Input placeholder="z.B. Leverkusen" {...field} /></FormControl>
+                        <FormMessage />
+                    </FormItem>
+                )} />
+                <DialogFooter>
+                    <DialogClose asChild><Button type="button" variant="outline" disabled={isSubmitting}>Abbrechen</Button></DialogClose>
+                    <Button type="submit" disabled={isSubmitting}>
+                        {isSubmitting ? <Loader2 className="animate-spin" /> : 'Speichern'}
+                    </Button>
+                </DialogFooter>
+            </form>
+        </Form>
+    );
+}
+
+function EventForm({ onDone, event, categories, teams, locations }: { onDone: () => void, event?: Event, categories: TeamCategory[], teams: Team[], locations: Location[] }) {
   const { user } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLocationFormOpen, setIsLocationFormOpen] = useState(false);
 
   const getInitialFormValues = () => {
     if (event) {
@@ -115,7 +192,7 @@ function EventForm({ onDone, event, categories, teams }: { onDone: () => void, e
         targetTeamIds: event.targetTeamIds || [],
         rsvpDeadlineDate: rsvpDate,
         rsvpDeadlineTime: rsvpDate ? format(rsvpDate, 'HH:mm') : '',
-        location: event.location || '',
+        locationId: event.locationId || '',
         meetingPoint: event.meetingPoint || '',
         description: event.description || '',
       };
@@ -131,7 +208,7 @@ function EventForm({ onDone, event, categories, teams }: { onDone: () => void, e
       targetTeamIds: [],
       rsvpDeadlineDate: undefined,
       rsvpDeadlineTime: '',
-      location: '',
+      locationId: '',
       meetingPoint: '',
       description: '',
     };
@@ -190,7 +267,7 @@ function EventForm({ onDone, event, categories, teams }: { onDone: () => void, e
       recurrence: values.recurrence,
       targetTeamIds: values.targetTeamIds || [],
       rsvpDeadline: rsvpDeadline,
-      location: values.location || '',
+      locationId: values.locationId || '',
       meetingPoint: values.meetingPoint || '',
       description: values.description || '',
       createdBy: user.uid,
@@ -233,6 +310,7 @@ function EventForm({ onDone, event, categories, teams }: { onDone: () => void, e
   };
 
   return (
+    <>
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <DialogHeader>
@@ -401,13 +479,28 @@ function EventForm({ onDone, event, categories, teams }: { onDone: () => void, e
             )} />
         </div>
         
-        <FormField control={form.control} name="location" render={({ field }) => (
+        <FormField control={form.control} name="locationId" render={({ field }) => (
           <FormItem>
             <FormLabel>Ort</FormLabel>
-            <FormControl><Input placeholder="z.B. Fritz-Jacobi-Anlage" {...field} /></FormControl>
+            <div className="flex gap-2">
+                <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Wähle einen Ort" />
+                        </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                        {locations.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+                <Button type="button" variant="outline" onClick={() => setIsLocationFormOpen(true)}>
+                    <PlusCircle className="mr-2 h-4 w-4" /> Neu
+                </Button>
+            </div>
             <FormMessage />
           </FormItem>
         )} />
+
 
         <FormField control={form.control} name="meetingPoint" render={({ field }) => (
           <FormItem>
@@ -433,6 +526,12 @@ function EventForm({ onDone, event, categories, teams }: { onDone: () => void, e
         </DialogFooter>
       </form>
     </Form>
+    <Dialog open={isLocationFormOpen} onOpenChange={setIsLocationFormOpen}>
+        <DialogContent>
+            <AddLocationForm onDone={() => setIsLocationFormOpen(false)} />
+        </DialogContent>
+    </Dialog>
+    </>
   );
 }
 
@@ -466,12 +565,19 @@ export default function TerminePage() {
     return query(collection(firestore, 'teams'), orderBy('name'));
   }, [firestore]);
   
+  const locationsQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'locations'), orderBy('name'));
+  }, [firestore]);
+
   const { data: currentUserData, isLoading: isUserLoading } = useDoc<UserData>(currentUserDocRef);
   const { data: events, isLoading: eventsLoading, error } = useCollection<Event>(eventsQuery);
   const { data: categories, isLoading: categoriesLoading } = useCollection<TeamCategory>(categoriesQuery);
   const { data: teams, isLoading: teamsLoading } = useCollection<Team>(teamsQuery);
+  const { data: locations, isLoading: locationsLoading } = useCollection<Location>(locationsQuery);
+
   
-  const isLoading = isUserLoading || eventsLoading || categoriesLoading || teamsLoading;
+  const isLoading = isUserLoading || eventsLoading || categoriesLoading || teamsLoading || locationsLoading;
 
   const isAdmin = currentUserData?.adminRechte === true;
 
@@ -544,6 +650,7 @@ export default function TerminePage() {
                 const recurrenceText = getRecurrenceText(event.recurrence);
                 const startDate = event.date.toDate();
                 const endDate = event.endTime?.toDate();
+                const location = locations?.find(loc => loc.id === event.locationId);
 
                 let timeString;
                 if (event.isAllDay) {
@@ -572,16 +679,16 @@ export default function TerminePage() {
                                     <Clock className="h-4 w-4" />
                                     <span>{timeString}</span>
                                 </div>
-                                {event.location && (
+                                {location && (
                                     <div className="flex items-center gap-1.5">
                                         <MapPin className="h-4 w-4" />
                                         <a
-                                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location)}`}
+                                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${location.name}, ${location.address}, ${location.city}`)}`}
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             className="hover:underline"
                                         >
-                                            {event.location}
+                                            {location.name}
                                         </a>
                                     </div>
                                 )}
@@ -637,7 +744,7 @@ export default function TerminePage() {
           {isLoading ? (
              <div className="flex items-center justify-center p-8"><Loader2 className="animate-spin h-8 w-8 text-primary"/></div>
           ) : (
-             <EventForm onDone={handleFormDone} event={selectedEvent} categories={categories || []} teams={teams || []} />
+             <EventForm onDone={handleFormDone} event={selectedEvent} categories={categories || []} teams={teams || []} locations={locations || []} />
           )}
         </DialogContent>
       </Dialog>
@@ -661,3 +768,5 @@ export default function TerminePage() {
     </div>
   );
 }
+
+    

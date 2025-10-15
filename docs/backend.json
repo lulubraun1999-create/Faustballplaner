@@ -398,7 +398,7 @@
           "description": "IDs of teams the event is for."
         },
         "rsvpDeadline": { "type": "string", "format": "date-time", "description": "Deadline for RSVPs." },
-        "location": { "type": "string", "description": "The location of the event." },
+        "locationId": { "type": "string", "description": "Reference to the Location in the 'locations' collection." },
         "meetingPoint": { "type": "string", "description": "Specific meeting point for the event." },
         "description": { "type": "string", "description": "A detailed description of the event." },
         "createdBy": { "type": "string", "description": "User ID of the creator." },
@@ -468,7 +468,20 @@
           }
         },
         "required": ["lastSeen"]
-      }
+    },
+    "Location": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "Location",
+        "type": "object",
+        "description": "Represents a physical location for an event.",
+        "properties": {
+            "id": { "type": "string" },
+            "name": { "type": "string", "description": "The name of the location (e.g., 'Fritz-Jacobi-Anlage')." },
+            "address": { "type": "string", "description": "Street and house number." },
+            "city": { "type": "string", "description": "The city of the location." }
+        },
+        "required": ["id", "name", "address", "city"]
+    }
   },
   "auth": {
     "providers": [
@@ -667,6 +680,14 @@
           "schema": { "$ref": "#/backend/entities/UserChatStatus" },
           "description": "Tracks the last time a user viewed a chat room to calculate unread messages."
         }
+      },
+       {
+        "path": "/locations/{locationId}",
+        "definition": {
+          "entityName": "Location",
+          "schema": { "$ref": "#/backend/entities/Location" },
+          "description": "Collection of all event locations."
+        }
       }
     ],
     "reasoning": "The Firestore data structure is designed to support the Werkself Hub application, focusing on news, match data, player information, AI-generated highlights, and a fan forum. The structure emphasizes authorization independence and efficient data retrieval.  \n\nAuthorization Independence is achieved by avoiding `get()` calls in Firestore rules. For instance, user-specific forum posts are stored under the `/users/{userId}/forum_posts/{postId}` path, making ownership explicit and verifiable without needing to access parent document data.  Similarly, although HighlightReels have a relationship to Matches, they are stored under a separate collection `/highlight_reels/{highlightReelId}` with the `matchId` denormalized, removing authorization dependencies based on match data.  The lack of any custom claims enforces DBAC. \n\nQAPs (Queries Are Permissions) are supported via Structural Segregation.  There is no mixing of secured and public data in any collection. For instance, forum posts are accessible only to authenticated users (or potentially publicly, depending on desired configuration), and sensitive user data (if any beyond the auth record) would be kept in `/users/{userId}` which uses path-based authorization, ensuring only the user can access their own data.\n\nThe structure favors path-based ownership (`/users/{userId}/forum_posts/{postId}`) for user-generated content and dedicated collections (e.g., `/news_articles`, `/matches`, `/players`) for global data. Global data is assumed to be read-only for most users, with administrative access controlled at the application level. In the future, if access controls are required for global data, a membership map could be used to control access, with appropriate denormalization."
@@ -675,6 +696,8 @@
     
     
   
+    
+
     
 
     
