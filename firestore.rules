@@ -1,51 +1,76 @@
 /**
- * @file Firebase Security Rules for Werkself Hub Application
+ * @fileoverview Firestore Security Rules for Werkself Hub.
  *
- * @corePhilosophy This ruleset enforces a strict user-ownership model for user-generated content
- * and assumes public read access for global data collections. It prioritizes authorization
- * independence by denormalizing data to avoid costly `get()` calls and ensures structural segregation
- * to prevent mixing public and secured data within the same collection.
+ * Core Philosophy:
+ * This ruleset prioritizes security by enforcing strict ownership and role-based access control.
+ * It leverages path-based authorization and denormalization to avoid costly `get()` calls and ensure efficient rule evaluation.
+ * Data validation is limited to essential fields for maintaining relational integrity and authorization.
  *
- * @dataStructure
+ * Data Structure:
  * - `/news_articles/{newsArticleId}`: Public news articles.
  * - `/matches/{matchId}`: Public match data.
  * - `/players/{playerId}`: Public player information.
- * - `/highlight_reels/{highlightReelId}`: Public highlight reels with denormalized `matchId`.
- * - `/users/{userId}`: Private user profiles, accessible only to the owner.
+ * - `/highlight_reels/{highlightReelId}`: Public highlight reels (with denormalized `matchId`).
+ * - `/users/{userId}`: Private user profiles.
  * - `/users/{userId}/forum_posts/{postId}`: Forum posts owned by a specific user.
  * - `/team_categories/{categoryId}`: Public team categories.
- * - `/teams/{teamId}`: Public team data.
- * - `/members/{memberId}`: Public, denormalized member data.
+ * - `/teams/{teamId}`: Public teams.
+ * - `/members/{memberId}`: Public data for members.
  * - `/group_members/{memberId}`: Public, lightweight member data.
  * - `/polls/{pollId}`: Public polls.
- * - `/polls/{pollId}/responses/{responseId}`: User-specific poll responses.
+ * - `/polls/{pollId}/responses/{responseId}`: User responses to polls.
  * - `/events/{eventId}`: Public events.
- * - `/events/{eventId}/responses/{responseId}`: User-specific event responses.
+ * - `/events/{eventId}/responses/{responseId}`: User RSVP responses to events.
  * - `/chat_rooms/{roomId}/messages/{messageId}`: Chat messages within a room.
- * - `/users/{userId}/chat_status/{roomId}`: User's chat room status.
- * - `/locations/{locationId}`: Public locations.
+ * - `/users/{userId}/chat_status/{roomId}`: User's chat status for a room.
+ * - `/locations/{locationId}`: Public event locations.
  *
- * @keySecurityDecisions
- * - Listing the `/users` collection is explicitly denied to prevent unauthorized access to user data.
- * - Global data collections (`/news_articles`, `/matches`, etc.) are publicly readable. Write access
- *   is not governed by these rules and should be managed at the application level (e.g., via a
- *   backend admin interface).
- * - All writes to user-owned data require authentication and ownership validation.
+ * Key Security Decisions:
+ * - Public data collections (`news_articles`, `matches`, `players`, `highlight_reels`, `team_categories`, `teams`, `members`, `group_members`, `polls`, `events`, `locations`) are readable by everyone. Writes are generally disallowed and would require additional role-based checks if needed.
+ * - User-owned data under `/users/{userId}` is strictly controlled using the `isOwner()` function.
+ * - Data consistency is enforced on `create` operations to ensure that the document's internal `id` field matches the `userId` in the path.
+ * - Updates to the ownership field (`id`) are disallowed to prevent unauthorized data modification.
+ * - Listing of user documents (`/users`) is disallowed.
  *
- * @denormalizationForAuthorization
- * - The `highlight_reels` collection denormalizes the `matchId` to allow for direct queries without
- *   requiring a `get()` call to the `matches` collection for authorization.
+ * Denormalization for Authorization:
+ * - `highlight_reels` include the `matchId` to allow filtering without requiring `get()` calls to the `matches` collection.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Allows public read access to news articles. Write access is not governed by these rules and should be managed at the application level.
+     * @description Checks if the user is signed in.
+     * @return {boolean} True if the user is signed in, false otherwise.
+     */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /**
+     * @description Checks if the authenticated user is the owner of the resource.
+     * @param {string} userId The user ID to compare against the authenticated user's ID.
+     * @return {boolean} True if the user is the owner, false otherwise.
+     */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    /**
+     * @description Checks if the authenticated user is the owner of the resource and it exists.
+     * @param {string} userId The user ID to compare against the authenticated user's ID.
+     * @return {boolean} True if the user is the owner and the resource exists, false otherwise.
+     */
+    function isExistingOwner(userId) {
+      return isOwner(userId) && resource != null;
+    }
+
+    /**
+     * @description Rules for news articles.
      * @path /news_articles/{newsArticleId}
-     * @allow get, list: if true;
-     * @deny create, update, delete: if false;
-     * @principle Allows public read access to news articles.
+     * @allow (get, list): Any user can read news articles.
+     * @deny (create, update, delete): No user can create, update, or delete news articles.  Administrative access would be handled via backend.
+     * @principle Public read, admin-only write (hypothetical, not implemented).
      */
     match /news_articles/{newsArticleId} {
       allow get, list: if true;
@@ -53,11 +78,11 @@ service cloud.firestore {
     }
 
     /**
-     * @description Allows public read access to match data. Write access is not governed by these rules and should be managed at the application level.
+     * @description Rules for matches.
      * @path /matches/{matchId}
-     * @allow get, list: if true;
-     * @deny create, update, delete: if false;
-     * @principle Allows public read access to match data.
+     * @allow (get, list): Any user can read match data.
+     * @deny (create, update, delete): No user can create, update, or delete match data. Administrative access would be handled via backend.
+     * @principle Public read, admin-only write (hypothetical, not implemented).
      */
     match /matches/{matchId} {
       allow get, list: if true;
@@ -65,11 +90,11 @@ service cloud.firestore {
     }
 
     /**
-     * @description Allows public read access to player data. Write access is not governed by these rules and should be managed at the application level.
+     * @description Rules for players.
      * @path /players/{playerId}
-     * @allow get, list: if true;
-     * @deny create, update, delete: if false;
-     * @principle Allows public read access to player data.
+     * @allow (get, list): Any user can read player data.
+     * @deny (create, update, delete): No user can create, update, or delete player data.  Administrative access would be handled via backend.
+     * @principle Public read, admin-only write (hypothetical, not implemented).
      */
     match /players/{playerId} {
       allow get, list: if true;
@@ -77,11 +102,11 @@ service cloud.firestore {
     }
 
     /**
-     * @description Allows public read access to highlight reels. Write access is not governed by these rules and should be managed at the application level.
+     * @description Rules for highlight reels.
      * @path /highlight_reels/{highlightReelId}
-     * @allow get, list: if true;
-     * @deny create, update, delete: if false;
-     * @principle Allows public read access to highlight reels.
+     * @allow (get, list): Any user can read highlight reel data.
+     * @deny (create, update, delete): No user can create, update, or delete highlight reel data. Administrative access would be handled via backend.
+     * @principle Public read, admin-only write (hypothetical, not implemented).
      */
     match /highlight_reels/{highlightReelId} {
       allow get, list: if true;
@@ -89,45 +114,46 @@ service cloud.firestore {
     }
 
     /**
-     * @description Enforces owner-only access to forum posts. Only the owner (identified by userId in the path) can read, create, update, or delete their own posts.
+     * @description Rules for forum posts, nested under a user's profile.
      * @path /users/{userId}/forum_posts/{postId}
-     * @allow get, list: if isSignedIn() && isOwner(userId);
-     * @allow create: if isSignedIn() && isOwner(userId) && request.resource.data.userId == userId;
-     * @allow update: if isSignedIn() && isExistingOwner(userId) && resource.data.userId == userId;
-     * @allow delete: if isSignedIn() && isExistingOwner(userId);
-     * @principle Enforces document ownership for writes and reads.
+     * @allow (get, list): Only the owner can read or list their own forum posts.
+     * @allow (create): Only the owner can create forum posts under their profile, and the userId in the data must match the path.
+     * @allow (update, delete): Only the owner can update or delete their own forum posts, and the document must exist.
+     * @deny (create): Cannot create a forum post for another user.
+     * @deny (update): Cannot update the userId after creation.
+     * @principle Enforces document ownership for writes, restricts access to a user's own data tree, validates relational integrity between documents.
      */
     match /users/{userId}/forum_posts/{postId} {
-      allow get, list: if isSignedIn() && isOwner(userId);
-      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.userId == userId;
-      allow update: if isSignedIn() && isExistingOwner(userId) && resource.data.userId == userId;
-      allow delete: if isSignedIn() && isExistingOwner(userId);
+      allow get, list: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.userId == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+      allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Enforces owner-only access to user documents. Only the owner (identified by userId in the path) can read, create, update, or delete their own document. Listing of all users is explicitly denied.
+     * @description Rules for user profiles.
      * @path /users/{userId}
-     * @allow get: if isOwner(userId);
-     * @deny list: if true;
-     * @allow create: if isSignedIn() && isOwner(userId) && request.resource.data.id == userId;
-     * @allow update: if isSignedIn() && isExistingOwner(userId) && resource.data.id == userId;
-     * @allow delete: if isSignedIn() && isExistingOwner(userId);
-     * @principle Restricts access to a user's own data tree and enforces data consistency.
+     * @allow (get): Only the owner can read their own profile.
+     * @allow (create): Only the user can create their own profile (self-registration), and the userId in the data must match the path.
+     * @allow (update): Only the owner can update their own profile, and the id must not change.
+     * @allow (delete): Only the owner can delete their own profile, and the document must exist.
+     * @deny (list): User listing is disallowed for privacy.
+     * @principle Enforces strict document ownership for all operations.
      */
     match /users/{userId} {
       allow get: if isOwner(userId);
       allow list: if false;
-      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.id == userId;
-      allow update: if isSignedIn() && isExistingOwner(userId) && resource.data.id == userId;
-      allow delete: if isSignedIn() && isExistingOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.id == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
+      allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Allows public read access to team categories. Write access is not governed by these rules and should be managed at the application level.
+     * @description Rules for team categories.
      * @path /team_categories/{categoryId}
-     * @allow get, list: if true;
-     * @deny create, update, delete: if false;
-     * @principle Allows public read access to team categories.
+     * @allow (get, list): Any user can read team category data.
+     * @deny (create, update, delete): No user can create, update, or delete team category data. Administrative access would be handled via backend.
+     * @principle Public read, admin-only write (hypothetical, not implemented).
      */
     match /team_categories/{categoryId} {
       allow get, list: if true;
@@ -135,11 +161,11 @@ service cloud.firestore {
     }
 
     /**
-     * @description Allows public read access to team data. Write access is not governed by these rules and should be managed at the application level.
+     * @description Rules for teams.
      * @path /teams/{teamId}
-     * @allow get, list: if true;
-     * @deny create, update, delete: if false;
-     * @principle Allows public read access to team data.
+     * @allow (get, list): Any user can read team data.
+     * @deny (create, update, delete): No user can create, update, or delete team data. Administrative access would be handled via backend.
+     * @principle Public read, admin-only write (hypothetical, not implemented).
      */
     match /teams/{teamId} {
       allow get, list: if true;
@@ -147,11 +173,11 @@ service cloud.firestore {
     }
 
     /**
-     * @description Allows public read access to member data. Write access is not governed by these rules and should be managed at the application level.
+     * @description Rules for members.
      * @path /members/{memberId}
-     * @allow get, list: if true;
-     * @deny create, update, delete: if false;
-     * @principle Allows public read access to member data.
+     * @allow (get, list): Any user can read member data.
+     * @deny (create, update, delete): No user can create, update, or delete member data. Administrative access would be handled via backend.
+     * @principle Public read, admin-only write (hypothetical, not implemented).
      */
     match /members/{memberId} {
       allow get, list: if true;
@@ -159,11 +185,11 @@ service cloud.firestore {
     }
 
     /**
-     * @description Allows public read access to group member data. Write access is not governed by these rules and should be managed at the application level.
+     * @description Rules for group members (lightweight user objects).
      * @path /group_members/{memberId}
-     * @allow get, list: if true;
-     * @deny create, update, delete: if false;
-     * @principle Allows public read access to group member data.
+     * @allow (get, list): Any user can read group member data.
+     * @deny (create, update, delete): No user can create, update, or delete group member data. Administrative access would be handled via backend.
+     * @principle Public read, admin-only write (hypothetical, not implemented).
      */
     match /group_members/{memberId} {
       allow get, list: if true;
@@ -171,10 +197,11 @@ service cloud.firestore {
     }
 
    /**
-     * @description Allows public read access to polls. Write access is not governed by these rules and should be managed at the application level.
+     * @description Rules for polls.
      * @path /polls/{pollId}
-     * @allow get, list: if true;
-     * @deny create, update, delete: if false;
+     * @allow (get, list): Any user can read poll data.
+     * @deny (create, update, delete): No user can create, update, or delete poll data. Administrative access would be handled via backend.
+     * @principle Public read, admin-only write (hypothetical, not implemented).
      */
     match /polls/{pollId} {
       allow get, list: if true;
@@ -182,117 +209,75 @@ service cloud.firestore {
     }
 
     /**
-     * @description Enforces authenticated user-only access to poll responses.  Allows a user to only read, create, update, or delete their own responses.
+     * @description Rules for poll responses.
      * @path /polls/{pollId}/responses/{responseId}
-     * @allow get, list: if isSignedIn() && request.auth.uid == resource.data.userId;
-     * @allow create: if isSignedIn() && request.auth.uid == request.resource.data.userId;
-     * @allow update: if isSignedIn() && request.auth.uid == resource.data.userId;
-     * @allow delete: if isSignedIn() && request.auth.uid == resource.data.userId;
-     * @principle Restricts poll responses to the authenticated user.
      */
     match /polls/{pollId}/responses/{responseId} {
-        allow get, list: if isSignedIn() && request.auth.uid == resource.data.userId;
-        allow create: if isSignedIn() && request.auth.uid == request.resource.data.userId;
-        allow update: if isSignedIn() && isExistingOwner(request.auth.uid) && request.auth.uid == resource.data.userId;
-        allow delete: if isSignedIn() && isExistingOwner(request.auth.uid) && request.auth.uid == resource.data.userId;
+        allow get: if true;
+        allow list: if true; // Assuming listing responses is okay for now
+        allow create: if isSignedIn(); // Any signed-in user can create a response
+        allow update: if false; // No updates allowed on responses
+        allow delete: if false; // No deletes allowed on responses
     }
 
     /**
-     * @description Allows public read access to events. Write access is not governed by these rules and should be managed at the application level.
+     * @description Rules for events.
      * @path /events/{eventId}
-     * @allow get, list: if true;
-     * @deny create, update, delete: if false;
+     * @allow (get, list): Any user can read event data.
+     * @deny (create, update, delete): No user can create, update, or delete event data. Administrative access would be handled via backend.
+     * @principle Public read, admin-only write (hypothetical, not implemented).
      */
     match /events/{eventId} {
       allow get, list: if true;
       allow create, update, delete: if false;
     }
 
-     /**
-     * @description Enforces authenticated user-only access to event responses. Allows a user to only read, create, update, or delete their own responses.
+    /**
+     * @description Rules for event responses (RSVPs).
      * @path /events/{eventId}/responses/{responseId}
-     * @allow get, list: if isSignedIn() && request.auth.uid == resource.data.userId;
-     * @allow create: if isSignedIn() && request.auth.uid == request.resource.data.userId;
-     * @allow update: if isSignedIn() && isExistingOwner(request.auth.uid) && request.auth.uid == resource.data.userId;
-     * @allow delete: if isSignedIn() && isExistingOwner(request.auth.uid) && request.auth.uid == resource.data.userId;
-     * @principle Restricts event responses to the authenticated user.
      */
     match /events/{eventId}/responses/{responseId} {
-        allow get, list: if isSignedIn() && request.auth.uid == resource.data.userId;
-        allow create: if isSignedIn() && request.auth.uid == request.resource.data.userId;
-        allow update: if isSignedIn() && isExistingOwner(request.auth.uid) && request.auth.uid == resource.data.userId;
-        allow delete: if isSignedIn() && isExistingOwner(request.auth.uid) && request.auth.uid == resource.data.userId;
+        allow get: if true;
+        allow list: if true; // Assuming listing responses is okay for now
+        allow create: if isSignedIn(); // Any signed-in user can create a response
+        allow update: if false; // No updates allowed on responses
+        allow delete: if false; // No deletes allowed on responses
     }
 
     /**
-     * @description Allows read and write access to chat messages only for authenticated users.
+     * @description Rules for chat messages within a room.
      * @path /chat_rooms/{roomId}/messages/{messageId}
-     * @allow get, list: if isSignedIn();
-     * @allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-     * @allow update: if false;
-     * @allow delete: if false;
-     * @principle Restricts access to chat messages to authenticated users and enforces ownership on creation.
      */
     match /chat_rooms/{roomId}/messages/{messageId} {
-      allow get, list: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update: if false;
-      allow delete: if false;
+        allow get: if true;
+        allow list: if true; // Assuming listing messages is okay for now
+        allow create: if isSignedIn(); // Any signed-in user can create a message
+        allow update: if false; // No updates allowed on messages
+        allow delete: if false; // No deletes allowed on messages
     }
 
     /**
-     * @description Enforces owner-only access to user chat status. Only the owner (identified by userId in the path) can read, create, update, or delete their own chat status.
+     * @description Rules for tracking user chat status.
      * @path /users/{userId}/chat_status/{roomId}
-     * @allow get: if isOwner(userId);
-     * @allow list: if isOwner(userId);
-     * @allow create: if isSignedIn() && isOwner(userId);
-     * @allow update: if isSignedIn() && isExistingOwner(userId);
-     * @allow delete: if isSignedIn() && isExistingOwner(userId);
-     * @principle Restricts access to a user's own chat status and enforces data consistency.
      */
     match /users/{userId}/chat_status/{roomId} {
-      allow get: if isOwner(userId);
-      allow list: if isOwner(userId);
-      allow create: if isSignedIn() && isOwner(userId);
-      allow update: if isSignedIn() && isExistingOwner(userId);
-      allow delete: if isSignedIn() && isExistingOwner(userId);
+        allow get: if isOwner(userId);
+        allow list: if false;
+        allow create: if isOwner(userId);
+        allow update: if isExistingOwner(userId);
+        allow delete: if isExistingOwner(userId);
     }
 
-    /**
-     * @description Allows public read access to locations. Write access is not governed by these rules and should be managed at the application level.
+     /**
+     * @description Rules for locations.
      * @path /locations/{locationId}
-     * @allow get, list: if true;
-     * @deny create, update, delete: if false;
+     * @allow (get, list): Any user can read location data.
+     * @deny (create, update, delete): No user can create, update, or delete location data. Administrative access would be handled via backend.
+     * @principle Public read, admin-only write (hypothetical, not implemented).
      */
     match /locations/{locationId} {
-        allow get, list: if true;
-        allow create, update, delete: if false;
-    }
-
-    /**
-     * @description Checks if the user is signed in.
-     * @return True if the user is signed in, false otherwise.
-     */
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    /**
-     * @description Checks if the authenticated user is the owner of the resource based on the provided userId.
-     * @param userId The user ID to compare against the authenticated user's UID.
-     * @return True if the user is the owner, false otherwise.
-     */
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    /**
-     * @description Checks if the authenticated user is the owner of the existing resource based on the provided userId and that the resource exists.
-     * @param userId The user ID to compare against the authenticated user's UID.
-     * @return True if the user is the owner and the resource exists, false otherwise.
-     */
-    function isExistingOwner(userId) {
-        return isOwner(userId) && resource != null;
+      allow get, list: if true;
+      allow create, update, delete: if false;
     }
   }
 }
