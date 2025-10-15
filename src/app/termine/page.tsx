@@ -575,7 +575,14 @@ export default function TerminePage() {
                                 {event.location && (
                                     <div className="flex items-center gap-1.5">
                                         <MapPin className="h-4 w-4" />
-                                        <span>{event.location}</span>
+                                        <a
+                                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location)}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="hover:underline"
+                                        >
+                                            {event.location}
+                                        </a>
                                     </div>
                                 )}
                                 {recurrenceText && (
@@ -654,5 +661,3 @@ export default function TerminePage() {
     </div>
   );
 }
-
-    
