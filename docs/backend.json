@@ -392,6 +392,40 @@
         "createdAt": { "type": "string", "format": "date-time", "description": "The timestamp when the event was created." }
       },
       "required": ["id", "title", "date", "createdBy", "createdAt"]
+    },
+     "ChatMessage": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ChatMessage",
+      "type": "object",
+      "description": "Represents a single message in a chat room.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the message."
+        },
+        "roomId": {
+          "type": "string",
+          "description": "Identifier for the chat room this message belongs to."
+        },
+        "userId": {
+          "type": "string",
+          "description": "The ID of the user who sent the message."
+        },
+        "username": {
+          "type": "string",
+          "description": "The display name of the user who sent the message."
+        },
+        "message": {
+          "type": "string",
+          "description": "The content of the chat message."
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "The server timestamp when the message was created.",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "roomId", "userId", "username", "message", "timestamp"]
     }
   },
   "auth": {
@@ -564,6 +598,16 @@
           "entityName": "Event",
           "schema": { "$ref": "#/backend/entities/Event" },
           "description": "Collection of all events and appointments."
+        }
+      },
+       {
+        "path": "/chat_rooms/{roomId}/messages/{messageId}",
+        "definition": {
+          "entityName": "ChatMessage",
+          "schema": {
+            "$ref": "#/backend/entities/ChatMessage"
+          },
+          "description": "Subcollection of messages within a specific chat room."
         }
       }
     ],
