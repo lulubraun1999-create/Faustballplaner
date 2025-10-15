@@ -60,7 +60,7 @@ export default function Home() {
               </CardHeader>
               <CardContent>
                 <p className="text-xs text-muted-foreground">
-                  Bleiben Sie auf dem Laufenden über die Werkself.
+                  Bleiben Sie auf dem Laufenden.
                 </p>
                 <Button size="sm" className="mt-4" asChild>
                   <Link href="/aktuelles">Zu den News</Link>
@@ -69,62 +69,34 @@ export default function Home() {
             </Card>
             <Card className="hover:border-primary/80 transition-all">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">Spielplan</CardTitle>
+                <CardTitle className="text-sm font-medium">Termine</CardTitle>
                 <CalendarDays className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <p className="text-xs text-muted-foreground">
                   Infos zu vergangenen und zukünftigen Spielen.
                 </p>
-                <Button size="sm" className="mt-4">Zum Spielplan</Button>
+                <Button size="sm" className="mt-4" asChild>
+                  <Link href="/termine">Zu den Terminen</Link>
+                </Button>
               </CardContent>
             </Card>
             <Card className="hover:border-primary/80 transition-all">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">Spielerkader</CardTitle>
+                <CardTitle className="text-sm font-medium">Kader</CardTitle>
                 <Users className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <p className="text-xs text-muted-foreground">
-                  Lernen Sie die Mannschaft besser kennen.
+                  Lernen Sie die Mannschaften besser kennen.
                 </p>
-                <Button size="sm" className="mt-4">Zum Kader</Button>
+                <Button size="sm" className="mt-4" asChild>
+                  <Link href="/mannschaften">Zu den Kadern</Link>
+                </Button>
               </CardContent>
             </Card>
           </div>
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MessageSquare className="h-5 w-5" />
-                Fan-Forum
-              </CardTitle>
-              <CardDescription>
-                Diskutieren Sie mit anderen Fans über die neuesten Spiele, Gerüchte und mehr.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-start gap-4">
-                  <div className="flex-1">
-                    <p className="font-semibold">Match-Thread: Bayer 04 vs. FC Bayern</p>
-                    <p className="text-xs text-muted-foreground">Gestartet von @Fan1904</p>
-                  </div>
-                  <Button variant="outline" size="sm">
-                    Diskussion beitreten
-                  </Button>
-                </div>
-                 <div className="flex items-start gap-4">
-                  <div className="flex-1">
-                    <p className="font-semibold">Transfergerüchte Sommer 2024</p>
-                    <p className="text-xs text-muted-foreground">Gestartet von @InsiderWirtz</p>
-                  </div>
-                  <Button variant="outline" size="sm">
-                    Diskussion beitreten
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+         
         </div>
       </main>
     </div>
