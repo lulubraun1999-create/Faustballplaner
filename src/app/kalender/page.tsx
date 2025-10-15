@@ -32,6 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 
 interface Event {
@@ -75,6 +76,12 @@ interface Team {
   categoryId: string;
 }
 
+interface GroupMember {
+  id: string;
+  vorname?: string;
+  nachname?: string;
+}
+
 
 const getRecurrenceText = (recurrence?: string) => {
   switch (recurrence) {
@@ -90,19 +97,17 @@ const getRecurrenceText = (recurrence?: string) => {
 };
 
 
-const EventCard = ({ event }: { event: DisplayEvent }) => {
+const EventCard = ({ event, allUsers }: { event: DisplayEvent; allUsers: GroupMember[] }) => {
     const { user } = useUser();
     const firestore = useFirestore();
 
     const responsesQuery = useMemoFirebase(() => {
         if (!firestore) return null;
-        // Query for all responses for this event ID, we will filter by date on the client
         return query(collection(firestore, 'events', event.id, 'responses'));
     }, [firestore, event.id]);
 
     const { data: allResponses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
     
-    // Filter responses for this specific instance date
     const responsesForThisInstance = useMemo(() => {
         if (!allResponses) return [];
         return allResponses.filter(r => 
@@ -134,6 +139,22 @@ const EventCard = ({ event }: { event: DisplayEvent }) => {
     }
 
     const attendingCount = responsesForThisInstance.filter(r => r.status === 'attending').length || 0;
+    const declinedCount = responsesForThisInstance.filter(r => r.status === 'declined').length || 0;
+
+    const attendees = useMemo(() => {
+        return responsesForThisInstance
+            .filter(r => r.status === 'attending')
+            .map(r => allUsers.find(u => u.id === r.userId)?.vorname || 'Unbekannt')
+            .sort();
+    }, [responsesForThisInstance, allUsers]);
+
+    const decliners = useMemo(() => {
+        return responsesForThisInstance
+            .filter(r => r.status === 'declined')
+            .map(r => allUsers.find(u => u.id === r.userId)?.vorname || 'Unbekannt')
+            .sort();
+    }, [responsesForThisInstance, allUsers]);
+
 
     const handleRsvp = (status: 'attending' | 'declined') => {
         if (!user || !firestore) return;
@@ -141,7 +162,7 @@ const EventCard = ({ event }: { event: DisplayEvent }) => {
         const responseCollectionRef = collection(firestore, 'events', event.id, 'responses');
         const eventDateAsTimestamp = Timestamp.fromDate(startOfDay(event.displayDate));
         
-        const data = {
+        const data: Omit<EventResponse, 'id'> & { respondedAt: any } = {
             userId: user.uid,
             status: status,
             respondedAt: serverTimestamp(),
@@ -149,12 +170,7 @@ const EventCard = ({ event }: { event: DisplayEvent }) => {
             eventId: event.id
         };
         
-        // If user already responded for this date, we could update, but for simplicity
-        // and to avoid complex queries for the doc ID, we can create a new response.
-        // A better approach would be to manage a unique doc ID per user per date.
-        // For now, let's assume we create a new one, or update if we find one.
-        // Let's create a predictable doc ID
-        const responseDocId = `${user.uid}_${eventDateAsTimestamp.toMillis()}`;
+        const responseDocId = userResponse?.id || doc(responseCollectionRef).id;
         const responseRef = doc(responseCollectionRef, responseDocId);
 
         setDoc(responseRef, data, { merge: true })
@@ -198,14 +214,35 @@ const EventCard = ({ event }: { event: DisplayEvent }) => {
                 </CardContent>
             )}
              <CardFooter className="flex-col sm:flex-row items-start sm:items-center sm:justify-between gap-4">
-                <div className="text-sm text-muted-foreground flex items-center gap-1.5">
-                    {responsesLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : (
-                      <>
-                        <Users className="h-4 w-4" />
-                        <span>{attendingCount} Zusagen</span>
-                      </>
-                    )}
-                </div>
+                 <Popover>
+                    <PopoverTrigger asChild>
+                         <Button variant="link" className="p-0 h-auto text-muted-foreground" disabled={responsesLoading || (attendingCount === 0 && declinedCount === 0)}>
+                             {responsesLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Users className="h-4 w-4 mr-2" />}
+                            <span>{attendingCount} Zusagen, {declinedCount} Absagen</span>
+                         </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-64">
+                        <div className="space-y-4">
+                            <div>
+                                <h4 className="font-semibold text-sm mb-2">Zusagen ({attendees.length})</h4>
+                                {attendees.length > 0 ? (
+                                    <ul className="list-disc list-inside text-sm space-y-1">
+                                        {attendees.map((name, i) => <li key={i}>{name}</li>)}
+                                    </ul>
+                                ) : <p className="text-xs text-muted-foreground">Noch keine Zusagen.</p>}
+                            </div>
+                             <div>
+                                <h4 className="font-semibold text-sm mb-2">Absagen ({decliners.length})</h4>
+                                {decliners.length > 0 ? (
+                                    <ul className="list-disc list-inside text-sm space-y-1">
+                                        {decliners.map((name, i) => <li key={i}>{name}</li>)}
+                                    </ul>
+                                ) : <p className="text-xs text-muted-foreground">Noch keine Absagen.</p>}
+                            </div>
+                        </div>
+                    </PopoverContent>
+                </Popover>
+
                 <div className="flex items-center gap-2">
                     <Button 
                         size="sm"
@@ -256,12 +293,18 @@ export default function KalenderPage() {
     return query(collection(firestore, 'events'));
   }, [firestore]);
   
+  const groupMembersQuery = useMemoFirebase(() => {
+      if (!firestore) return null;
+      return collection(firestore, 'group_members');
+  }, [firestore]);
+
   const { data: categories, isLoading: categoriesLoading } = useCollection<TeamCategory>(categoriesQuery);
   const { data: teams, isLoading: teamsLoading } = useCollection<Team>(teamsQuery);
   const { data: eventsData, isLoading: eventsLoading, error } = useCollection<Event>(eventsQuery);
+  const { data: allUsers, isLoading: usersLoading } = useCollection<GroupMember>(groupMembersQuery);
   
 
-  const isLoading = categoriesLoading || teamsLoading || eventsLoading;
+  const isLoading = categoriesLoading || teamsLoading || eventsLoading || usersLoading;
 
  const groupedTeams = useMemo(() => {
     if (!categories || !teams) return [];
@@ -296,7 +339,6 @@ export default function KalenderPage() {
 
       let currentDate = originalStartDate;
       
-      // Fast-forward to a point before the current interval to catch all occurrences
       if (currentDate < interval.start) {
         let tempDate = new Date(currentDate);
         if (event.recurrence === 'weekly' || event.recurrence === 'biweekly') {
@@ -309,7 +351,7 @@ export default function KalenderPage() {
         } else if (event.recurrence === 'monthly') {
              const monthDiff = (interval.start.getFullYear() - tempDate.getFullYear()) * 12 + (interval.start.getMonth() - tempDate.getMonth());
              if (monthDiff > 0) {
-                tempDate = addMonths(tempDate, monthDiff -1); // Go to month before to catch all dates
+                tempDate = addMonths(tempDate, monthDiff -1);
              }
         }
         currentDate = tempDate;
@@ -332,8 +374,8 @@ export default function KalenderPage() {
             case 'monthly':
                 currentDate = addMonths(currentDate, 1);
                 break;
-            default: // Should not happen if recurrence is not 'none'
-                limit = 0; // exit loop
+            default:
+                limit = 0;
                 break;
         }
         limit--;
@@ -427,7 +469,7 @@ export default function KalenderPage() {
                         {error && <p className="text-destructive">Fehler: {error.message}</p>}
                         {!isLoading && selectedEvents.length > 0 ? (
                             selectedEvents.map(event => (
-                               <EventCard event={event} key={`${event.id}-${event.displayDate.toISOString()}`} />
+                               <EventCard event={event} allUsers={allUsers || []} key={`${event.id}-${event.displayDate.toISOString()}`} />
                             ))
                         ) : (
                         !isLoading && (
@@ -446,5 +488,3 @@ export default function KalenderPage() {
     </div>
   );
 }
-
-    

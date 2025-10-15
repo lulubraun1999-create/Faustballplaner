@@ -95,38 +95,50 @@ const formatPosition = (position?: { abwehr: boolean; zuspiel: boolean; angriff:
     return positions.length > 0 ? positions.join(', ') : 'N/A';
 }
 
-const TeamsCell = ({ teamIds, teamsMap }: { teamIds?: string[], teamsMap: Map<string, string> }) => {
-  const userTeams = useMemo(() => {
-    return (teamIds || []).map(id => ({ id, name: teamsMap.get(id) })).filter(team => team.name);
-  }, [teamIds, teamsMap]);
+const TeamsCell = ({ teamIds, teams, categories }: { teamIds?: string[], teams: Team[], categories: TeamCategory[] }) => {
+    const teamsMap = useMemo(() => new Map(teams.map(t => [t.id, t.name])), [teams]);
+    const categoryMap = useMemo(() => new Map(teams.map(t => [t.id, categories.find(c => c.id === t.categoryId)?.name || ''])), [teams, categories]);
 
-  if (userTeams.length === 0) {
-    return <TableCell>N/A</TableCell>;
-  }
+    const userTeams = useMemo(() => {
+        return (teamIds || [])
+            .map(id => ({ 
+                id, 
+                name: teamsMap.get(id),
+                category: categoryMap.get(id)
+            }))
+            .filter(team => team.name)
+            .sort((a, b) => (a.category || '').localeCompare(b.category || '') || (a.name || '').localeCompare(b.name || ''));
+    }, [teamIds, teamsMap, categoryMap]);
 
-  const firstTeam = userTeams[0];
+    if (userTeams.length === 0) {
+        return <TableCell>N/A</TableCell>;
+    }
 
-  return (
-    <TableCell>
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button variant="link" className="p-0 h-auto text-left font-normal text-foreground">
-            {firstTeam.name}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-56 p-2">
-          <div className="space-y-1">
-            <p className="font-semibold text-sm mb-2">Alle Mannschaften</p>
-            {userTeams.map(team => (
-              <div key={team.id} className="text-sm p-1.5 rounded-sm bg-muted/50">
-                {team.name}
-              </div>
-            ))}
-          </div>
-        </PopoverContent>
-      </Popover>
-    </TableCell>
-  );
+    const firstTeam = userTeams[0];
+
+    return (
+        <TableCell>
+            <Popover>
+                <PopoverTrigger asChild>
+                    <Button variant="link" className="p-0 h-auto text-left font-normal text-foreground">
+                        {firstTeam.name}
+                        {userTeams.length > 1 && ` (+${userTeams.length - 1})`}
+                    </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-56 p-2">
+                    <div className="space-y-1">
+                        <p className="font-semibold text-sm mb-2">Alle Mannschaften</p>
+                        {userTeams.map(team => (
+                            <div key={team.id} className="text-sm p-1.5 rounded-sm bg-muted/50">
+                                <p className="font-medium">{team.name}</p>
+                                <p className="text-xs text-muted-foreground">{team.category}</p>
+                            </div>
+                        ))}
+                    </div>
+                </PopoverContent>
+            </Popover>
+        </TableCell>
+    );
 };
 
 
@@ -153,7 +165,7 @@ export default function MitgliederPage() {
   const isAdmin = currentUserData?.adminRechte === true;
 
   const usersCollectionRef = useMemoFirebase(() => {
-    if (!firestore || !isAdmin) return null; // Only fetch all users if admin
+    if (!firestore || !isAdmin) return null;
     return collection(firestore, 'users');
   }, [firestore, isAdmin]);
 
@@ -175,10 +187,6 @@ export default function MitgliederPage() {
   const isLoading = isAuthLoading || isUserDocLoading || usersLoading || teamsLoading || categoriesLoading;
   const error = usersError || teamsError || categoriesError;
 
-  const teamsMap = useMemo(() => {
-    if (!teams) return new Map();
-    return new Map(teams.map(team => [team.id, team.name]));
-  }, [teams]);
   
   const groupedTeams = useMemo(() => {
     if (!categories || !teams) return [];
@@ -307,7 +315,7 @@ export default function MitgliederPage() {
       );
     }
     
-    if (users) {
+    if (users && teams && categories) {
       return (
         <>
           <div className="flex items-center justify-start mb-4">
@@ -317,7 +325,7 @@ export default function MitgliederPage() {
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem value="all">Alle Mannschaften</SelectItem>
-                        {teams?.slice().sort((a, b) => a.name.localeCompare(b.name)).map((team) => (
+                        {teams.slice().sort((a, b) => a.name.localeCompare(b.name)).map((team) => (
                             <SelectItem key={team.id} value={team.id}>
                                 {team.name}
                             </SelectItem>
@@ -343,7 +351,7 @@ export default function MitgliederPage() {
           <TableBody>
             {filteredUsers.map((user) => (
               <TableRow key={user.id}>
-                <TeamsCell teamIds={user.teamIds} teamsMap={teamsMap} />
+                <TeamsCell teamIds={user.teamIds} teams={teams} categories={categories} />
                 <TableCell className="font-medium">{`${user.vorname || ''} ${user.nachname || ''}`.trim() || 'N/A'}</TableCell>
                 <TableCell>{user.geschlecht || 'N/A'}</TableCell>
                 <TableCell>{formatPosition(user.position)}</TableCell>
@@ -498,5 +506,3 @@ export default function MitgliederPage() {
     </div>
   );
 }
-
-    
