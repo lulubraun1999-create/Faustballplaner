@@ -175,12 +175,14 @@ function AddLocationForm({ onDone }: { onDone: () => void }) {
     );
 }
 
-function EventForm({ onDone, event, categories, teams, locations }: { onDone: () => void, event?: Event, categories: TeamCategory[], teams: Team[], locations: Location[] }) {
+function EventForm({ onDone, event, categories, teams, locations, isAdmin }: { onDone: () => void, event?: Event, categories: TeamCategory[], teams: Team[], locations: Location[], isAdmin: boolean }) {
   const { user } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLocationFormOpen, setIsLocationFormOpen] = useState(false);
+  const [locationToDelete, setLocationToDelete] = useState<Location | null>(null);
+  const [isDeletingLocation, setIsDeletingLocation] = useState(false);
 
   const getInitialFormValues = () => {
     if (event) {
@@ -226,6 +228,7 @@ function EventForm({ onDone, event, categories, teams, locations }: { onDone: ()
   });
   
   const isAllDay = form.watch('isAllDay');
+  const selectedLocationId = form.watch('locationId');
 
   const groupedTeams = useMemo(() => {
     if (!categories || !teams) return [];
@@ -234,6 +237,27 @@ function EventForm({ onDone, event, categories, teams, locations }: { onDone: ()
       teams: teams.filter(team => team.categoryId === category.id).sort((a,b) => a.name.localeCompare(b.name))
     }));
   }, [categories, teams]);
+
+  const handleDeleteLocation = async () => {
+    if (!firestore || !locationToDelete) return;
+    setIsDeletingLocation(true);
+    const locationRef = doc(firestore, 'locations', locationToDelete.id);
+    try {
+      await deleteDoc(locationRef);
+      toast({ title: 'Ort gelöscht' });
+      form.setValue('locationId', ''); // Reset selection in form
+      setLocationToDelete(null);
+    } catch (serverError: any) {
+      toast({ variant: 'destructive', title: 'Fehler beim Löschen', description: serverError.message });
+      const permissionError = new FirestorePermissionError({
+        path: locationRef.path,
+        operation: 'delete',
+      });
+      errorEmitter.emit('permission-error', permissionError);
+    } finally {
+      setIsDeletingLocation(false);
+    }
+  };
 
   const onSubmit = (values: EventFormValues) => {
     if (!user || !firestore) {
@@ -499,9 +523,25 @@ function EventForm({ onDone, event, categories, teams, locations }: { onDone: ()
                         {locations.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)}
                     </SelectContent>
                 </Select>
-                <Button type="button" variant="outline" onClick={() => setIsLocationFormOpen(true)}>
-                    <PlusCircle className="mr-2 h-4 w-4" /> Neu
-                </Button>
+                {isAdmin && (
+                  <div className="flex gap-2">
+                    <Button type="button" variant="outline" onClick={() => setIsLocationFormOpen(true)}>
+                        <PlusCircle className="mr-2 h-4 w-4" /> Neu
+                    </Button>
+                     <Button 
+                        type="button" 
+                        variant="destructive" 
+                        size="icon" 
+                        disabled={!selectedLocationId}
+                        onClick={() => {
+                            const location = locations.find(l => l.id === selectedLocationId);
+                            if (location) setLocationToDelete(location);
+                        }}
+                        >
+                        <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
             </div>
             <FormMessage />
           </FormItem>
@@ -532,11 +572,29 @@ function EventForm({ onDone, event, categories, teams, locations }: { onDone: ()
         </DialogFooter>
       </form>
     </Form>
+
     <Dialog open={isLocationFormOpen} onOpenChange={setIsLocationFormOpen}>
         <DialogContent>
             <AddLocationForm onDone={() => setIsLocationFormOpen(false)} />
         </DialogContent>
     </Dialog>
+
+    <AlertDialog open={!!locationToDelete} onOpenChange={(open) => !open && setLocationToDelete(null)}>
+        <AlertDialogContent>
+            <AlertDialogHeader>
+                <AlertDialogTitle>Sind Sie sicher?</AlertDialogTitle>
+                <AlertDialogDescription>
+                    Diese Aktion kann nicht rückgängig gemacht werden. Dadurch wird der Ort "{locationToDelete?.name}" dauerhaft gelöscht.
+                </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+                <AlertDialogCancel disabled={isDeletingLocation}>Abbrechen</AlertDialogCancel>
+                <AlertDialogAction onClick={handleDeleteLocation} disabled={isDeletingLocation} className="bg-destructive hover:bg-destructive/90">
+                    {isDeletingLocation ? <Loader2 className="animate-spin" /> : 'Ja, löschen'}
+                </AlertDialogAction>
+            </AlertDialogFooter>
+        </AlertDialogContent>
+    </AlertDialog>
     </>
   );
 }
@@ -750,7 +808,7 @@ export default function TerminePage() {
           {isLoading ? (
              <div className="flex items-center justify-center p-8"><Loader2 className="animate-spin h-8 w-8 text-primary"/></div>
           ) : (
-             <EventForm onDone={handleFormDone} event={selectedEvent} categories={categories || []} teams={teams || []} locations={locations || []} />
+             <EventForm onDone={handleFormDone} event={selectedEvent} categories={categories || []} teams={teams || []} locations={locations || []} isAdmin={isAdmin}/>
           )}
         </DialogContent>
       </Dialog>
@@ -774,3 +832,5 @@ export default function TerminePage() {
     </div>
   );
 }
+
+    
