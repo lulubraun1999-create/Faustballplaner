@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -41,6 +41,7 @@ interface Event {
   endTime?: Timestamp;
   isAllDay?: boolean;
   recurrence?: 'none' | 'weekly' | 'biweekly' | 'monthly';
+  recurrenceEndDate?: Timestamp;
   targetTeamIds?: string[];
   rsvpDeadline?: Timestamp;
   locationId?: string;
@@ -81,6 +82,7 @@ const eventSchema = z.object({
   endDate: z.date().optional(),
   isAllDay: z.boolean().default(false),
   recurrence: z.enum(['none', 'weekly', 'biweekly', 'monthly']).default('none'),
+  recurrenceEndDate: z.date().optional(),
   targetTeamIds: z.array(z.string()).optional(),
   rsvpDeadlineDate: z.date().optional(),
   rsvpDeadlineTime: z.string().optional(),
@@ -197,6 +199,7 @@ function EventForm({ onDone, event, categories, teams, locations, isAdmin }: { o
         endTime: endDate && !event.isAllDay ? format(endDate, 'HH:mm') : '',
         isAllDay: event.isAllDay || false,
         recurrence: event.recurrence || 'none',
+        recurrenceEndDate: event.recurrenceEndDate?.toDate() || undefined,
         targetTeamIds: event.targetTeamIds || [],
         rsvpDeadlineDate: rsvpDate,
         rsvpDeadlineTime: rsvpDate ? format(rsvpDate, 'HH:mm') : '',
@@ -213,6 +216,7 @@ function EventForm({ onDone, event, categories, teams, locations, isAdmin }: { o
       endTime: '',
       isAllDay: false,
       recurrence: 'none' as const,
+      recurrenceEndDate: undefined,
       targetTeamIds: [],
       rsvpDeadlineDate: undefined,
       rsvpDeadlineTime: '',
@@ -229,6 +233,8 @@ function EventForm({ onDone, event, categories, teams, locations, isAdmin }: { o
   
   const isAllDay = form.watch('isAllDay');
   const selectedLocationId = form.watch('locationId');
+  const recurrence = form.watch('recurrence');
+
 
   const groupedTeams = useMemo(() => {
     if (!categories || !teams) return [];
@@ -295,6 +301,7 @@ function EventForm({ onDone, event, categories, teams, locations, isAdmin }: { o
       endTime: endDate ? Timestamp.fromDate(endDate) : null,
       isAllDay: values.isAllDay,
       recurrence: values.recurrence,
+      recurrenceEndDate: values.recurrenceEndDate ? Timestamp.fromDate(values.recurrenceEndDate) : null,
       targetTeamIds: values.targetTeamIds || [],
       rsvpDeadline: rsvpDeadline,
       locationId: values.locationId || '',
@@ -423,25 +430,48 @@ function EventForm({ onDone, event, categories, teams, locations, isAdmin }: { o
             </FormItem>
         )} />
         
-        <FormField control={form.control} name="recurrence" render={({ field }) => (
-            <FormItem>
-                <FormLabel>Wiederholung</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                    <SelectTrigger>
-                        <SelectValue placeholder="Wähle eine Wiederholungsregel" />
-                    </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                        <SelectItem value="none">Keine Wiederholung</SelectItem>
-                        <SelectItem value="weekly">Wöchentlich</SelectItem>
-                        <SelectItem value="biweekly">Alle 2 Wochen</SelectItem>
-                        <SelectItem value="monthly">Monatlich</SelectItem>
-                    </SelectContent>
-                </Select>
-                <FormMessage />
-            </FormItem>
-        )} />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+            <FormField control={form.control} name="recurrence" render={({ field }) => (
+                <FormItem>
+                    <FormLabel>Wiederholung</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Wähle eine Wiederholungsregel" />
+                        </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                            <SelectItem value="none">Keine Wiederholung</SelectItem>
+                            <SelectItem value="weekly">Wöchentlich</SelectItem>
+                            <SelectItem value="biweekly">Alle 2 Wochen</SelectItem>
+                            <SelectItem value="monthly">Monatlich</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <FormMessage />
+                </FormItem>
+            )} />
+            {recurrence !== 'none' && (
+                <FormField control={form.control} name="recurrenceEndDate" render={({ field }) => (
+                    <FormItem className="flex flex-col">
+                        <FormLabel>Wiederholung endet am</FormLabel>
+                        <Popover>
+                            <PopoverTrigger asChild>
+                            <FormControl>
+                                <Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                                {field.value ? format(field.value, 'dd.MM.yyyy') : <span>Datum (optional)</span>}
+                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                </Button>
+                            </FormControl>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar mode="single" selected={field.value} onSelect={field.onChange} locale={de} />
+                            </PopoverContent>
+                        </Popover>
+                        <FormMessage />
+                    </FormItem>
+                )} />
+            )}
+        </div>
         
         <FormField control={form.control} name="targetTeamIds" render={() => (
             <FormItem>
@@ -676,13 +706,23 @@ export default function TerminePage() {
       });
   };
   
-  const getRecurrenceText = (recurrence?: string) => {
+  const getRecurrenceText = (event: Event) => {
+    const recurrence = event.recurrence;
+    const recurrenceEndDate = event.recurrenceEndDate?.toDate();
+
+    let text = '';
     switch (recurrence) {
-      case 'weekly': return 'Wöchentlich';
-      case 'biweekly': return 'Alle 2 Wochen';
-      case 'monthly': return 'Monatlich';
-      default: return null;
+        case 'weekly': text = 'Wöchentlich'; break;
+        case 'biweekly': text = 'Alle 2 Wochen'; break;
+        case 'monthly': text = 'Monatlich'; break;
+        default: return null;
     }
+    
+    if(recurrenceEndDate) {
+        text += ` bis ${format(recurrenceEndDate, 'dd.MM.yyyy')}`;
+    }
+
+    return text;
   };
 
 
@@ -711,7 +751,7 @@ export default function TerminePage() {
     return (
         <div className="space-y-4">
             {events.map(event => {
-                const recurrenceText = getRecurrenceText(event.recurrence);
+                const recurrenceText = getRecurrenceText(event);
                 const startDate = event.date.toDate();
                 const endDate = event.endTime?.toDate();
                 const location = locations?.find(loc => loc.id === event.locationId);
@@ -832,5 +872,3 @@ export default function TerminePage() {
     </div>
   );
 }
-
-    
