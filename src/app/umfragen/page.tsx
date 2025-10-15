@@ -362,7 +362,12 @@ function PollCard({ poll, allUsers }: { poll: Poll; allUsers: GroupMember[] }) {
 
         const responseRef = doc(collection(firestore, 'polls', poll.id, 'responses'));
         
-        const responseData: any = {
+        const responseData: {
+            userId: string;
+            selectedOptionIds: string[];
+            respondedAt: Timestamp;
+            customOption?: string;
+        } = {
             userId: user.uid,
             selectedOptionIds: selectedOptions,
             respondedAt: serverTimestamp(),
