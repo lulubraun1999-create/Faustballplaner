@@ -1,214 +1,250 @@
 /**
- * @file Firestore Security Rules for Werkself Hub
- * @version Prototyping
+ * @fileoverview Firestore Security Rules for the Werkself Hub application.
  *
- * @description
- * This ruleset enforces a security model based on path-based ownership and dedicated collections, with a focus on authorization independence and efficient data retrieval.
+ * Core Philosophy:
+ * This ruleset prioritizes security and authorization independence, avoiding `get()` calls to other documents for rule evaluation.
+ * It enforces strict user-ownership for user-generated content and assumes read-only access to public data for most users.
  *
  * Data Structure:
- * - Core data (news, matches, players, highlights) is stored in top-level collections.
- * - User-specific data (forum posts, user profiles, chat status) is stored under `/users/{userId}`.
- * - Polls and Events are stored in top-level collections.
- * - Chat messages are stored in a subcollection `/chat_rooms/{roomId}/messages/{messageId}`.
+ * - Public data (news, matches, players, highlight reels, teams, team categories, events, polls) is stored in top-level collections.
+ * - User-specific data (forum posts, user data, chat status) is nested under `/users/{userId}`.
+ * - Chat messages are stored in the /chat_rooms/{roomId}/messages/{messageId} subcollection
  *
  * Key Security Decisions:
- * - User data is strictly controlled through path-based ownership.
- * - Top-level collections (news, matches, players, highlights) are publicly readable but write-protected.
- * - All writes must be authenticated.
- * - Data validation is minimal to allow for rapid prototyping.
- * - No support for listing all users or forum posts across all users.
+ * - User listing is implicitly disallowed due to the lack of a top-level `/users` collection listing rule.
+ * - Global data is assumed to be read-only for most users, with administrative access controlled at the application level.
+ * - Path-based ownership is heavily utilized for user-generated content.
  *
  * Denormalization for Authorization:
- * - `highlight_reels` store the `matchId` to avoid needing to read the `matches` document for authorization.
- * - `ForumPost` documents are stored in a user subcollection to avoid `get()` calls to verify ownership.
+ * - `highlight_reels` denormalizes `matchId` to enable efficient queries without needing to `get()` the corresponding `match` document.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Allows anyone to read news articles, but restricts creation, updating, and deletion.
+     * @description Allows anyone to read news articles. Only allows creating, updating, and deleting.
      * @path /news_articles/{newsArticleId}
-     * @allow (get, list)
-     * @deny (create, update, delete)
-     * @principle Public read, owner-only writes (if ownership field existed)
+     * @allow get, list: if true;
+     * @allow create: if false;
+     * @allow update: if false;
+     * @allow delete: if false;
+     * @principle Allows public read access and restricts write access.
      */
     match /news_articles/{newsArticleId} {
       allow get, list: if true;
-      allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Allows anyone to read match data, but restricts creation, updating, and deletion.
+     * @description Allows anyone to read match data.  Denies all writes.
      * @path /matches/{matchId}
-     * @allow (get, list)
-     * @deny (create, update, delete)
-     * @principle Public read, owner-only writes (if ownership field existed)
+     * @allow get, list: if true;
+     * @allow create: if false;
+     * @allow update: if false;
+     * @allow delete: if false;
+     * @principle Allows public read access and restricts write access.
      */
     match /matches/{matchId} {
       allow get, list: if true;
-      allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Allows anyone to read player data, but restricts creation, updating, and deletion.
+     * @description Allows anyone to read player data. Denies all writes.
      * @path /players/{playerId}
-     * @allow (get, list)
-     * @deny (create, update, delete)
-     * @principle Public read, owner-only writes (if ownership field existed)
+     * @allow get, list: if true;
+     * @allow create: if false;
+     * @allow update: if false;
+     * @allow delete: if false;
+     * @principle Allows public read access and restricts write access.
      */
     match /players/{playerId} {
       allow get, list: if true;
-      allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Allows anyone to read highlight reels, but restricts creation, updating, and deletion.
+     * @description Allows anyone to read highlight reels. Only allows creating, updating, and deleting.
      * @path /highlight_reels/{highlightReelId}
-     * @allow (get, list)
-     * @deny (create, update, delete)
-     * @principle Public read, owner-only writes (if ownership field existed)
+     * @allow get, list: if true;
+     * @allow create: if false;
+     * @allow update: if false;
+     * @allow delete: if false;
+     * @principle Allows public read access and restricts write access.
      */
     match /highlight_reels/{highlightReelId} {
       allow get, list: if true;
-      allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Allows a user to manage their own forum posts.
+     * @description Allows a user to read, create, update, and delete their own forum posts.
      * @path /users/{userId}/forum_posts/{postId}
-     * @allow (create) User can create a post with their userId.
-     * @allow (get, list, update, delete) User can only access their own posts.
-     * @deny (create) User cannot create a post for another user.
+     * @allow get, list: if isOwner(userId);
+     * @allow create: if request.auth.uid == userId;
+     * @allow update: if isExistingOwner(userId);
+     * @allow delete: if isExistingOwner(userId);
+     * @deny create: if request.auth.uid != userId;
+     * @deny update: if !isExistingOwner(userId);
+     * @deny delete: if !isExistingOwner(userId);
      * @principle Enforces document ownership for writes.
      */
     match /users/{userId}/forum_posts/{postId} {
-      allow read, list: if isSignedIn() && isOwner(userId);
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update: if isSignedIn() && isExistingOwner(userId);
-      allow delete: if isSignedIn() && isExistingOwner(userId);
+      allow get, list: if isOwner(userId);
+      allow create: if request.auth.uid == userId;
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Allows a user to manage their own user document.
+     * @description Allows a user to read, create, update, and delete their own user document.
      * @path /users/{userId}
-     * @allow (create) A user can create their own document with matching userId.
-     * @allow (get, list, update, delete) A user can only access their own user document.
-     * @deny (create) A user cannot create a document for another user.
+     * @allow get: if isOwner(userId);
+     * @allow create: if request.auth.uid == userId;
+     * @allow update: if isExistingOwner(userId);
+     * @allow delete: if isExistingOwner(userId);
+     * @deny create: if request.auth.uid != userId;
+     * @deny update: if !isExistingOwner(userId);
+     * @deny delete: if !isExistingOwner(userId);
      * @principle Enforces document ownership for writes.
      */
     match /users/{userId} {
-      allow get: if isSignedIn() && isOwner(userId);
-      allow list: if false;
-      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.id == request.auth.uid;
-      allow update: if isSignedIn() && isExistingOwner(userId) && request.resource.data.id == resource.data.id;
-      allow delete: if isSignedIn() && isExistingOwner(userId);
+      allow get: if isOwner(userId);
+      allow create: if request.auth.uid == userId;
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Allows anyone to read team categories, but restricts creation, updating, and deletion.
+     * @description Allows anyone to read team categories.  Denies all writes.
      * @path /team_categories/{categoryId}
-     * @allow (get, list)
-     * @deny (create, update, delete)
-     * @principle Public read, owner-only writes (if ownership field existed)
+     * @allow get, list: if true;
+     * @allow create: if false;
+     * @allow update: if false;
+     * @allow delete: if false;
+     * @principle Allows public read access and restricts write access.
      */
     match /team_categories/{categoryId} {
       allow get, list: if true;
-      allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Allows anyone to read teams, but restricts creation, updating, and deletion.
+     * @description Allows anyone to read team data.  Denies all writes.
      * @path /teams/{teamId}
-     * @allow (get, list)
-     * @deny (create, update, delete)
-     * @principle Public read, owner-only writes (if ownership field existed)
+     * @allow get, list: if true;
+     * @allow create: if false;
+     * @allow update: if false;
+     * @allow delete: if false;
+     * @principle Allows public read access and restricts write access.
      */
     match /teams/{teamId} {
       allow get, list: if true;
-      allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow create, update, delete: if false;
     }
-
+    
     /**
-     * @description Allows anyone to read members, but restricts creation, updating, and deletion.
+     * @description Allows anyone to read member data.  Denies all writes.
      * @path /members/{memberId}
-     * @allow (get, list)
-     * @deny (create, update, delete)
-     * @principle Public read, owner-only writes (if ownership field existed)
+     * @allow get, list: if true;
+     * @allow create: if false;
+     * @allow update: if false;
+     * @allow delete: if false;
+     * @principle Allows public read access and restricts write access.
      */
-    match /members/{memberId} {
+     match /members/{memberId} {
       allow get, list: if true;
-      allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Allows anyone to read group members, but restricts creation, updating, and deletion.
+     * @description Allows anyone to read group member data. Denies all writes.
      * @path /group_members/{memberId}
-     * @allow (get, list)
-     * @deny (create, update, delete)
-     * @principle Public read, owner-only writes (if ownership field existed)
+     * @allow get, list: if true;
+     * @allow create: if false;
+     * @allow update: if false;
+     * @allow delete: if false;
+     * @principle Allows public read access and restricts write access.
      */
     match /group_members/{memberId} {
       allow get, list: if true;
-      allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Allows anyone to read polls, but restricts creation, updating, and deletion.
+     * @description Allows anyone to read polls. Denies all writes.
      * @path /polls/{pollId}
-     * @allow (get, list)
-     * @deny (create, update, delete)
-     * @principle Public read, owner-only writes (if ownership field existed)
+     * @allow get, list: if true;
+     * @allow create: if false;
+     * @allow update: if false;
+     * @allow delete: if false;
+     * @principle Allows public read access and restricts write access.
      */
     match /polls/{pollId} {
       allow get, list: if true;
-      allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Subcollection for responses to a specific poll.
+     * @description Allows anyone to read poll responses. Denies all writes.
      * @path /polls/{pollId}/responses/{responseId}
+     * @allow get, list: if true;
+     * @allow create: if false;
+     * @allow update: if false;
+     * @allow delete: if false;
+     * @principle Allows public read access and restricts write access.
      */
     match /polls/{pollId}/responses/{responseId} {
-          allow read, list: if false;
-          allow create: if isSignedIn();
-          allow update: if false;
-          allow delete: if false;
+      allow get, list: if true;
+      allow create, update, delete: if false;
     }
-
-     /**
-      * @description Allows anyone to read events, but restricts creation, updating, and deletion.
-      * @path /events/{eventId}
-      * @allow (get, list)
-      * @deny (create, update, delete)
-      * @principle Public read, owner-only writes (if ownership field existed)
-      */
-      match /events/{eventId} {
-        allow get, list: if true;
-        allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
-      }
 
     /**
-     * @description Allows reading and writing chat messages within a chat room.
+     * @description Allows anyone to read events. Denies all writes.
+     * @path /events/{eventId}
+     * @allow get, list: if true;
+     * @allow create: if false;
+     * @allow update: if false;
+     * @allow delete: if false;
+     * @principle Allows public read access and restricts write access.
+     */
+    match /events/{eventId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+    
+    /**
+     * @description Allows anyone to read messages, but restricts writing to signed-in users.
      * @path /chat_rooms/{roomId}/messages/{messageId}
+     * @allow get, list: if true;
+     * @allow create: if isSignedIn();
+     * @allow update: if false;
+     * @allow delete: if false;
+     * @principle Public read, signed-in users can create messages.
      */
     match /chat_rooms/{roomId}/messages/{messageId} {
-          allow read, list: if true;
-          allow create: if isSignedIn();
-          allow update: if false;
-          allow delete: if false;
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if false;
+      allow delete: if false;
     }
-
-     /**
-      * @description Tracks the last time a user viewed a chat room to calculate unread messages.
-      * @path /users/{userId}/chat_status/{roomId}
-      */
-      match /users/{userId}/chat_status/{roomId} {
-            allow read, list: if isOwner(userId);
-            allow create: if isOwner(userId);
-            allow update: if isOwner(userId) && resource != null;
-            allow delete: if isOwner(userId) && resource != null;
-      }
+    
+   /**
+     * @description Allows a user to read, create, update, and delete their own chat status.
+     * @path /users/{userId}/chat_status/{roomId}
+     * @allow get: if isOwner(userId);
+     * @allow create: if request.auth.uid == userId;
+     * @allow update: if isExistingOwner(userId);
+     * @allow delete: if isExistingOwner(userId);
+     * @principle Enforces document ownership for writes.
+     */
+     match /users/{userId}/chat_status/{roomId} {
+      allow get: if isOwner(userId);
+      allow create: if request.auth.uid == userId;
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
+    }
 
     // Helper functions
     function isSignedIn() {
@@ -220,7 +256,7 @@ service cloud.firestore {
     }
 
     function isExistingOwner(userId) {
-      return isSignedIn() && isOwner(userId) && resource != null;
+      return isOwner(userId) && resource != null;
     }
   }
 }
