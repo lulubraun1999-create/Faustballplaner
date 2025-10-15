@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Calendar } from '@/components/ui/calendar';
 import { de } from 'date-fns/locale';
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where, Timestamp, or } from 'firebase/firestore';
+import { collection, query, where, Timestamp, or, orderBy } from 'firebase/firestore';
 import { Loader2, CalendarIcon, Clock, MapPin, Repeat } from 'lucide-react';
 import {
   format,
@@ -337,5 +337,3 @@ export default function KalenderPage() {
     </div>
   );
 }
-
-    
