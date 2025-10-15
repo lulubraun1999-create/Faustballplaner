@@ -74,7 +74,8 @@ export default function ChatPage() {
     if (teams && currentUserData?.teamIds) {
       const userTeams = teams
         .filter(team => currentUserData.teamIds?.includes(team.id))
-        .map(team => ({ id: team.id, name: team.name }));
+        .map(team => ({ id: team.id, name: team.name }))
+        .sort((a, b) => a.name.localeCompare(b.name));
       rooms.push(...userTeams);
     }
     return rooms;
