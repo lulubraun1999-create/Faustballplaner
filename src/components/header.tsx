@@ -68,7 +68,9 @@ export function Header() {
               <DropdownMenuItem asChild>
                 <Link href="/umfragen">Umfragen</Link>
               </DropdownMenuItem>
-              <DropdownMenuItem>Termine</DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/termine">Termine</Link>
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </nav>
@@ -104,3 +106,5 @@ export function Header() {
     </header>
   );
 }
+
+    
