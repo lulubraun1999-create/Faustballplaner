@@ -41,6 +41,7 @@ interface Event {
   endTime?: Timestamp;
   isAllDay?: boolean;
   recurrence?: 'none' | 'weekly' | 'biweekly' | 'monthly';
+  recurrenceEndDate?: Timestamp;
   targetTeamIds?: string[];
   rsvpDeadline?: Timestamp;
   location?: string;
@@ -369,6 +370,7 @@ export default function KalenderPage() {
 
     for (const event of filteredByTeam) {
       const originalStartDate = event.date.toDate();
+      const recurrenceEndDate = event.recurrenceEndDate?.toDate();
 
       if (event.recurrence === 'none' || !event.recurrence) {
         if (isWithinInterval(originalStartDate, interval)) {
@@ -400,6 +402,11 @@ export default function KalenderPage() {
 
       let limit = 100; // safety break
       while (currentDate <= interval.end && limit > 0) {
+        if (recurrenceEndDate && currentDate > recurrenceEndDate) {
+            limit = 0; // Stop if the recurrence end date is passed
+            continue;
+        }
+
         if (isWithinInterval(currentDate, interval)) {
              visibleEvents.push({ ...event, displayDate: currentDate });
         }
