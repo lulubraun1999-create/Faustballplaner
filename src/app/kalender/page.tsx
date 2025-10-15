@@ -52,6 +52,7 @@ interface Event {
 
 interface EventResponse {
     id: string;
+    eventId: string;
     userId: string;
     eventDate: Timestamp;
     status: 'attending' | 'declined' | 'uncertain';
@@ -304,7 +305,7 @@ const EventCard = ({ event, allUsers }: { event: DisplayEvent; allUsers: GroupMe
 
 export default function KalenderPage() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
   
   const firestore = useFirestore();
@@ -312,6 +313,11 @@ export default function KalenderPage() {
   const start = startOfMonth(currentMonth);
   const end = endOfMonth(currentMonth);
   
+  // Set selectedDate to today only on client-side
+  useEffect(() => {
+    setSelectedDate(new Date());
+  }, []);
+
   const categoriesQuery = useMemoFirebase(() => {
     if (!firestore) return null;
     return query(collection(firestore, 'team_categories'), orderBy('order'));
@@ -529,5 +535,3 @@ export default function KalenderPage() {
     </div>
   );
 }
-
-    
