@@ -107,7 +107,12 @@ const EventCard = ({ event }: { event: DisplayEvent }) => {
     if (event.isAllDay) {
         timeString = "Ganztägig";
     } else if (endDate) {
-        timeString = `${format(startDate, 'HH:mm')} - ${format(endDate, 'HH:mm')} Uhr`;
+        const adjustedEndDate = new Date(startDate);
+        adjustedEndDate.setHours(endDate.getHours(), endDate.getMinutes());
+         if (adjustedEndDate < startDate) {
+            adjustedEndDate.setDate(adjustedEndDate.getDate() + 1);
+        }
+        timeString = `${format(startDate, 'HH:mm')} - ${format(adjustedEndDate, 'HH:mm')} Uhr`;
     } else {
         timeString = `${format(startDate, 'HH:mm')} Uhr`;
     }
@@ -137,7 +142,7 @@ const EventCard = ({ event }: { event: DisplayEvent }) => {
     };
 
     return (
-        <Card key={`${event.id}-${event.displayDate.toISOString()}`}>
+        <Card key={event.id}>
             <CardHeader>
                 <CardTitle>{event.title}</CardTitle>
                 <div className="text-sm text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 pt-1">
@@ -264,38 +269,47 @@ export default function KalenderPage() {
 
       let currentDate = originalStartDate;
       
-      if (event.recurrence === 'weekly' || event.recurrence === 'biweekly') {
-        const step = event.recurrence === 'weekly' ? 1 : 2;
-        if (currentDate < interval.start) {
-            const weeksDiff = Math.floor((interval.start.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24 * 7));
+      // Fast-forward to a point before the current interval to catch all occurrences
+      if (currentDate < interval.start) {
+        let tempDate = new Date(currentDate);
+        if (event.recurrence === 'weekly' || event.recurrence === 'biweekly') {
+            const weeksDiff = Math.floor((interval.start.getTime() - tempDate.getTime()) / (1000 * 60 * 60 * 24 * 7));
+            const step = event.recurrence === 'weekly' ? 1 : 2;
             const stepsToSkip = Math.floor(weeksDiff / step);
             if (stepsToSkip > 0) {
-              currentDate = addWeeks(currentDate, stepsToSkip * step);
+              tempDate = addWeeks(tempDate, stepsToSkip * step);
             }
-        }
-         while (currentDate < interval.start) {
-             currentDate = addWeeks(currentDate, step);
-         }
-        while (currentDate <= interval.end) {
-            visibleEvents.push({ ...event, displayDate: currentDate });
-            currentDate = addWeeks(currentDate, step);
-        }
-      } else if (event.recurrence === 'monthly') {
-         if (currentDate < interval.start) {
-             const monthDiff = (interval.start.getFullYear() - currentDate.getFullYear()) * 12 + (interval.start.getMonth() - currentDate.getMonth());
+        } else if (event.recurrence === 'monthly') {
+             const monthDiff = (interval.start.getFullYear() - tempDate.getFullYear()) * 12 + (interval.start.getMonth() - tempDate.getMonth());
              if (monthDiff > 0) {
-                currentDate = addMonths(currentDate, monthDiff);
+                tempDate = addMonths(tempDate, monthDiff -1); // Go to month before to catch all dates
              }
-         }
-         while(currentDate < interval.start) {
-            currentDate = addMonths(currentDate, 1);
-         }
-        while (currentDate <= interval.end) {
-            if (isSameMonth(currentDate, interval.start)) {
-                visibleEvents.push({ ...event, displayDate: currentDate });
-            }
-            currentDate = addMonths(currentDate, 1);
         }
+        currentDate = tempDate;
+      }
+
+
+      let limit = 100; // safety break
+      while (currentDate <= interval.end && limit > 0) {
+        if (isWithinInterval(currentDate, interval)) {
+             visibleEvents.push({ ...event, displayDate: currentDate });
+        }
+
+        switch (event.recurrence) {
+            case 'weekly':
+                currentDate = addWeeks(currentDate, 1);
+                break;
+            case 'biweekly':
+                currentDate = addWeeks(currentDate, 2);
+                break;
+            case 'monthly':
+                currentDate = addMonths(currentDate, 1);
+                break;
+            default: // Should not happen if recurrence is not 'none'
+                limit = 0; // exit loop
+                break;
+        }
+        limit--;
       }
     }
     return visibleEvents;
