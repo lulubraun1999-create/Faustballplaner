@@ -120,13 +120,19 @@ function AddLocationForm({ onDone }: { onDone: () => void }) {
     const onSubmit = (values: LocationFormValues) => {
         if (!firestore) return;
         setIsSubmitting(true);
-        addDoc(collection(firestore, 'locations'), values)
+        const locationsCollection = collection(firestore, 'locations');
+        addDoc(locationsCollection, values)
             .then(() => {
                 toast({ title: 'Ort hinzugefügt' });
                 onDone();
             })
-            .catch(error => {
-                 toast({ variant: 'destructive', title: 'Fehler', description: error.message });
+            .catch(serverError => {
+                 const permissionError = new FirestorePermissionError({
+                    path: locationsCollection.path,
+                    operation: 'create',
+                    requestResourceData: values,
+                });
+                errorEmitter.emit('permission-error', permissionError);
             })
             .finally(() => setIsSubmitting(false));
     };
@@ -768,5 +774,3 @@ export default function TerminePage() {
     </div>
   );
 }
-
-    
