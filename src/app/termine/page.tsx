@@ -774,7 +774,7 @@ export default function TerminePage() {
                     <Card key={event.id}>
                         <CardHeader>
                             <CardTitle>{event.title}</CardTitle>
-                            <div className="text-sm text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:flex-wrap gap-x-4 gap-y-1 pt-1">
+                             <div className="text-sm text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:flex-wrap gap-x-4 gap-y-1 pt-1">
                                 <div className="flex items-center gap-1.5">
                                     <CalendarIcon className="h-4 w-4 flex-shrink-0" />
                                     <span>{dateString}</span>
@@ -862,7 +862,7 @@ export default function TerminePage() {
                 </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-                <AlertDialogCancel disabled={isDeleting}>Abbrechen</Button>
+                <AlertDialogCancel disabled={isDeleting}>Abbrechen</AlertDialogCancel>
                 <AlertDialogAction onClick={handleDelete} disabled={isDeleting} className="bg-destructive hover:bg-destructive/90">
                     {isDeleting ? <Loader2 className="animate-spin" /> : 'Ja, löschen'}
                 </AlertDialogAction>
