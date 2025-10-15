@@ -357,39 +357,34 @@ function PollCard({ poll, allUsers }: { poll: Poll; allUsers: GroupMember[] }) {
 
     const handleVote = async () => {
         if (!user || !firestore || (selectedOptions.length === 0 && !customOption)) {
-          return;
+            return;
         }
-    
+
         const responseRef = doc(collection(firestore, 'polls', poll.id, 'responses'));
-    
-        const responseData: {
-          userId: string;
-          selectedOptionIds: string[];
-          respondedAt: Timestamp;
-          customOption?: string;
-        } = {
-          userId: user.uid,
-          selectedOptionIds: selectedOptions,
-          respondedAt: serverTimestamp() as Timestamp,
+        
+        const responseData: any = {
+            userId: user.uid,
+            selectedOptionIds: selectedOptions,
+            respondedAt: serverTimestamp(),
         };
-    
+
         if (poll.allowCustomOptions && customOption) {
-          responseData.customOption = customOption;
+            responseData.customOption = customOption;
         }
-    
+
         setDoc(responseRef, responseData)
-          .then(() => {
-            toast({ title: 'Stimme wurde gezählt' });
-          })
-          .catch((serverError) => {
-            const permissionError = new FirestorePermissionError({
-              path: responseRef.path,
-              operation: 'create',
-              requestResourceData: responseData,
+            .then(() => {
+                toast({ title: 'Stimme wurde gezählt' });
+            })
+            .catch((serverError) => {
+                const permissionError = new FirestorePermissionError({
+                    path: responseRef.path,
+                    operation: 'create',
+                    requestResourceData: responseData,
+                });
+                errorEmitter.emit('permission-error', permissionError);
             });
-            errorEmitter.emit('permission-error', permissionError);
-          });
-      };
+    };
     
     const handleDeletePoll = async () => {
         if (!firestore) return;
