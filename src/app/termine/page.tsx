@@ -5,7 +5,7 @@ import { useState, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useFirestore, useUser, useCollection, useDoc, useMemoFirebase } from '@/firebase';
+import { useFirestore, useUser, useCollection, useDoc, useMemoFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { addDoc, collection, serverTimestamp, orderBy, query, Timestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Header } from '@/components/header';
@@ -182,7 +182,7 @@ function EventForm({ onDone, event, categories, teams }: { onDone: () => void, e
         rsvpDeadline = Timestamp.fromDate(rsvpDate);
     }
 
-    const dataToSave = {
+    const dataToSave: Omit<Event, 'id' | 'createdAt'> & { createdAt: any } = {
       title: values.title,
       date: Timestamp.fromDate(startDate),
       endTime: endDate ? Timestamp.fromDate(endDate) : null,
@@ -197,21 +197,38 @@ function EventForm({ onDone, event, categories, teams }: { onDone: () => void, e
       createdAt: event ? event.createdAt : serverTimestamp(),
     };
     
-
-    try {
-      if (event) {
-        const eventRef = doc(firestore, 'events', event.id);
-        await updateDoc(eventRef, dataToSave);
-        toast({ title: 'Termin aktualisiert' });
-      } else {
-        await addDoc(collection(firestore, 'events'), dataToSave);
-        toast({ title: 'Termin erstellt' });
-      }
-      onDone();
-    } catch (error: any) {
-      toast({ variant: 'destructive', title: 'Fehler', description: error.message });
-    } finally {
-      setIsSubmitting(false);
+    if (event) {
+      const eventRef = doc(firestore, 'events', event.id);
+      updateDoc(eventRef, dataToSave)
+        .then(() => {
+          toast({ title: 'Termin aktualisiert' });
+          onDone();
+        })
+        .catch((serverError) => {
+          const permissionError = new FirestorePermissionError({
+            path: eventRef.path,
+            operation: 'update',
+            requestResourceData: dataToSave,
+          });
+          errorEmitter.emit('permission-error', permissionError);
+        })
+        .finally(() => setIsSubmitting(false));
+    } else {
+      const eventsCollection = collection(firestore, 'events');
+      addDoc(eventsCollection, dataToSave)
+        .then(() => {
+          toast({ title: 'Termin erstellt' });
+          onDone();
+        })
+        .catch((serverError) => {
+          const permissionError = new FirestorePermissionError({
+            path: eventsCollection.path,
+            operation: 'create',
+            requestResourceData: dataToSave,
+          });
+          errorEmitter.emit('permission-error', permissionError);
+        })
+        .finally(() => setIsSubmitting(false));
     }
   };
 
@@ -630,5 +647,3 @@ export default function TerminePage() {
     </div>
   );
 }
-
-    
