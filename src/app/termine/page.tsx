@@ -826,7 +826,7 @@ const EventCard = ({ event, allUsers, locations, teams, onEdit, onDelete }: { ev
                              {responsesLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Users className="h-4 w-4 mr-2" />}
                             <span className="flex gap-2">
                                 <span className="text-green-600">{attendingCount} Zusagen</span>
-                                <span className="text-red-600">{declinedCount} Absagen</span>
+                                <span className="text-destructive">{declinedCount} Absagen</span>
                                 {uncertainCount > 0 && <span className="text-yellow-600">{uncertainCount} Unsicher</span>}
                             </span>
                          </Button>
@@ -1228,5 +1228,3 @@ export default function TerminePage() {
     </div>
   );
 }
-
-    

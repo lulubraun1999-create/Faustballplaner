@@ -316,7 +316,7 @@ export default function ChatPage() {
                                             <Button
                                                 variant="ghost"
                                                 size="icon"
-                                                className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-destructive-foreground hover:bg-destructive/80 hover:text-destructive-foreground"
                                                 onClick={() => handleDeleteMessage(msg.id)}
                                             >
                                                 <Trash2 className="h-4 w-4" />
@@ -370,5 +370,3 @@ export default function ChatPage() {
     </div>
   );
 }
-
-    

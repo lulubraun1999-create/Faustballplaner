@@ -211,7 +211,7 @@ const EventCard = ({ event, allUsers, locations }: { event: DisplayEvent; allUse
         <Card key={`${event.id}-${event.displayDate.toISOString()}`}>
             <CardHeader>
                 <CardTitle>{event.title}</CardTitle>
-                 <div className="text-sm text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:flex-wrap gap-x-4 gap-y-1 pt-1">
+                 <div className="text-sm text-muted-foreground flex items-center gap-x-4 gap-y-1 pt-1">
                     <div className="flex items-center gap-1.5">
                         <Clock className="h-4 w-4 flex-shrink-0" />
                         <span>{timeString}</span>
@@ -255,7 +255,7 @@ const EventCard = ({ event, allUsers, locations }: { event: DisplayEvent; allUse
                              {responsesLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Users className="h-4 w-4 mr-2" />}
                             <span className="flex gap-2">
                                 <span className="text-green-600">{attendingCount} Zusagen</span>
-                                <span className="text-red-600">{declinedCount} Absagen</span>
+                                <span className="text-destructive">{declinedCount} Absagen</span>
                                 {uncertainCount > 0 && <span className="text-yellow-600">{uncertainCount} Unsicher</span>}
                             </span>
                          </Button>
