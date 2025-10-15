@@ -1,13 +1,25 @@
+/**
+ * @file Firestore Security Rules for Werkself Hub
+ * @corePhilosophy This ruleset enforces a strict user-ownership model for personal data and allows public read access for global data collections. Write access to global data is restricted and should be managed through backend processes.  DBAC is enforced due to the lack of custom claims, so authentication is needed to write to any data that isn't globally readable.
+ * @dataStructure Data is organized into top-level collections for global data (news, matches, players) and user subcollections under /users/{userId} for personal data (forum posts). Chat messages are stored under /chat_rooms/{roomId}/messages/{messageId}.
+ * @keySecurityDecisions
+ *   - User listing is implicitly denied.
+ *   - Global data collections are publicly readable.
+ *   - Write access to user documents and subcollections is restricted to the owning user.
+ *   - Validation of request data is limited to authorization-critical fields to allow for rapid schema iteration.
+ * @denormalizationForAuthorization Ownership is enforced through path-based rules (e.g., /users/{userId}/forum_posts/{postId}) to avoid costly `get()` calls. The `matchId` is denormalized in the `HighlightReel` entity to avoid `get()` calls on the `Match` document for authorization.
+ * @structuralSegregation User-specific data (forum posts) is stored in a private subcollection under /users/{userId}, while global data (news articles, matches, players) is stored in top-level collections.
+ */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Allows read-only access to news articles for all users.  Write access is denied to all clients and must be handled by the backend.
+     * @description Allows anyone to read news articles.  Write access is denied.
      * @path /news_articles/{newsArticleId}
-     * @allow get, list: if true;
-     * @deny create, update, delete: if true;
-     * @principle Public read access for global data, backend-only writes.
+     * @allow (get, list): if true
+     * @deny (create, update, delete): if false
+     * @principle Allows public read access to news articles. Write operations are disabled.
      */
     match /news_articles/{newsArticleId} {
       allow get, list: if true;
@@ -15,11 +27,11 @@ service cloud.firestore {
     }
 
     /**
-     * @description Allows read-only access to match data for all users.  Write access is denied to all clients and must be handled by the backend.
+     * @description Allows anyone to read match data.  Write access is denied.
      * @path /matches/{matchId}
-     * @allow get, list: if true;
-     * @deny create, update, delete: if true;
-     * @principle Public read access for global data, backend-only writes.
+     * @allow (get, list): if true
+     * @deny (create, update, delete): if false
+     * @principle Allows public read access to match data. Write operations are disabled.
      */
     match /matches/{matchId} {
       allow get, list: if true;
@@ -27,11 +39,11 @@ service cloud.firestore {
     }
 
     /**
-     * @description Allows read-only access to player data for all users.  Write access is denied to all clients and must be handled by the backend.
+     * @description Allows anyone to read player data.  Write access is denied.
      * @path /players/{playerId}
-     * @allow get, list: if true;
-     * @deny create, update, delete: if false;
-     * @principle Public read access for global data, backend-only writes.
+     * @allow (get, list): if true
+     * @deny (create, update, delete): if false
+     * @principle Allows public read access to player data. Write operations are disabled.
      */
     match /players/{playerId} {
       allow get, list: if true;
@@ -39,11 +51,11 @@ service cloud.firestore {
     }
 
     /**
-     * @description Allows read-only access to highlight reels for all users. Write access is denied to all clients and must be handled by the backend.
+     * @description Allows anyone to read highlight reels. Write access is denied.
      * @path /highlight_reels/{highlightReelId}
-     * @allow get, list: if true;
-     * @deny create, update, delete: if false;
-     * @principle Public read access for global data, backend-only writes.
+     * @allow (get, list): if true
+     * @deny (create, update, delete): if false
+     * @principle Allows public read access to highlight reels. Write operations are disabled.
      */
     match /highlight_reels/{highlightReelId} {
       allow get, list: if true;
@@ -51,45 +63,49 @@ service cloud.firestore {
     }
 
     /**
-     * @description Manages forum posts for a specific user. Only the owner can create, read, update, and delete their own posts.
+     * @description Allows a user to read, create, update, and delete their own forum posts.
      * @path /users/{userId}/forum_posts/{postId}
-     * @allow create: if isSignedIn() && request.auth.uid == userId;
-     * @allow get, list: if isSignedIn() && request.auth.uid == userId;
-     * @allow update: if isSignedIn() && request.auth.uid == userId && resource != null;
-     * @allow delete: if isSignedIn() && request.auth.uid == userId && resource != null;
-     * @principle Enforces document ownership for writes, restricting access to a user's own data tree.
+     * @allow (create): if isSignedIn() && request.auth.uid == userId
+     * @allow (get, list): if isSignedIn() && request.auth.uid == userId
+     * @allow (update): if isExistingOwner(userId)
+     * @allow (delete): if isExistingOwner(userId)
+     * @deny (create): if request.resource.data.userId != userId // Anti-spoofing: enforce correct userId on creation.
+     * @deny (update): if request.resource.data.userId != resource.data.userId // Prevent userId from being changed.
+     * @deny (get, list): if request.auth.uid != userId
+     * @principle Enforces document ownership for forum posts using path-based rules.
      */
     match /users/{userId}/forum_posts/{postId} {
-      allow create: if isOwner(userId);
-      allow get, list: if isOwner(userId);
-      allow update: if isExistingOwner(userId);
+      allow create: if isSignedIn() && request.auth.uid == userId && request.resource.data.userId == userId;
+      allow get, list: if isSignedIn() && isOwner(userId);
+      allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
       allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Enforces strict ownership for user documents. Allows a user to create their own document if the user ID matches the authenticated user's ID.
+     * @description Allows a user to create their own user document and read/write their own data.
      * @path /users/{userId}
-     * @allow create: if isSignedIn() && request.auth.uid == userId && request.resource.data.id == userId;
-     * @allow get: if isSignedIn() && request.auth.uid == userId;
-     * @allow update: if isSignedIn() && request.auth.uid == userId && resource != null && request.resource.data.id == resource.data.id;
-     * @allow delete: if isSignedIn() && request.auth.uid == userId && resource != null;
-     * @deny list: if true;
-     * @principle Enforces document ownership for writes and restricts listing of user documents.
+     * @allow (create): if isSignedIn() && request.auth.uid == userId
+     * @allow (get): if isSignedIn() && request.auth.uid == userId
+     * @allow (update): if isExistingOwner(userId)
+     * @allow (delete): if isExistingOwner(userId)
+     * @deny (create): if request.resource.data.id != userId
+     * @deny (update): if request.resource.data.id != resource.data.id // Prevent userId from being changed.
+     * @principle Enforces document ownership for user documents.
      */
     match /users/{userId} {
-      allow create: if isOwner(userId) && request.resource.data.id == userId;
-      allow get: if isOwner(userId);
+      allow create: if isSignedIn() && request.auth.uid == userId && request.resource.data.id == userId;
+      allow get: if isSignedIn() && isOwner(userId);
       allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
       allow delete: if isExistingOwner(userId);
-      allow list: if false;
+      allow list: if false; // Explicitly disallow listing of users
     }
 
     /**
-     * @description Allows read-only access to team categories for all users. Write access is denied to all clients and must be handled by the backend.
+     * @description Allows anyone to read team categories.  Write access is denied.
      * @path /team_categories/{categoryId}
-     * @allow get, list: if true;
-     * @deny create, update, delete: if false;
-     * @principle Public read access for global data, backend-only writes.
+     * @allow (get, list): if true
+     * @deny (create, update, delete): if false
+     * @principle Allows public read access to team categories. Write operations are disabled.
      */
     match /team_categories/{categoryId} {
       allow get, list: if true;
@@ -97,84 +113,84 @@ service cloud.firestore {
     }
 
     /**
-     * @description Allows read-only access to team data for all users. Write access is denied to all clients and must be handled by the backend.
+     * @description Allows anyone to read team data.  Write access is denied.
      * @path /teams/{teamId}
-     * @allow get, list: if true;
-     * @deny create, update, delete: if false;
-     * @principle Public read access for global data, backend-only writes.
+     * @allow (get, list): if true
+     * @deny (create, update, delete): if false
+     * @principle Allows public read access to team data. Write operations are disabled.
      */
     match /teams/{teamId} {
       allow get, list: if true;
       allow create, update, delete: if false;
     }
-
-    /**
-     * @description Allows read-only access to member data for all users. Write access is denied to all clients and must be handled by the backend.
-     * @path /members/{memberId}
-     * @allow get, list: if true;
-     * @deny create, update, delete: if false;
-     * @principle Public read access for global data, backend-only writes.
-     */
+      /**
+       * @description Allows anyone to read team members. Write access is denied.
+       * @path /members/{memberId}
+       * @allow (get, list): if true
+       * @deny (create, update, delete): if false
+       * @principle Allows public read access to team members. Write operations are disabled.
+       */
     match /members/{memberId} {
       allow get, list: if true;
       allow create, update, delete: if false;
     }
-
-    /**
-     * @description Allows read-only access to group member data for all users. Write access is denied to all clients and must be handled by the backend.
-     * @path /group_members/{memberId}
-     * @allow get, list: if true;
-     * @deny create, update, delete: if false;
-     * @principle Public read access for global data, backend-only writes.
-     */
+      /**
+       * @description Allows anyone to read group members. Write access is denied.
+       * @path /group_members/{memberId}
+       * @allow (get, list): if true
+       * @deny (create, update, delete): if false
+       * @principle Allows public read access to group members. Write operations are disabled.
+       */
     match /group_members/{memberId} {
       allow get, list: if true;
       allow create, update, delete: if false;
     }
-
-    /**
-     * @description Allows read-only access to poll data for all users. Write access is denied to all clients and must be handled by the backend.
+        /**
+     * @description Allows anyone to read polls. Write access is denied.
      * @path /polls/{pollId}
-     * @allow get, list: if true;
-     * @deny create, update, delete: if false;
-     * @principle Public read access for global data, backend-only writes.
+     * @allow (get, list): if true
+     * @deny (create, update, delete): if false
      */
     match /polls/{pollId} {
-      allow get, list: if true;
-      allow create, update, delete: if false;
+        allow get, list: if true;
+        allow create, update, delete: if false;
     }
 
     /**
-     * @description Allows read-only access to event data for all users. Write access is denied to all clients and must be handled by the backend.
-     * @path /events/{eventId}
-     * @allow get, list: if true;
-     * @deny create, update, delete: if false;
-     * @principle Public read access for global data, backend-only writes.
-     */
-    match /events/{eventId} {
-      allow get, list: if true;
-      allow create, update, delete: if false;
-    }
-
-    /**
-     * @description Responses to a poll, write access is secured by checking if user is signed in
+     * @description Allows anyone to read poll responses. Write access is denied.
      * @path /polls/{pollId}/responses/{responseId}
-     * @allow create: if isSignedIn();
-     * @allow get: if isSignedIn();
-     * @allow update: if isSignedIn() && resource != null;
-     * @allow delete: if isSignedIn() && resource != null;
-     * @allow list: if isSignedIn();
-     * @principle Only signed in users can create, get, update, delete, list poll responses.
+     * @allow (get, list): if true
+     * @deny (create, update, delete): if false
      */
     match /polls/{pollId}/responses/{responseId} {
-      allow create: if isSignedIn();
-      allow get: if isSignedIn();
-      allow update: if isSignedIn();
-      allow delete: if isSignedIn();
-      allow list: if isSignedIn();
+        allow get, list: if true;
+        allow create, update, delete: if false;
     }
+        /**
+     * @description Allows anyone to read events. Write access is denied.
+     * @path /events/{eventId}
+     * @allow (get, list): if true
+     * @deny (create, update, delete): if false
+     */
+        match /events/{eventId} {
+            allow get, list: if true;
+            allow create, update, delete: if false;
+        }
+
+      /**
+       * @description Allows anyone to read chat messages. Write access is denied.
+       * @path /chat_rooms/{roomId}/messages/{messageId}
+       * @allow (get, list): if true
+       * @deny (create, update, delete): if false
+       */
+      match /chat_rooms/{roomId}/messages/{messageId} {
+        allow get, list: if true;
+        allow create, update, delete: if false;
+      }
+
   }
 
+  // Helper functions
   function isSignedIn() {
     return request.auth != null;
   }
@@ -184,6 +200,6 @@ service cloud.firestore {
   }
 
   function isExistingOwner(userId) {
-    return isOwner(userId) && resource.data.id == userId;
+      return isOwner(userId) && resource != null;
   }
 }
