@@ -44,7 +44,7 @@ interface Event {
   recurrenceEndDate?: Timestamp;
   targetTeamIds?: string[];
   rsvpDeadline?: Timestamp;
-  location?: string;
+  locationId?: string;
   meetingPoint?: string;
   description?: string;
   createdBy: string;
@@ -83,6 +83,13 @@ interface GroupMember {
   nachname?: string;
 }
 
+interface Location {
+  id: string;
+  name: string;
+  address: string;
+  city: string;
+}
+
 
 const getRecurrenceText = (recurrence?: string) => {
   switch (recurrence) {
@@ -98,9 +105,10 @@ const getRecurrenceText = (recurrence?: string) => {
 };
 
 
-const EventCard = ({ event, allUsers }: { event: DisplayEvent; allUsers: GroupMember[] }) => {
+const EventCard = ({ event, allUsers, locations }: { event: DisplayEvent; allUsers: GroupMember[], locations: Location[] }) => {
     const { user } = useUser();
     const firestore = useFirestore();
+    const location = locations.find(l => l.id === event.locationId);
 
     const responsesQuery = useMemoFirebase(() => {
         if (!firestore) return null;
@@ -203,19 +211,19 @@ const EventCard = ({ event, allUsers }: { event: DisplayEvent; allUsers: GroupMe
         <Card key={`${event.id}-${event.displayDate.toISOString()}`}>
             <CardHeader>
                 <CardTitle>{event.title}</CardTitle>
-                <div className="text-sm text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 pt-1">
+                 <div className="text-sm text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:flex-wrap gap-x-4 gap-y-1 pt-1">
                     <div className="flex items-center gap-1.5">
-                        <Clock className="h-4 w-4" />
+                        <Clock className="h-4 w-4 flex-shrink-0" />
                         <span>{timeString}</span>
                     </div>
-                    {event.location && (
+                    {location && (
                         <div className="flex items-center gap-1.5">
-                            <MapPin className="h-4 w-4" />
-                            <span>{event.location}</span>
+                            <MapPin className="h-4 w-4 flex-shrink-0" />
+                            <span>{location.name}, {location.address}, {location.city}</span>
                         </div>
                     )}
                     {recurrenceText && (
-                        <Badge variant="outline" className="flex items-center gap-1.5">
+                        <Badge variant="outline" className="flex items-center gap-1.5 w-fit mt-1 sm:mt-0">
                             <Repeat className="h-3 w-3" />
                             <span>{recurrenceText}</span>
                         </Badge>
@@ -328,6 +336,11 @@ export default function KalenderPage() {
     if (!firestore) return null;
     return query(collection(firestore, 'teams'));
   }, [firestore]);
+    
+  const locationsQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'locations'));
+  }, [firestore]);
 
   const eventsQuery = useMemoFirebase(() => {
     if (!firestore) return null;
@@ -343,9 +356,10 @@ export default function KalenderPage() {
   const { data: teams, isLoading: teamsLoading } = useCollection<Team>(teamsQuery);
   const { data: eventsData, isLoading: eventsLoading, error } = useCollection<Event>(eventsQuery);
   const { data: allUsers, isLoading: usersLoading } = useCollection<GroupMember>(groupMembersQuery);
+  const { data: locations, isLoading: locationsLoading } = useCollection<Location>(locationsQuery);
   
 
-  const isLoading = categoriesLoading || teamsLoading || eventsLoading || usersLoading;
+  const isLoading = categoriesLoading || teamsLoading || eventsLoading || usersLoading || locationsLoading;
 
  const groupedTeams = useMemo(() => {
     if (!categories || !teams) return [];
@@ -523,7 +537,7 @@ export default function KalenderPage() {
                         {error && <p className="text-destructive">Fehler: {error.message}</p>}
                         {!isLoading && selectedEvents.length > 0 ? (
                             selectedEvents.map(event => (
-                               <EventCard event={event} allUsers={allUsers || []} key={`${event.id}-${event.displayDate.toISOString()}`} />
+                               <EventCard event={event} allUsers={allUsers || []} locations={locations || []} key={`${event.id}-${event.displayDate.toISOString()}`} />
                             ))
                         ) : (
                         !isLoading && (
