@@ -57,7 +57,7 @@ export function Header() {
             Aktuelles
           </Link>
           <Link 
-            href="#" 
+            href="/chat" 
             className={cn("transition-colors hover:text-foreground/80", pathname === '/chat' ? 'text-foreground' : 'text-muted-foreground')}
             >
             Chat
@@ -65,7 +65,7 @@ export function Header() {
            <DropdownMenu>
             <DropdownMenuTrigger className={cn(
                 "flex items-center gap-1 transition-colors hover:text-foreground/80 focus:outline-none",
-                isVerwaltungActive ? 'text-foreground' : 'text-muted-foreground'
+                isVerwaltungActive ? 'text-foreground font-semibold' : 'text-muted-foreground'
             )}>
               Verwaltung
               <ChevronDown className="h-4 w-4" />
