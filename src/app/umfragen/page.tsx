@@ -364,7 +364,7 @@ function PollCard({ poll, allUsers }: { poll: Poll; allUsers: GroupMember[] }) {
 
         const responseRef = doc(collection(firestore, 'polls', poll.id, 'responses'));
         
-        const responseData: { [key: string]: any } = {
+        let responseData: { [key: string]: any } = {
             userId: user.uid,
             selectedOptionIds: selectedOptions,
             respondedAt: serverTimestamp(),
@@ -391,10 +391,20 @@ function PollCard({ poll, allUsers }: { poll: Poll; allUsers: GroupMember[] }) {
             });
     };
     
-    const handleDeletePoll = async () => {
+    const handleDeletePoll = () => {
         if (!firestore) return;
-        await deleteDoc(doc(firestore, 'polls', poll.id));
-        toast({title: "Umfrage gelöscht"});
+        const pollRef = doc(firestore, 'polls', poll.id);
+        deleteDoc(pollRef)
+            .then(() => {
+                toast({title: "Umfrage gelöscht"});
+            })
+            .catch((serverError) => {
+                 const permissionError = new FirestorePermissionError({
+                    path: pollRef.path,
+                    operation: 'delete',
+                });
+                errorEmitter.emit('permission-error', permissionError);
+            });
     }
 
     const handleOptionChange = (optionId: string) => {
