@@ -36,7 +36,7 @@ export function Header() {
     }
   };
   
-  const verwaltungPaths = ["/mannschaften", "/mitglieder", "/admin/news", "/umfragen", "/termine", "/aktuelles"];
+  const verwaltungPaths = ["/mannschaften", "/mitglieder", "/admin/news", "/umfragen", "/aktuelles"];
   const isVerwaltungActive = verwaltungPaths.some(p => pathname.startsWith(p));
 
 
@@ -50,6 +50,12 @@ export function Header() {
         </div>
 
         <nav className="hidden md:flex items-center justify-center gap-4 text-sm font-medium flex-1">
+          <Link 
+            href="/termine" 
+            className={cn("transition-colors hover:text-foreground/80", pathname.startsWith('/termine') ? 'text-foreground' : 'text-muted-foreground')}
+            >
+            Kalender
+          </Link>
           <Link 
             href="/chat" 
             className={cn("transition-colors hover:text-foreground/80", pathname === '/chat' ? 'text-foreground' : 'text-muted-foreground')}
