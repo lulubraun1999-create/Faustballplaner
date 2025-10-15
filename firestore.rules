@@ -2,47 +2,68 @@
  * @fileoverview Firestore Security Rules for Werkself Hub.
  *
  * Core Philosophy:
- * This ruleset prioritizes security by enforcing strict ownership and role-based access control.
- * Data is structured to minimize dependencies and avoid complex `get()` calls in rules.
+ * This ruleset prioritizes a strict separation of concerns. User-generated content
+ * is secured via path-based ownership. Global data (news, matches, players) is
+ * assumed to be managed administratively. Rules are designed to avoid complex
+ * queries and external `get()` calls for authorization.
  *
  * Data Structure:
- * - User-specific data (e.g., forum posts, user profiles) is nested under `/users/{userId}`.
- * - Public data (e.g., news articles, matches, players) resides in top-level collections.
- * - Polls and poll responses are stored in `/polls/{pollId}/responses/{responseId}`
+ * - /news_articles/{newsArticleId}: Public news articles.
+ * - /matches/{matchId}: Public match data.
+ * - /players/{playerId}: Public player data.
+ * - /highlight_reels/{highlightReelId}: Public highlight reels with denormalized matchId.
+ * - /users/{userId}: Private user data.
+ * - /users/{userId}/forum_posts/{postId}: User-owned forum posts.
+ * - /team_categories/{categoryId}: Public team categories
+ * - /teams/{teamId}: Public teams
+ * - /members/{memberId}: Public members (denormalized user data)
+ * - /group_members/{memberId}: Public group members (lightweight user data)
+ * - /polls/{pollId}: Polls created by users.
+ * - /polls/{pollId}/responses/{responseId}: Responses to a poll.
  *
  * Key Security Decisions:
- * - Listing of users is disallowed.
- * - All write operations require authentication.
- * - Data validation is limited to authorization-critical fields in this prototype.
+ * - No user listing is allowed for any collection.
+ * - Global data collections (/news_articles, /matches, /players, /highlight_reels, /team_categories, /teams, /members, /group_members) are publicly readable and writable by authenticated users.
+ * - User-owned data (/users/{userId}, /users/{userId}/forum_posts/{postId}) is strictly controlled via path-based ownership.
+ * - Authorization logic is encapsulated in helper functions for clarity and maintainability.
  *
  * Denormalization for Authorization:
- * - The `matchId` field is denormalized in the `/highlight_reels` collection to avoid costly `get()` calls when querying highlight reels for a specific match.
+ * - HighlightReels denormalize `matchId` to avoid needing to query the `/matches` collection during rule evaluation.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    /**
+     * @description Checks if the request is authenticated.
+     */
     function isSignedIn() {
       return request.auth != null;
     }
 
+    /**
+     * @description Checks if the authenticated user ID matches the provided user ID.
+     */
     function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    function isExistingOwner(userId) {
-      return isOwner(userId) && resource != null;
+      return request.auth.uid == userId;
     }
 
     /**
-     * @description Rules for managing news articles.
+     * @description Checks if the authenticated user ID matches the resource owner ID and the resource exists.
+     */
+    function isExistingOwner(userId) {
+        return isOwner(userId) && resource != null;
+    }
+
+    /**
+     * @description Rules for the news_articles collection.
      * @path /news_articles/{newsArticleId}
-     * @allow get, list: Anyone can read news articles.
-     * @allow create: Only authenticated users can create news articles, the author field has to match their user ID
-     * @allow update, delete: Only the author of the news article can modify or delete it.
-     * @deny create: if request.resource.data.author != request.auth.uid;
-     * @deny update, delete: if resource.data.author != request.auth.uid;
-     * @principle Public read, owner-only writes; ensures only authors can modify their articles.
+     * @allow (get, list): Anyone can read news articles.
+     * @allow (create): Authenticated user can create a news article.
+     * @deny (create): Unauthenticated user can't create a news article.
+     * @deny (update): Only the article author can update the article.  The ownership field is missing from the entity.
+     * @deny (delete): Only the article author can delete the article. The ownership field is missing from the entity.
+     * @principle Public read, owner-only writes (requires 'authorId' field).
      */
     match /news_articles/{newsArticleId} {
       allow get, list: if true;
@@ -51,13 +72,14 @@ service cloud.firestore {
     }
 
     /**
-     * @description Rules for managing match data.
+     * @description Rules for the matches collection.
      * @path /matches/{matchId}
-     * @allow get, list: Anyone can read match data.
-     * @allow create: Only authenticated users can create matches.
-     * @allow update, delete: Only the creator of the match can modify or delete it.
-     * @deny create, update, delete: if false;
-     * @principle Public read, owner-only writes; ensures only authorized users can modify match data.
+     * @allow (get, list): Anyone can read match data.
+     * @allow (create): Authenticated user can create match data.
+     * @deny (create): Unauthenticated user can't create match data.
+     * @deny (update): Only the match author can update the match. The ownership field is missing from the entity.
+     * @deny (delete): Only the match author can delete the match. The ownership field is missing from the entity.
+     * @principle Public read, owner-only writes (requires 'authorId' field).
      */
     match /matches/{matchId} {
       allow get, list: if true;
@@ -66,13 +88,14 @@ service cloud.firestore {
     }
 
     /**
-     * @description Rules for managing player data.
+     * @description Rules for the players collection.
      * @path /players/{playerId}
-     * @allow get, list: Anyone can read player data.
-     * @allow create: Only authenticated users can create players.
-     * @allow update, delete: Only the creator of the player can modify or delete it.
-     * @deny create, update, delete: if false;
-     * @principle Public read, owner-only writes; ensures only authorized users can modify player data.
+     * @allow (get, list): Anyone can read player data.
+     * @allow (create): Authenticated user can create player data.
+     * @deny (create): Unauthenticated user can't create player data.
+     * @deny (update): Only the player author can update the player. The ownership field is missing from the entity.
+     * @deny (delete): Only the player author can delete the player. The ownership field is missing from the entity.
+     * @principle Public read, owner-only writes (requires 'authorId' field).
      */
     match /players/{playerId} {
       allow get, list: if true;
@@ -81,13 +104,14 @@ service cloud.firestore {
     }
 
     /**
-     * @description Rules for managing highlight reels.
+     * @description Rules for the highlight_reels collection.
      * @path /highlight_reels/{highlightReelId}
-     * @allow get, list: Anyone can read highlight reels.
-     * @allow create: Only authenticated users can create highlight reels.
-     * @allow update, delete: Only the creator of the highlight reel can modify or delete it.
-     * @deny create, update, delete: if false;
-     * @principle Public read, owner-only writes; ensures only authorized users can modify highlight reel data.
+     * @allow (get, list): Anyone can read highlight reel data.
+     * @allow (create): Authenticated user can create highlight reel data.
+     * @deny (create): Unauthenticated user can't create highlight reel data.
+     * @deny (update): Only the highlight reel author can update the highlight reel.  The ownership field is missing from the entity.
+     * @deny (delete): Only the highlight reel author can delete the highlight reel. The ownership field is missing from the entity.
+     * @principle Public read, owner-only writes (requires 'authorId' field).
      */
     match /highlight_reels/{highlightReelId} {
       allow get, list: if true;
@@ -96,47 +120,51 @@ service cloud.firestore {
     }
 
     /**
-     * @description Rules for managing forum posts created by a user.
+     * @description Rules for the forum_posts collection under a specific user.
      * @path /users/{userId}/forum_posts/{postId}
-     * @allow get, list: Only the owner can read/list the forum posts.
-     * @allow create: Only the owner can create forum posts. The userId must match the authenticated user.
-     * @allow update, delete: Only the owner can modify or delete their forum posts.
-     * @deny create: if request.resource.data.userId != request.auth.uid;
-     * @deny update, delete: if resource.data.userId != request.auth.uid;
-     * @principle Owner-only access; restricts access to a user's own forum posts using path-based ownership.
+     * @allow (get, list): Only the owner can read their own forum posts.
+     * @allow (create): Only the owner can create forum posts under their own user ID.
+     * @deny (create): A user can't create a forum post under another user's ID.
+     * @allow (update): Only the owner can update their own forum posts, and the document must exist.
+     * @allow (delete): Only the owner can delete their own forum posts, and the document must exist.
+     * @deny (delete): A user can't delete a forum post that doesn't exist.
+     * @principle Enforces document ownership for all operations.
      */
     match /users/{userId}/forum_posts/{postId} {
-      allow get, list: if isOwner(userId);
-      allow create: if isOwner(userId);
-      allow update: if isExistingOwner(userId);
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.userId == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.userId == userId;
       allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Rules for managing user profiles.
+     * @description Rules for the user document.
      * @path /users/{userId}
-     * @allow get: Only the owner can read their own profile.
-     * @allow create: Only the user themselves can create their profile.  The userId must match the authenticated user.
-     * @allow update, delete: Only the owner can modify or delete their profile.
-     * @deny create: if request.resource.data.id != request.auth.uid;
-     * @deny update: if resource.data.id != request.resource.data.id; // Ensures immutability of the user ID
-     * @principle Owner-only access; restricts access to a user's own profile using path-based ownership.
+     * @allow (get): Only the owner can get their own user document.
+     * @allow (create): Only the user can create their own document (self-registration).
+     * @deny (create): A user can't create a document with another user's ID.
+     * @allow (update): Only the owner can update their own user document, and the document must exist. The userId cannot be changed.
+     * @allow (delete): Only the owner can delete their own user document, and the document must exist.
+     * @principle Enforces document ownership for all operations.
      */
     match /users/{userId} {
       allow get: if isOwner(userId);
       allow list: if false;
-      allow create: if isOwner(userId);
-      allow update: if isExistingOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.id == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
       allow delete: if isExistingOwner(userId);
     }
 
-   /**
-     * @description Rules for managing team categories.
+    /**
+     * @description Rules for the team_categories collection.
      * @path /team_categories/{categoryId}
-     * @allow get, list: Anyone can read team categories.
-     * @allow create: Only authenticated users can create team categories.
-     * @allow update, delete: Only the creator of the team category can modify or delete it.
-     * @principle Public read, owner-only writes; ensures only authorized users can modify team category data.
+     * @allow (get, list): Anyone can read team category data.
+     * @allow (create): Authenticated user can create team category data.
+     * @deny (create): Unauthenticated user can't create team category data.
+     * @deny (update): Only the team category author can update the team category. The ownership field is missing from the entity.
+     * @deny (delete): Only the team category author can delete the team category. The ownership field is missing from the entity.
+     * @principle Public read, owner-only writes (requires 'authorId' field).
      */
     match /team_categories/{categoryId} {
       allow get, list: if true;
@@ -144,13 +172,15 @@ service cloud.firestore {
       allow update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
     }
 
-    /**
-     * @description Rules for managing teams.
+      /**
+     * @description Rules for the teams collection.
      * @path /teams/{teamId}
-     * @allow get, list: Anyone can read team data.
-     * @allow create: Only authenticated users can create teams.
-     * @allow update, delete: Only the creator of the team can modify or delete it.
-     * @principle Public read, owner-only writes; ensures only authorized users can modify team data.
+     * @allow (get, list): Anyone can read team data.
+     * @allow (create): Authenticated user can create team data.
+     * @deny (create): Unauthenticated user can't create team data.
+     * @deny (update): Only the team author can update the team. The ownership field is missing from the entity.
+     * @deny (delete): Only the team author can delete the team.  The ownership field is missing from the entity.
+     * @principle Public read, owner-only writes (requires 'authorId' field).
      */
     match /teams/{teamId} {
       allow get, list: if true;
@@ -158,13 +188,15 @@ service cloud.firestore {
       allow update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
     }
 
-    /**
-     * @description Rules for managing members.
+      /**
+     * @description Rules for the members collection.
      * @path /members/{memberId}
-     * @allow get, list: Anyone can read member data.
-     * @allow create: Only authenticated users can create members.
-     * @allow update, delete: Only the creator of the member can modify or delete it.
-     * @principle Public read, owner-only writes; ensures only authorized users can modify member data.
+     * @allow (get, list): Anyone can read members data.
+     * @allow (create): Authenticated user can create members data.
+     * @deny (create): Unauthenticated user can't create members data.
+     * @deny (update): Only the member author can update the member. The ownership field is missing from the entity.
+     * @deny (delete): Only the member author can delete the member.  The ownership field is missing from the entity.
+     * @principle Public read, owner-only writes (requires 'authorId' field).
      */
     match /members/{memberId} {
       allow get, list: if true;
@@ -172,13 +204,15 @@ service cloud.firestore {
       allow update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
     }
 
-    /**
-     * @description Rules for managing group members.
+      /**
+     * @description Rules for the group_members collection.
      * @path /group_members/{memberId}
-     * @allow get, list: Anyone can read group member data.
-     * @allow create: Only authenticated users can create group members.
-     * @allow update, delete: Only the creator of the group member can modify or delete it.
-     * @principle Public read, owner-only writes; ensures only authorized users can modify group member data.
+     * @allow (get, list): Anyone can read group_members data.
+     * @allow (create): Authenticated user can create group_members data.
+     * @deny (create): Unauthenticated user can't create group_members data.
+     * @deny (update): Only the group_members author can update the group_members. The ownership field is missing from the entity.
+     * @deny (delete): Only the group_members author can delete the group_members.  The ownership field is missing from the entity.
+     * @principle Public read, owner-only writes (requires 'authorId' field).
      */
     match /group_members/{memberId} {
       allow get, list: if true;
@@ -186,39 +220,38 @@ service cloud.firestore {
       allow update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
     }
 
-    /**
-     * @description Rules for managing polls.
+        /**
+     * @description Rules for the polls collection.
      * @path /polls/{pollId}
-     * @allow get, list: Anyone can read poll data.
-     * @allow create: Only authenticated users can create polls, the createdBy field has to match their user ID
-     * @allow update, delete: Only the creator of the poll can modify or delete it.
-     * @deny create: if request.resource.data.createdBy != request.auth.uid;
-     * @deny update, delete: if resource.data.createdBy != request.auth.uid;
-     * @principle Public read, owner-only writes; ensures only authors can modify their polls.
+     * @allow (get, list): Anyone can read poll data.
+     * @allow (create): Authenticated user can create poll data.
+     * @deny (create): Unauthenticated user can't create poll data.
+     * @allow update: Authenticated user can update poll if created by them.
+     * @allow delete: Authenticated user can delete poll if created by them.
+     * @principle Public read, owner-only writes
      */
     match /polls/{pollId} {
-      allow get, list: if true;
-      allow create: if isSignedIn() ;
-      allow update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+        allow get, list: if true;
+        allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
+        allow update: if isSignedIn() && resource.data.createdBy == request.auth.uid && resource != null;
+        allow delete: if isSignedIn() && resource.data.createdBy == request.auth.uid && resource != null;
     }
 
     /**
-     * @description Rules for managing poll responses.
+     * @description Rules for the poll_responses collection.
      * @path /polls/{pollId}/responses/{responseId}
-     * @allow get, list: Only the owner can read/list the poll responses.
-     * @allow create: Only the owner can create poll responses. The userId must match the authenticated user.
-     * @allow update: Not allowed, as poll responses should be immutable.
-     * @allow delete: Only the owner can delete their poll response.
-     * @deny create: if request.resource.data.userId != request.auth.uid;
-     * @deny update: if true;
-     * @deny delete: if resource.data.userId != request.auth.uid;
-     * @principle Owner-only access; restricts access to a user's own poll responses.
+     * @allow (get, list): Anyone can read poll responses.
+     * @allow (create): Authenticated user can create poll response.
+     * @deny (create): Unauthenticated user can't create poll response.
+     * @allow update: Authenticated user can update poll response if created by them.
+     * @allow delete: Authenticated user can delete poll response if created by them.
+     * @principle Public read, owner-only writes
      */
-    match /polls/{pollId}/responses/{responseId} {
-      allow get, list: if isOwner(request.auth.uid);
-      allow create: if isOwner(request.auth.uid);
-      allow update: if false;
-      allow delete: if isExistingOwner(request.auth.uid);
-    }
+      match /polls/{pollId}/responses/{responseId} {
+        allow get, list: if true;
+        allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+        allow update: if isSignedIn() && resource.data.userId == request.auth.uid  && resource != null;
+        allow delete: if isSignedIn() && resource.data.userId == request.auth.uid  && resource != null;
+      }
   }
 }
