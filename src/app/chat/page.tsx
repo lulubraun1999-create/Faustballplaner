@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useFirestore, useUser, useCollection, useDoc, useMemoFirebase } from '@/firebase';
-import { collection, query, orderBy, addDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { collection, query, orderBy, addDoc, serverTimestamp, Timestamp, doc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
@@ -234,5 +234,3 @@ export default function ChatPage() {
     </div>
   );
 }
-
-    
