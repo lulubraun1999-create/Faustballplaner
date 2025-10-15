@@ -3,12 +3,12 @@
 
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useFirestore, useUser, useCollection, useDoc, useMemoFirebase } from '@/firebase';
-import { collection, query, orderBy, addDoc, serverTimestamp, Timestamp, doc } from 'firebase/firestore';
+import { collection, query, orderBy, addDoc, serverTimestamp, Timestamp, doc, deleteDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Send, Loader2, Users } from 'lucide-react';
+import { Send, Loader2, Users, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { format, isToday, isYesterday } from 'date-fns';
@@ -40,6 +40,7 @@ interface ChatRoom {
 }
 
 const getInitials = (name: string) => {
+  if (!name) return '??';
   const nameParts = name.split(' ');
   if (nameParts.length > 1) {
     return `${nameParts[0][0]}${nameParts[nameParts.length - 1][0]}`.toUpperCase();
@@ -116,6 +117,20 @@ export default function ChatPage() {
     }
   };
 
+  const handleDeleteMessage = async (messageId: string) => {
+    if (!firestore || !activeRoom) return;
+    const messageRef = doc(firestore, 'chat_rooms', activeRoom.id, 'messages', messageId);
+    try {
+        await deleteDoc(messageRef);
+    } catch (error: any) {
+        toast({
+            variant: 'destructive',
+            title: 'Fehler beim Löschen',
+            description: error.message
+        });
+    }
+  }
+
   const groupMessagesByDate = (messages: ChatMessage[]) => {
     return messages.reduce((acc, message) => {
       if (!message.timestamp) return acc;
@@ -188,12 +203,24 @@ export default function ChatPage() {
                                 {dayMessages.map(msg => {
                                     const isCurrentUser = msg.userId === user?.uid;
                                     return (
-                                    <div key={msg.id} className={cn("flex items-end gap-2", isCurrentUser && "justify-end")}>
+                                    <div key={msg.id} className={cn("flex items-end gap-2 group", isCurrentUser && "justify-end")}>
                                         {!isCurrentUser && (
                                             <div className="rounded-full bg-muted h-8 w-8 flex items-center justify-center text-sm font-bold flex-shrink-0">
                                                 {getInitials(msg.username)}
                                             </div>
                                         )}
+
+                                        {isCurrentUser && (
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                onClick={() => handleDeleteMessage(msg.id)}
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        )}
+
                                         <div className={cn("p-3 rounded-lg max-w-sm md:max-w-md", isCurrentUser ? "bg-primary text-primary-foreground" : "bg-muted")}>
                                             {!isCurrentUser && <p className="font-bold text-sm">{msg.username}</p>}
                                             <p className="whitespace-pre-wrap">{msg.message}</p>
