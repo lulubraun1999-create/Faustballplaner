@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { format, isToday, isYesterday } from 'date-fns';
 import { de } from 'date-fns/locale';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 interface UserData {
   adminRechte?: boolean;
@@ -299,9 +300,16 @@ export default function ChatPage() {
                                     return (
                                     <div key={msg.id} className={cn("flex items-end gap-2 group", isCurrentUser && "justify-end")}>
                                         {!isCurrentUser && (
-                                            <div className="rounded-full bg-muted h-8 w-8 flex items-center justify-center text-sm font-bold flex-shrink-0">
-                                                {getInitials(msg.username)}
-                                            </div>
+                                            <Popover>
+                                                <PopoverTrigger asChild>
+                                                    <div className="rounded-full bg-muted h-8 w-8 flex items-center justify-center text-sm font-bold flex-shrink-0 cursor-pointer">
+                                                        {getInitials(msg.username)}
+                                                    </div>
+                                                </PopoverTrigger>
+                                                <PopoverContent className="w-auto p-2">
+                                                    <p className="text-sm font-semibold">{msg.username}</p>
+                                                </PopoverContent>
+                                            </Popover>
                                         )}
 
                                         {isCurrentUser && (
@@ -321,9 +329,16 @@ export default function ChatPage() {
                                             <p className={cn("text-xs mt-1", isCurrentUser ? "text-primary-foreground/70" : "text-muted-foreground")}>{msg.timestamp ? format(msg.timestamp.toDate(), 'HH:mm') : ''}</p>
                                         </div>
                                          {isCurrentUser && (
-                                            <div className="rounded-full bg-primary text-primary-foreground h-8 w-8 flex items-center justify-center text-sm font-bold flex-shrink-0">
-                                                {getInitials(msg.username)}
-                                            </div>
+                                            <Popover>
+                                                <PopoverTrigger asChild>
+                                                    <div className="rounded-full bg-primary text-primary-foreground h-8 w-8 flex items-center justify-center text-sm font-bold flex-shrink-0 cursor-pointer">
+                                                        {getInitials(msg.username)}
+                                                    </div>
+                                                </PopoverTrigger>
+                                                <PopoverContent className="w-auto p-2">
+                                                    <p className="text-sm font-semibold">{msg.username}</p>
+                                                </PopoverContent>
+                                            </Popover>
                                         )}
                                     </div>
                                     )
