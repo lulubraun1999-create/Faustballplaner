@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { Header } from '@/components/header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Calendar } from '@/components/ui/calendar';
@@ -21,7 +21,9 @@ import {
 } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
 interface Event {
   id: string;
@@ -43,6 +45,19 @@ interface DisplayEvent extends Event {
   displayDate: Date;
 }
 
+interface TeamCategory {
+  id: string;
+  name: string;
+  order: number;
+}
+
+interface Team {
+  id: string;
+  name: string;
+  categoryId: string;
+}
+
+
 const getRecurrenceText = (recurrence?: string) => {
   switch (recurrence) {
     case 'weekly':
@@ -59,37 +74,62 @@ const getRecurrenceText = (recurrence?: string) => {
 export default function KalenderPage() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
   
   const firestore = useFirestore();
 
   const start = startOfMonth(currentMonth);
   const end = endOfMonth(currentMonth);
+  
+  const categoriesQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'team_categories'), orderBy('order'));
+  }, [firestore]);
+
+  const teamsQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'teams'));
+  }, [firestore]);
 
   const eventsQuery = useMemoFirebase(() => {
     if (!firestore) return null;
-    return query(
-      collection(firestore, 'events'),
-      // Fetch events that are either not recurring or could potentially recur into the current month view.
-      // This is an approximation; client-side logic will do the heavy lifting for recurrence.
-      or(
-        where('recurrence', '==', 'none'),
-        where('date', '<=', end)
-      )
-    );
-  }, [firestore, end]);
+    // Fetch all events. Filtering based on recurrence will be handled client-side.
+    return query(collection(firestore, 'events'));
+  }, [firestore]);
 
+  const { data: categories, isLoading: categoriesLoading } = useCollection<TeamCategory>(categoriesQuery);
+  const { data: teams, isLoading: teamsLoading } = useCollection<Team>(teamsQuery);
   const { data: events, isLoading: eventsLoading, error } = useCollection<Event>(eventsQuery);
+  
+  const isLoading = categoriesLoading || teamsLoading || eventsLoading;
+
+ const groupedTeams = useMemo(() => {
+    if (!categories || !teams) return [];
+    return categories.map(category => ({
+      ...category,
+      teams: teams.filter(team => team.categoryId === category.id).sort((a,b) => a.name.localeCompare(b.name))
+    }));
+  }, [categories, teams]);
+
 
  const allVisibleEvents = useMemo(() => {
     if (!events) return [];
 
+    const filteredByTeam = events.filter(event => {
+        // If no teams are selected in the filter, show all events.
+        if (selectedTeamIds.length === 0) return true;
+        // Show events that are not targeted to any specific team (public events).
+        if (!event.targetTeamIds || event.targetTeamIds.length === 0) return true;
+        // Show events that are targeted to at least one of the selected teams.
+        return event.targetTeamIds.some(teamId => selectedTeamIds.includes(teamId));
+    });
+
     const visibleEvents: DisplayEvent[] = [];
     const interval = { start: startOfMonth(currentMonth), end: endOfMonth(currentMonth) };
 
-    for (const event of events) {
+    for (const event of filteredByTeam) {
       const originalStartDate = event.date.toDate();
 
-      // Handle non-recurring events
       if (event.recurrence === 'none' || !event.recurrence) {
         if (isWithinInterval(originalStartDate, interval)) {
           visibleEvents.push({ ...event, displayDate: originalStartDate });
@@ -97,26 +137,35 @@ export default function KalenderPage() {
         continue;
       }
 
-      // Handle recurring events
       let currentDate = originalStartDate;
-      const step = event.recurrence === 'weekly' ? 1 : 2;
-
+      
       if (event.recurrence === 'weekly' || event.recurrence === 'biweekly') {
-        // Move to the first occurrence within or after the start of the month
-        while (currentDate < interval.start) {
-            currentDate = addWeeks(currentDate, step);
+        const step = event.recurrence === 'weekly' ? 1 : 2;
+        // Fast-forward to the current view interval
+        if (currentDate < interval.start) {
+            const weeksDiff = Math.floor((interval.start.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24 * 7));
+            const stepsToSkip = Math.floor(weeksDiff / step);
+            if (stepsToSkip > 0) {
+              currentDate = addWeeks(currentDate, stepsToSkip * step);
+            }
         }
-        // Add all occurrences within the month
+         while (currentDate < interval.start) {
+             currentDate = addWeeks(currentDate, step);
+         }
         while (currentDate <= interval.end) {
             visibleEvents.push({ ...event, displayDate: currentDate });
             currentDate = addWeeks(currentDate, step);
         }
       } else if (event.recurrence === 'monthly') {
-         // Move to the first occurrence within or after the start of the month
+         if (currentDate < interval.start) {
+             const monthDiff = (interval.start.getFullYear() - currentDate.getFullYear()) * 12 + (interval.start.getMonth() - currentDate.getMonth());
+             if (monthDiff > 0) {
+                currentDate = addMonths(currentDate, monthDiff);
+             }
+         }
          while(currentDate < interval.start) {
             currentDate = addMonths(currentDate, 1);
          }
-         // Add all occurrences within the month
         while (currentDate <= interval.end) {
             if (isSameMonth(currentDate, interval.start)) {
                 visibleEvents.push({ ...event, displayDate: currentDate });
@@ -126,7 +175,7 @@ export default function KalenderPage() {
       }
     }
     return visibleEvents;
-  }, [events, currentMonth]);
+  }, [events, currentMonth, selectedTeamIds]);
 
   const eventDates = useMemo(() => {
     return allVisibleEvents.map(event => event.displayDate);
@@ -138,113 +187,155 @@ export default function KalenderPage() {
       .filter(event => isSameDay(event.displayDate, selectedDate))
       .sort((a, b) => a.displayDate.getTime() - b.displayDate.getTime());
   }, [selectedDate, allVisibleEvents]);
+  
+  const handleTeamFilterChange = (teamId: string, checked: boolean) => {
+    setSelectedTeamIds(prev => {
+        if (checked) {
+            return [...prev, teamId];
+        } else {
+            return prev.filter(id => id !== teamId);
+        }
+    });
+  };
 
 
   return (
     <div className="flex min-h-screen w-full flex-col bg-background">
       <Header />
       <main className="flex-1 p-4 md:p-8">
-        <div className="mx-auto max-w-6xl">
+        <div className="mx-auto max-w-7xl">
             <div className="flex items-center justify-between mb-8">
               <h1 className="text-3xl font-bold">Kalender</h1>
             </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <Card>
-              <CardContent className="p-0 sm:p-2 flex justify-center">
-                <Calendar
-                  mode="single"
-                  selected={selectedDate}
-                  onSelect={setSelectedDate}
-                  month={currentMonth}
-                  onMonthChange={setCurrentMonth}
-                  className="rounded-md"
-                  locale={de}
-                  modifiers={{ event: eventDates }}
-                  modifiersClassNames={{
-                    event: 'bg-primary/20 text-primary-foreground rounded-full',
-                    selected: 'bg-primary text-primary-foreground hover:bg-primary/90 focus:bg-primary/90',
-                  }}
-                   components={{
-                      DayContent: ({ date, activeModifiers }) => (
-                        <div className="relative h-full w-full">
-                           <span className={cn(activeModifiers.today && "font-bold")}>{format(date, 'd')}</span>
-                           {activeModifiers.event && <div className="absolute bottom-1 left-1/2 -translate-x-1/2 h-1.5 w-1.5 rounded-full bg-primary" />}
-                        </div>
-                      )
-                    }}
-                />
-              </CardContent>
-            </Card>
-            <div className="lg:col-span-1">
-             <div className="mb-8">
-                <h2 className="text-2xl font-bold">Termine für {selectedDate ? format(selectedDate, 'dd. MMMM yyyy', {locale: de}) : '...'}</h2>
-             </div>
-             <div className="space-y-4">
-                {eventsLoading && <div className="flex items-center justify-center p-8"><Loader2 className="h-8 w-8 animate-spin text-primary"/></div>}
-                {error && <p className="text-destructive">Fehler: {error.message}</p>}
-                {!eventsLoading && selectedEvents.length > 0 ? (
-                    selectedEvents.map(event => {
-                        const recurrenceText = getRecurrenceText(event.recurrence);
-                        const startDate = event.displayDate;
-                        // For recurring events, endTime needs careful handling if it spans across days, 
-                        // but for this implementation we assume endTime is for the same day.
-                        const endDate = event.endTime?.toDate();
-
-                        let timeString;
-                        if (event.isAllDay) {
-                            timeString = "Ganztägig";
-                        } else if (endDate) {
-                             timeString = `${format(startDate, 'HH:mm')} - ${format(endDate, 'HH:mm')} Uhr`;
-                        } else {
-                            timeString = `${format(startDate, 'HH:mm')} Uhr`;
-                        }
-
-                        return (
-                             <Card key={`${event.id}-${event.displayDate.toISOString()}`}>
-                                <CardHeader>
-                                    <CardTitle>{event.title}</CardTitle>
-                                    <div className="text-sm text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 pt-1">
-                                        <div className="flex items-center gap-1.5">
-                                            <Clock className="h-4 w-4" />
-                                            <span>{timeString}</span>
-                                        </div>
-                                        {event.location && (
-                                            <div className="flex items-center gap-1.5">
-                                                <MapPin className="h-4 w-4" />
-                                                <span>{event.location}</span>
-                                            </div>
-                                        )}
-                                        {recurrenceText && (
-                                            <Badge variant="outline" className="flex items-center gap-1.5">
-                                                <Repeat className="h-3 w-3" />
-                                                <span>{recurrenceText}</span>
-                                            </Badge>
-                                        )}
+            <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] lg:grid-cols-[320px_1fr] gap-8">
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Filter</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                       {isLoading ? <Loader2 className="animate-spin" /> : (
+                         <Accordion type="multiple" className="w-full" defaultValue={groupedTeams.map(g => g.id)}>
+                            {groupedTeams.map(category => (
+                            <AccordionItem value={category.id} key={category.id}>
+                                <AccordionTrigger>{category.name}</AccordionTrigger>
+                                <AccordionContent className="space-y-2">
+                                {category.teams.map(team => (
+                                    <div key={team.id} className="flex items-center space-x-2 pl-2">
+                                        <Checkbox 
+                                            id={`team-${team.id}`}
+                                            checked={selectedTeamIds.includes(team.id)}
+                                            onCheckedChange={(checked) => handleTeamFilterChange(team.id, !!checked)}
+                                        />
+                                        <Label htmlFor={`team-${team.id}`} className="font-normal">{team.name}</Label>
                                     </div>
-                                </CardHeader>
-                                {(event.description || event.meetingPoint) && (
-                                    <CardContent className="space-y-2">
-                                        {event.meetingPoint && <p className="text-sm"><span className="font-semibold">Treffpunkt:</span> {event.meetingPoint}</p>}
-                                        {event.description && <p className="text-sm whitespace-pre-wrap">{event.description}</p>}
-                                    </CardContent>
-                                )}
+                                ))}
+                                </AccordionContent>
+                            </AccordionItem>
+                            ))}
+                        </Accordion>
+                       )}
+                    </CardContent>
+                </Card>
+
+                <div className="md:col-start-2 lg:col-start-2 row-start-1 md:row-start-auto">
+                    <Card>
+                    <CardContent className="p-0 sm:p-2 flex justify-center">
+                        <Calendar
+                        mode="single"
+                        selected={selectedDate}
+                        onSelect={setSelectedDate}
+                        month={currentMonth}
+                        onMonthChange={setCurrentMonth}
+                        className="rounded-md"
+                        locale={de}
+                        modifiers={{ event: eventDates }}
+                        modifiersClassNames={{
+                            event: 'bg-primary/20 text-primary-foreground rounded-full',
+                            selected: 'bg-primary text-primary-foreground hover:bg-primary/90 focus:bg-primary/90',
+                        }}
+                        components={{
+                            DayContent: ({ date, activeModifiers }) => (
+                                <div className="relative h-full w-full flex items-center justify-center">
+                                <span className={cn(activeModifiers.today && "font-bold")}>{format(date, 'd')}</span>
+                                {activeModifiers.event && <div className="absolute bottom-1 h-1.5 w-1.5 rounded-full bg-primary" />}
+                                </div>
+                            )
+                            }}
+                        />
+                    </CardContent>
+                    </Card>
+                </div>
+
+                <div className="md:col-start-2 lg:col-start-2">
+                    <div className="mb-4">
+                        <h2 className="text-2xl font-bold">Termine für {selectedDate ? format(selectedDate, 'dd. MMMM yyyy', {locale: de}) : '...'}</h2>
+                    </div>
+                    <div className="space-y-4">
+                        {isLoading && <div className="flex items-center justify-center p-8"><Loader2 className="h-8 w-8 animate-spin text-primary"/></div>}
+                        {error && <p className="text-destructive">Fehler: {error.message}</p>}
+                        {!isLoading && selectedEvents.length > 0 ? (
+                            selectedEvents.map(event => {
+                                const recurrenceText = getRecurrenceText(event.recurrence);
+                                const startDate = event.displayDate;
+                                const endDate = event.endTime?.toDate();
+
+                                let timeString;
+                                if (event.isAllDay) {
+                                    timeString = "Ganztägig";
+                                } else if (endDate) {
+                                    timeString = `${format(startDate, 'HH:mm')} - ${format(endDate, 'HH:mm')} Uhr`;
+                                } else {
+                                    timeString = `${format(startDate, 'HH:mm')} Uhr`;
+                                }
+
+                                return (
+                                    <Card key={`${event.id}-${event.displayDate.toISOString()}`}>
+                                        <CardHeader>
+                                            <CardTitle>{event.title}</CardTitle>
+                                            <div className="text-sm text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 pt-1">
+                                                <div className="flex items-center gap-1.5">
+                                                    <Clock className="h-4 w-4" />
+                                                    <span>{timeString}</span>
+                                                </div>
+                                                {event.location && (
+                                                    <div className="flex items-center gap-1.5">
+                                                        <MapPin className="h-4 w-4" />
+                                                        <span>{event.location}</span>
+                                                    </div>
+                                                )}
+                                                {recurrenceText && (
+                                                    <Badge variant="outline" className="flex items-center gap-1.5">
+                                                        <Repeat className="h-3 w-3" />
+                                                        <span>{recurrenceText}</span>
+                                                    </Badge>
+                                                )}
+                                            </div>
+                                        </CardHeader>
+                                        {(event.description || event.meetingPoint) && (
+                                            <CardContent className="space-y-2">
+                                                {event.meetingPoint && <p className="text-sm"><span className="font-semibold">Treffpunkt:</span> {event.meetingPoint}</p>}
+                                                {event.description && <p className="text-sm whitespace-pre-wrap">{event.description}</p>}
+                                            </CardContent>
+                                        )}
+                                    </Card>
+                                )
+                            })
+                        ) : (
+                        !isLoading && (
+                            <Card>
+                                <CardContent className="p-8">
+                                    <p className="text-muted-foreground text-center">Keine Termine für diesen Tag.</p>
+                                </CardContent>
                             </Card>
                         )
-                    })
-                ) : (
-                   !eventsLoading && (
-                    <Card>
-                        <CardContent className="p-8">
-                             <p className="text-muted-foreground text-center">Keine Termine für diesen Tag.</p>
-                        </CardContent>
-                    </Card>
-                   )
-                )}
-             </div>
-          </div>
-        </div>
+                        )}
+                    </div>
+                </div>
+            </div>
         </div>
       </main>
     </div>
   );
 }
+
+    
