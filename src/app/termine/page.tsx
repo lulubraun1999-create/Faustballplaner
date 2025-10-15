@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useFirestore, useUser, useCollection, useDoc, useMemoFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { addDoc, collection, serverTimestamp, orderBy, query, Timestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { addDoc, collection, serverTimestamp, orderBy, query, Timestamp, doc, updateDoc, deleteDoc, setDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
@@ -18,9 +18,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { PlusCircle, Trash2, Loader2, CalendarIcon, Edit, Clock, MapPin, Users, Repeat } from 'lucide-react';
+import { PlusCircle, Trash2, Loader2, CalendarIcon, Edit, Clock, MapPin, Users, Repeat, ChevronLeft, ChevronRight, Check, XIcon, HelpCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { format } from 'date-fns';
+import { format, add, startOfWeek, eachDayOfInterval, isSameDay, startOfDay, addWeeks, isWithinInterval } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -49,6 +49,25 @@ interface Event {
   description?: string;
   createdBy: string;
   createdAt: Timestamp;
+}
+
+interface DisplayEvent extends Event {
+  displayDate: Date;
+}
+
+interface EventResponse {
+    id: string;
+    eventId: string;
+    userId: string;
+    eventDate: Timestamp;
+    status: 'attending' | 'declined' | 'uncertain';
+    respondedAt: Timestamp;
+}
+
+interface GroupMember {
+  id: string;
+  vorname?: string;
+  nachname?: string;
 }
 
 interface UserData {
@@ -629,19 +648,261 @@ function EventForm({ onDone, event, categories, teams, locations, isAdmin }: { o
   );
 }
 
+const EventCard = ({ event, allUsers, locations, onEdit, onDelete }: { event: DisplayEvent; allUsers: GroupMember[], locations: Location[], onEdit: (event: Event) => void, onDelete: (event: Event) => void }) => {
+    const { user } = useUser();
+    const firestore = useFirestore();
+    const location = locations.find(l => l.id === event.locationId);
+    const {data: currentUserData} = useDoc<UserData>(user ? doc(firestore, 'users', user.uid) : null);
+    const isAdmin = currentUserData?.adminRechte === true;
+
+    const responsesQuery = useMemoFirebase(() => {
+        if (!firestore) return null;
+        // Query for responses for the specific event instance date
+        return query(collection(firestore, 'events', event.id, 'responses'), where('eventDate', '==', Timestamp.fromDate(startOfDay(event.displayDate))));
+    }, [firestore, event.id, event.displayDate]);
+
+    const { data: responsesForThisInstance, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
+    
+    const userResponse = useMemo(() => {
+         return responsesForThisInstance?.find(r => r.userId === user?.uid);
+    }, [responsesForThisInstance, user]);
+
+    const recurrenceText = getRecurrenceText(event);
+    const startDate = event.displayDate;
+    const endDate = event.endTime?.toDate();
+
+    let timeString;
+    if (event.isAllDay) {
+        timeString = "Ganztägig";
+    } else if (endDate) {
+        // Adjust end date to match start date's day for correct time display
+        const adjustedEndDate = new Date(startDate);
+        adjustedEndDate.setHours(endDate.getHours(), endDate.getMinutes());
+        if (adjustedEndDate < startDate) {
+             adjustedEndDate.setDate(adjustedEndDate.getDate() + 1);
+        }
+        timeString = `${format(startDate, 'HH:mm')} - ${format(adjustedEndDate, 'HH:mm')} Uhr`;
+    } else {
+        timeString = `${format(startDate, 'HH:mm')} Uhr`;
+    }
+    
+    const attendingCount = responsesForThisInstance?.filter(r => r.status === 'attending').length || 0;
+    const declinedCount = responsesForThisInstance?.filter(r => r.status === 'declined').length || 0;
+    const uncertainCount = responsesForThisInstance?.filter(r => r.status === 'uncertain').length || 0;
+
+    const getResponderName = (userId: string) => {
+      const responder = allUsers.find(u => u.id === userId);
+      return responder ? `${responder.vorname || ''} ${responder.nachname || ''}`.trim() : 'Unbekannt';
+    };
+
+    const attendees = useMemo(() => {
+        return (responsesForThisInstance || [])
+            .filter(r => r.status === 'attending')
+            .map(r => getResponderName(r.userId))
+            .sort();
+    }, [responsesForThisInstance, allUsers]);
+
+    const decliners = useMemo(() => {
+        return (responsesForThisInstance || [])
+            .filter(r => r.status === 'declined')
+            .map(r => getResponderName(r.userId))
+            .sort();
+    }, [responsesForThisInstance, allUsers]);
+    
+    const uncertains = useMemo(() => {
+        return (responsesForThisInstance || [])
+            .filter(r => r.status === 'uncertain')
+            .map(r => getResponderName(r.userId))
+            .sort();
+    }, [responsesForThisInstance, allUsers]);
+
+    const handleRsvp = (status: 'attending' | 'declined' | 'uncertain') => {
+        if (!user || !firestore) return;
+
+        const responseCollectionRef = collection(firestore, 'events', event.id, 'responses');
+        const eventDateAsTimestamp = Timestamp.fromDate(startOfDay(event.displayDate));
+        
+        const responseDocId = userResponse?.id || doc(responseCollectionRef).id;
+        
+        const data: Omit<EventResponse, 'id'| 'respondedAt' | 'eventId'> & { respondedAt: any, eventId: string } = {
+            userId: user.uid,
+            status: status,
+            respondedAt: serverTimestamp(),
+            eventDate: eventDateAsTimestamp,
+            eventId: event.id,
+        };
+        
+        const responseRef = doc(responseCollectionRef, responseDocId);
+
+        setDoc(responseRef, data, { merge: true })
+            .catch(serverError => {
+                const permissionError = new FirestorePermissionError({
+                    path: responseRef.path,
+                    operation: 'write',
+                    requestResourceData: data,
+                });
+                errorEmitter.emit('permission-error', permissionError);
+            });
+    };
+
+    const getRecurrenceText = (event: Event) => {
+        const recurrence = event.recurrence;
+        const recurrenceEndDate = event.recurrenceEndDate?.toDate();
+        let text = '';
+        switch (recurrence) {
+            case 'weekly': text = 'Wöchentlich'; break;
+            case 'biweekly': text = 'Alle 2 Wochen'; break;
+            case 'monthly': text = 'Monatlich'; break;
+            default: return null;
+        }
+        if (recurrenceEndDate) {
+            text += ` bis ${format(recurrenceEndDate, 'dd.MM.yyyy')}`;
+        }
+        return text;
+    };
+
+    return (
+        <Card key={event.id}>
+            <CardHeader>
+                <CardTitle>{event.title}</CardTitle>
+                 <div className="text-sm text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:flex-wrap gap-x-4 gap-y-1 pt-1">
+                    <div className="flex items-center gap-1.5">
+                        <Clock className="h-4 w-4 flex-shrink-0" />
+                        <span>{timeString}</span>
+                    </div>
+                    {location && (
+                        <div className="flex items-center gap-1.5">
+                            <MapPin className="h-4 w-4 flex-shrink-0" />
+                            {location.name ? (
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <button className="hover:underline cursor-pointer">{location.name}</button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto p-3">
+                                        <div>{location.address}</div>
+                                        <div>{location.city}</div>
+                                    </PopoverContent>
+                                </Popover>
+                            ) : (
+                                <span>{location.address}, {location.city}</span>
+                            )}
+                        </div>
+                    )}
+                    {recurrenceText && (
+                        <Badge variant="outline" className="flex items-center gap-1.5 w-fit mt-1 sm:mt-0">
+                            <Repeat className="h-3 w-3" />
+                            <span>{recurrenceText}</span>
+                        </Badge>
+                    )}
+                </div>
+            </CardHeader>
+            {(event.description || event.meetingPoint) && (
+                <CardContent className="space-y-2">
+                    {event.meetingPoint && <p className="text-sm"><span className="font-semibold">Treffpunkt:</span> {event.meetingPoint}</p>}
+                    {event.description && <p className="text-sm whitespace-pre-wrap">{event.description}</p>}
+                </CardContent>
+            )}
+             <CardFooter className="flex-col sm:flex-row items-start sm:items-center sm:justify-between gap-4">
+                 <Popover>
+                    <PopoverTrigger asChild>
+                         <Button variant="link" className="p-0 h-auto text-muted-foreground" disabled={responsesLoading || (attendingCount === 0 && declinedCount === 0 && uncertainCount === 0)}>
+                             {responsesLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Users className="h-4 w-4 mr-2" />}
+                            <span className="flex gap-2">
+                                <span className="text-green-600">{attendingCount} Zusagen</span>
+                                <span className="text-red-600">{declinedCount} Absagen</span>
+                                {uncertainCount > 0 && <span className="text-yellow-600">{uncertainCount} Unsicher</span>}
+                            </span>
+                         </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-64">
+                        <div className="space-y-4">
+                            <div>
+                                <h4 className="font-semibold text-sm mb-2">Zusagen ({attendees.length})</h4>
+                                {attendees.length > 0 ? (
+                                    <ul className="list-disc list-inside text-sm space-y-1">
+                                        {attendees.map((name, i) => <li key={i}>{name}</li>)}
+                                    </ul>
+                                ) : <p className="text-xs text-muted-foreground">Noch keine Zusagen.</p>}
+                            </div>
+                            <div>
+                                <h4 className="font-semibold text-sm mb-2">Unsicher ({uncertains.length})</h4>
+                                {uncertains.length > 0 ? (
+                                    <ul className="list-disc list-inside text-sm space-y-1">
+                                        {uncertains.map((name, i) => <li key={i}>{name}</li>)}
+                                    </ul>
+                                ) : <p className="text-xs text-muted-foreground">Keine unsicheren Antworten.</p>}
+                            </div>
+                             <div>
+                                <h4 className="font-semibold text-sm mb-2">Absagen ({decliners.length})</h4>
+                                {decliners.length > 0 ? (
+                                    <ul className="list-disc list-inside text-sm space-y-1">
+                                        {decliners.map((name, i) => <li key={i}>{name}</li>)}
+                                    </ul>
+                                ) : <p className="text-xs text-muted-foreground">Noch keine Absagen.</p>}
+                            </div>
+                        </div>
+                    </PopoverContent>
+                </Popover>
+
+                <div className="flex items-center gap-2">
+                    <Button 
+                        size="sm"
+                        variant={userResponse?.status === 'attending' ? 'default' : 'outline'}
+                        onClick={() => handleRsvp('attending')}
+                        className={cn(userResponse?.status === 'attending' && 'bg-green-600 hover:bg-green-700')}
+                    >
+                        <Check className="mr-2 h-4 w-4" />
+                        Zusagen
+                    </Button>
+                     <Button 
+                        size="sm"
+                        variant={userResponse?.status === 'uncertain' ? 'secondary' : 'outline'}
+                        onClick={() => handleRsvp('uncertain')}
+                        className={cn(userResponse?.status === 'uncertain' && 'bg-yellow-500 hover:bg-yellow-600 text-black')}
+                    >
+                        <HelpCircle className="mr-2 h-4 w-4" />
+                        Unsicher
+                    </Button>
+                    <Button 
+                        size="sm"
+                        variant={userResponse?.status === 'declined' ? 'destructive' : 'outline'}
+                        onClick={() => handleRsvp('declined')}
+                    >
+                        <XIcon className="mr-2 h-4 w-4" />
+                        Absagen
+                    </Button>
+                     {isAdmin && (
+                        <>
+                            <Button variant="ghost" size="icon" onClick={() => onEdit(event)}><Edit className="h-4 w-4"/></Button>
+                            <Button variant="ghost" size="icon" className="hover:bg-destructive/10 hover:text-destructive" onClick={() => onDelete(event)}><Trash2 className="h-4 w-4" /></Button>
+                        </>
+                    )}
+                </div>
+            </CardFooter>
+        </Card>
+    );
+};
+
+
 export default function TerminePage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<Event | undefined>(undefined);
   const [eventToDelete, setEventToDelete] = useState<Event | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  
+  const [currentDate, setCurrentDate] = useState(new Date());
+
   const firestore = useFirestore();
   const { user } = useUser();
   const { toast } = useToast();
 
+  const weekStartsOn = 1; // Monday
+  const currentWeekStart = startOfWeek(currentDate, { weekStartsOn });
+  const currentWeekEnd = add(currentWeekStart, { days: 6 });
+  const weekDays = eachDayOfInterval({ start: currentWeekStart, end: currentWeekEnd });
+
   const eventsQuery = useMemoFirebase(() => {
     if (!firestore) return null;
-    return query(collection(firestore, 'events'), orderBy('date', 'desc'));
+    return query(collection(firestore, 'events'));
   }, [firestore]);
   
   const currentUserDocRef = useMemoFirebase(() => {
@@ -663,17 +924,84 @@ export default function TerminePage() {
     if (!firestore) return null;
     return query(collection(firestore, 'locations'), orderBy('name'));
   }, [firestore]);
+  
+  const groupMembersQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return collection(firestore, 'group_members');
+  }, [firestore]);
+
 
   const { data: currentUserData, isLoading: isUserLoading } = useDoc<UserData>(currentUserDocRef);
-  const { data: events, isLoading: eventsLoading, error } = useCollection<Event>(eventsQuery);
+  const { data: eventsData, isLoading: eventsLoading, error } = useCollection<Event>(eventsQuery);
   const { data: categories, isLoading: categoriesLoading } = useCollection<TeamCategory>(categoriesQuery);
   const { data: teams, isLoading: teamsLoading } = useCollection<Team>(teamsQuery);
   const { data: locations, isLoading: locationsLoading } = useCollection<Location>(locationsQuery);
+  const { data: allUsers, isLoading: usersLoading } = useCollection<GroupMember>(groupMembersQuery);
 
   
-  const isLoading = isUserLoading || eventsLoading || categoriesLoading || teamsLoading || locationsLoading;
+  const isLoading = isUserLoading || eventsLoading || categoriesLoading || teamsLoading || locationsLoading || usersLoading;
 
   const isAdmin = currentUserData?.adminRechte === true;
+  
+  const eventsForWeek = useMemo(() => {
+    if (!eventsData) return new Map();
+
+    const weeklyEventsMap = new Map<string, DisplayEvent[]>();
+    const interval = { start: currentWeekStart, end: currentWeekEnd };
+
+    for (const event of eventsData) {
+      const originalStartDate = event.date.toDate();
+      const recurrenceEndDate = event.recurrenceEndDate?.toDate();
+
+      if (event.recurrence === 'none' || !event.recurrence) {
+        if (isWithinInterval(originalStartDate, interval)) {
+          const dayKey = format(originalStartDate, 'yyyy-MM-dd');
+          if (!weeklyEventsMap.has(dayKey)) weeklyEventsMap.set(dayKey, []);
+          weeklyEventsMap.get(dayKey)?.push({ ...event, displayDate: originalStartDate });
+        }
+        continue;
+      }
+
+      let currentDate = originalStartDate;
+      let limit = 200; // safety break
+      while (currentDate <= interval.end && limit > 0) {
+        if (recurrenceEndDate && currentDate > recurrenceEndDate) {
+            limit = 0; // Stop if the recurrence end date is passed
+            continue;
+        }
+
+        if (currentDate >= interval.start) {
+             const dayKey = format(currentDate, 'yyyy-MM-dd');
+             if (!weeklyEventsMap.has(dayKey)) weeklyEventsMap.set(dayKey, []);
+             weeklyEventsMap.get(dayKey)?.push({ ...event, displayDate: currentDate });
+        }
+
+        switch (event.recurrence) {
+            case 'weekly':
+                currentDate = addWeeks(currentDate, 1);
+                break;
+            case 'biweekly':
+                currentDate = addWeeks(currentDate, 2);
+                break;
+            case 'monthly':
+                // This logic is simplified for weekly view; for full accuracy, needs more complex date-math
+                currentDate = add(currentDate, { months: 1 });
+                break;
+            default:
+                limit = 0;
+                break;
+        }
+        limit--;
+      }
+    }
+     // Sort events within each day
+    weeklyEventsMap.forEach((dayEvents) => {
+        dayEvents.sort((a, b) => a.displayDate.getTime() - b.displayDate.getTime());
+    });
+
+    return weeklyEventsMap;
+  }, [eventsData, currentWeekStart, currentWeekEnd]);
+
 
   const handleOpenForm = (event?: Event) => {
     setSelectedEvent(event);
@@ -705,25 +1033,10 @@ export default function TerminePage() {
         setIsDeleting(false);
       });
   };
-  
-  const getRecurrenceText = (event: Event) => {
-    const recurrence = event.recurrence;
-    const recurrenceEndDate = event.recurrenceEndDate?.toDate();
 
-    let text = '';
-    switch (recurrence) {
-        case 'weekly': text = 'Wöchentlich'; break;
-        case 'biweekly': text = 'Alle 2 Wochen'; break;
-        case 'monthly': text = 'Monatlich'; break;
-        default: return null;
-    }
-    
-    if(recurrenceEndDate) {
-        text += ` bis ${format(recurrenceEndDate, 'dd.MM.yyyy')}`;
-    }
-
-    return text;
-  };
+  const goToPreviousWeek = () => setCurrentDate(add(currentDate, { weeks: -1 }));
+  const goToNextWeek = () => setCurrentDate(add(currentDate, { weeks: 1 }));
+  const goToToday = () => setCurrentDate(new Date());
 
 
   const renderContent = () => {
@@ -737,91 +1050,40 @@ export default function TerminePage() {
     if (error) {
       return <p className="text-destructive text-center">Fehler beim Laden der Termine: {error.message}</p>;
     }
-    if (!events || events.length === 0) {
+    if (eventsForWeek.size === 0) {
       return (
          <Card>
             <CardContent>
               <div className="text-center py-10">
-                <p className="text-muted-foreground">Keine Termine gefunden.</p>
+                <p className="text-muted-foreground">Keine Termine für diese Woche gefunden.</p>
               </div>
             </CardContent>
           </Card>
       );
     }
     return (
-        <div className="space-y-4">
-            {events.map(event => {
-                const recurrenceText = getRecurrenceText(event);
-                const startDate = event.date.toDate();
-                const endDate = event.endTime?.toDate();
-                const location = locations?.find(loc => loc.id === event.locationId);
-
-                let timeString;
-                if (event.isAllDay) {
-                    timeString = "Ganztägig";
-                } else if (endDate) {
-                    timeString = `${format(startDate, 'HH:mm')} - ${format(endDate, 'HH:mm')} Uhr`;
-                } else {
-                    timeString = `${format(startDate, 'HH:mm')} Uhr`;
-                }
-
-                let dateString = format(startDate, 'eeee, dd.MM.yyyy', { locale: de });
-                if(endDate && format(startDate, 'yyyyMMdd') !== format(endDate, 'yyyyMMdd')) {
-                    dateString += ` - ${format(endDate, 'eeee, dd.MM.yyyy', { locale: de })}`;
-                }
+        <div className="space-y-8">
+            {weekDays.map(day => {
+                const dayKey = format(day, 'yyyy-MM-dd');
+                const dayEvents = eventsForWeek.get(dayKey) || [];
+                if(dayEvents.length === 0) return null;
 
                 return (
-                    <Card key={event.id}>
-                        <CardHeader>
-                            <CardTitle>{event.title}</CardTitle>
-                             <div className="text-sm text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:flex-wrap gap-x-4 gap-y-1 pt-1">
-                                <div className="flex items-center gap-1.5">
-                                    <CalendarIcon className="h-4 w-4 flex-shrink-0" />
-                                    <span>{dateString}</span>
-                                </div>
-                                <div className="flex items-center gap-1.5">
-                                    <Clock className="h-4 w-4 flex-shrink-0" />
-                                    <span>{timeString}</span>
-                                </div>
-                                {location && (
-                                    <div className="flex items-center gap-1.5">
-                                        <MapPin className="h-4 w-4 flex-shrink-0" />
-                                         {location.name ? (
-                                            <Popover>
-                                                <PopoverTrigger asChild>
-                                                    <button className="hover:underline cursor-pointer">{location.name}</button>
-                                                </PopoverTrigger>
-                                                <PopoverContent className="w-auto p-3">
-                                                    <div>{location.address}</div>
-                                                    <div>{location.city}</div>
-                                                </PopoverContent>
-                                            </Popover>
-                                        ) : (
-                                            <span>{location.address}, {location.city}</span>
-                                        )}
-                                    </div>
-                                )}
-                                {recurrenceText && (
-                                    <div className="flex items-center gap-1.5">
-                                        <Repeat className="h-4 w-4 flex-shrink-0" />
-                                        <span>{recurrenceText}</span>
-                                    </div>
-                                )}
-                            </div>
-                        </CardHeader>
-                        {(event.description || event.meetingPoint) && (
-                            <CardContent className="space-y-2">
-                                {event.meetingPoint && <p><span className="font-semibold">Treffpunkt:</span> {event.meetingPoint}</p>}
-                                {event.description && <p className="whitespace-pre-wrap">{event.description}</p>}
-                            </CardContent>
-                        )}
-                        {isAdmin && (
-                            <CardFooter className="flex justify-end gap-2">
-                                <Button variant="ghost" size="icon" onClick={() => handleOpenForm(event)}><Edit className="h-4 w-4"/></Button>
-                                <Button variant="ghost" size="icon" className="hover:bg-destructive/10 hover:text-destructive" onClick={() => setEventToDelete(event)}><Trash2 className="h-4 w-4" /></Button>
-                            </CardFooter>
-                        )}
-                    </Card>
+                    <div key={dayKey}>
+                        <h2 className="font-bold text-lg mb-2 sticky top-16 bg-background py-2 border-b">{format(day, 'eeee, dd. MMMM', {locale: de})}</h2>
+                        <div className="space-y-4">
+                            {dayEvents.map(event => (
+                                <EventCard
+                                    key={`${event.id}-${event.displayDate.toISOString()}`}
+                                    event={event}
+                                    allUsers={allUsers || []}
+                                    locations={locations || []}
+                                    onEdit={handleOpenForm}
+                                    onDelete={setEventToDelete}
+                                />
+                            ))}
+                        </div>
+                    </div>
                 )
             })}
         </div>
@@ -832,9 +1094,14 @@ export default function TerminePage() {
     <div className="flex min-h-screen w-full flex-col bg-background">
       <Header />
       <main className="flex-1 p-4 md:p-8">
-        <div className="mx-auto max-w-2xl">
-          <div className="flex items-center justify-between mb-8">
+        <div className="mx-auto max-w-4xl">
+          <div className="flex items-center justify-between mb-8 flex-wrap gap-4">
             <h1 className="text-3xl font-bold">Termine</h1>
+            <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={goToPreviousWeek}><ChevronLeft className="h-4 w-4 mr-2"/> Vorherige Woche</Button>
+                <Button variant="outline" onClick={goToToday}>Heute</Button>
+                <Button variant="outline" onClick={goToNextWeek}>Nächste Woche <ChevronRight className="h-4 w-4 ml-2"/></Button>
+            </div>
             {isAdmin && (
               <Button className="bg-red-600 hover:bg-red-700 text-white" onClick={() => handleOpenForm()}>
                 <PlusCircle className="mr-2 h-4 w-4" />
@@ -842,6 +1109,9 @@ export default function TerminePage() {
               </Button>
             )}
           </div>
+           <div className="mb-4 text-center text-xl font-semibold">
+                {format(currentWeekStart, 'dd. MMM', { locale: de })} - {format(currentWeekEnd, 'dd. MMM yyyy', { locale: de })}
+            </div>
 
           {renderContent()}
 
@@ -877,3 +1147,5 @@ export default function TerminePage() {
     </div>
   );
 }
+
+    
