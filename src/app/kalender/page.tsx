@@ -1,14 +1,14 @@
 
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Header } from '@/components/header';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Calendar } from '@/components/ui/calendar';
 import { de } from 'date-fns/locale';
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where, Timestamp, or, orderBy } from 'firebase/firestore';
-import { Loader2, CalendarIcon, Clock, MapPin, Repeat } from 'lucide-react';
+import { useFirestore, useCollection, useMemoFirebase, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
+import { collection, query, where, Timestamp, orderBy, doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { Loader2, CalendarIcon, Clock, MapPin, Repeat, Check, XIcon, Users } from 'lucide-react';
 import {
   format,
   isSameDay,
@@ -21,8 +21,7 @@ import {
 } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
 import {
   Select,
   SelectContent,
@@ -50,8 +49,17 @@ interface Event {
   createdAt: Timestamp;
 }
 
+interface EventResponse {
+    id: string;
+    userId: string;
+    status: 'attending' | 'declined';
+    respondedAt: Timestamp;
+}
+
+
 interface DisplayEvent extends Event {
   displayDate: Date;
+  responses: EventResponse[];
 }
 
 interface TeamCategory {
@@ -80,6 +88,107 @@ const getRecurrenceText = (recurrence?: string) => {
   }
 };
 
+
+const EventCard = ({ event }: { event: DisplayEvent }) => {
+    const { user } = useUser();
+    const firestore = useFirestore();
+
+    const recurrenceText = getRecurrenceText(event.recurrence);
+    const startDate = event.displayDate;
+    const endDate = event.endTime?.toDate();
+
+    let timeString;
+    if (event.isAllDay) {
+        timeString = "Ganztägig";
+    } else if (endDate) {
+        timeString = `${format(startDate, 'HH:mm')} - ${format(endDate, 'HH:mm')} Uhr`;
+    } else {
+        timeString = `${format(startDate, 'HH:mm')} Uhr`;
+    }
+
+    const userResponse = event.responses.find(r => r.userId === user?.uid);
+    const attendingCount = event.responses.filter(r => r.status === 'attending').length;
+
+    const handleRsvp = (status: 'attending' | 'declined') => {
+        if (!user || !firestore) return;
+
+        const responseRef = doc(firestore, 'events', event.id, 'responses', user.uid);
+        const data = {
+            userId: user.uid,
+            status: status,
+            respondedAt: serverTimestamp()
+        };
+
+        setDoc(responseRef, data, { merge: true })
+            .catch(serverError => {
+                const permissionError = new FirestorePermissionError({
+                    path: responseRef.path,
+                    operation: 'write',
+                    requestResourceData: data,
+                });
+                errorEmitter.emit('permission-error', permissionError);
+            });
+    };
+
+    return (
+        <Card key={`${event.id}-${event.displayDate.toISOString()}`}>
+            <CardHeader>
+                <CardTitle>{event.title}</CardTitle>
+                <div className="text-sm text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 pt-1">
+                    <div className="flex items-center gap-1.5">
+                        <Clock className="h-4 w-4" />
+                        <span>{timeString}</span>
+                    </div>
+                    {event.location && (
+                        <div className="flex items-center gap-1.5">
+                            <MapPin className="h-4 w-4" />
+                            <span>{event.location}</span>
+                        </div>
+                    )}
+                    {recurrenceText && (
+                        <Badge variant="outline" className="flex items-center gap-1.5">
+                            <Repeat className="h-3 w-3" />
+                            <span>{recurrenceText}</span>
+                        </Badge>
+                    )}
+                </div>
+            </CardHeader>
+            {(event.description || event.meetingPoint) && (
+                <CardContent className="space-y-2">
+                    {event.meetingPoint && <p className="text-sm"><span className="font-semibold">Treffpunkt:</span> {event.meetingPoint}</p>}
+                    {event.description && <p className="text-sm whitespace-pre-wrap">{event.description}</p>}
+                </CardContent>
+            )}
+             <CardFooter className="flex-col sm:flex-row items-start sm:items-center sm:justify-between gap-4">
+                <div className="text-sm text-muted-foreground flex items-center gap-1.5">
+                    <Users className="h-4 w-4" />
+                    <span>{attendingCount} Zusagen</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <Button 
+                        size="sm"
+                        variant={userResponse?.status === 'attending' ? 'default' : 'outline'}
+                        onClick={() => handleRsvp('attending')}
+                        className={cn(userResponse?.status === 'attending' && 'bg-green-600 hover:bg-green-700')}
+                    >
+                        <Check className="mr-2 h-4 w-4" />
+                        Zusagen
+                    </Button>
+                    <Button 
+                        size="sm"
+                        variant={userResponse?.status === 'declined' ? 'destructive' : 'outline'}
+                        onClick={() => handleRsvp('declined')}
+                    >
+                        <XIcon className="mr-2 h-4 w-4" />
+                        Absagen
+                    </Button>
+                </div>
+            </CardFooter>
+        </Card>
+    );
+};
+
+
 export default function KalenderPage() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
@@ -105,12 +214,62 @@ export default function KalenderPage() {
     // Fetch all events. Filtering based on recurrence will be handled client-side.
     return query(collection(firestore, 'events'));
   }, [firestore]);
+  
+  const eventResponsesQuery = useMemoFirebase(() => {
+    if(!firestore || !events) return null;
+    // This is a simplification. For a large number of events, you'd want to query responses more selectively.
+    const eventIds = events.map(e => e.id);
+    if(eventIds.length === 0) return null;
+    // Firestore 'in' queries are limited to 30 values.
+    // This will break if there are more than 30 events loaded.
+    // A better approach would be to fetch responses for each event individually when it's displayed.
+    const q = query(collection(firestore, `events/${eventIds[0]}/responses`)); // Example, needs better logic
+    // For now, we will fetch responses per-event inside the useffect
+    return null;
+  }, [firestore, events]);
+
 
   const { data: categories, isLoading: categoriesLoading } = useCollection<TeamCategory>(categoriesQuery);
   const { data: teams, isLoading: teamsLoading } = useCollection<Team>(teamsQuery);
-  const { data: events, isLoading: eventsLoading, error } = useCollection<Event>(eventsQuery);
+  const { data: eventsData, isLoading: eventsLoading, error } = useCollection<Event>(eventsQuery);
   
-  const isLoading = categoriesLoading || teamsLoading || eventsLoading;
+  const [eventResponses, setEventResponses] = useState<Record<string, EventResponse[]>>({});
+  const [responsesLoading, setResponsesLoading] = useState(true);
+
+  useEffect(() => {
+    if (!firestore || !eventsData) {
+        setResponsesLoading(false);
+        return;
+    };
+    
+    setResponsesLoading(true);
+    const allUnsubscribes: (() => void)[] = [];
+    const newResponses: Record<string, EventResponse[]> = {};
+    let promises: Promise<void>[] = [];
+
+    eventsData.forEach(event => {
+        const responsesQuery = query(collection(firestore, 'events', event.id, 'responses'));
+        const promise = new Promise<void>(resolve => {
+            const unsubscribe = onSnapshot(responsesQuery, (snapshot) => {
+                newResponses[event.id] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as EventResponse));
+                resolve();
+            });
+            allUnsubscribes.push(unsubscribe);
+        });
+        promises.push(promise);
+    });
+
+    Promise.all(promises).then(() => {
+        setEventResponses(newResponses);
+        setResponsesLoading(false);
+    })
+
+    return () => allUnsubscribes.forEach(unsub => unsub());
+
+  }, [firestore, eventsData]);
+
+
+  const isLoading = categoriesLoading || teamsLoading || eventsLoading || responsesLoading;
 
  const groupedTeams = useMemo(() => {
     if (!categories || !teams) return [];
@@ -122,9 +281,9 @@ export default function KalenderPage() {
 
 
  const allVisibleEvents = useMemo(() => {
-    if (!events) return [];
+    if (!eventsData) return [];
 
-    const filteredByTeam = events.filter(event => {
+    const filteredByTeam = eventsData.filter(event => {
         if (selectedTeamId === 'all') return true;
         // Show events that are not targeted to any specific team (public events).
         if (!event.targetTeamIds || event.targetTeamIds.length === 0) return true;
@@ -137,10 +296,11 @@ export default function KalenderPage() {
 
     for (const event of filteredByTeam) {
       const originalStartDate = event.date.toDate();
+      const responses = eventResponses[event.id] || [];
 
       if (event.recurrence === 'none' || !event.recurrence) {
         if (isWithinInterval(originalStartDate, interval)) {
-          visibleEvents.push({ ...event, displayDate: originalStartDate });
+          visibleEvents.push({ ...event, displayDate: originalStartDate, responses });
         }
         continue;
       }
@@ -161,7 +321,7 @@ export default function KalenderPage() {
              currentDate = addWeeks(currentDate, step);
          }
         while (currentDate <= interval.end) {
-            visibleEvents.push({ ...event, displayDate: currentDate });
+            visibleEvents.push({ ...event, displayDate: currentDate, responses });
             currentDate = addWeeks(currentDate, step);
         }
       } else if (event.recurrence === 'monthly') {
@@ -176,14 +336,14 @@ export default function KalenderPage() {
          }
         while (currentDate <= interval.end) {
             if (isSameMonth(currentDate, interval.start)) {
-                visibleEvents.push({ ...event, displayDate: currentDate });
+                visibleEvents.push({ ...event, displayDate: currentDate, responses });
             }
             currentDate = addMonths(currentDate, 1);
         }
       }
     }
     return visibleEvents;
-  }, [events, currentMonth, selectedTeamId]);
+  }, [eventsData, currentMonth, selectedTeamId, eventResponses]);
 
   const eventDates = useMemo(() => {
     return allVisibleEvents.map(event => event.displayDate);
@@ -269,52 +429,9 @@ export default function KalenderPage() {
                         {isLoading && <div className="flex items-center justify-center p-8"><Loader2 className="h-8 w-8 animate-spin text-primary"/></div>}
                         {error && <p className="text-destructive">Fehler: {error.message}</p>}
                         {!isLoading && selectedEvents.length > 0 ? (
-                            selectedEvents.map(event => {
-                                const recurrenceText = getRecurrenceText(event.recurrence);
-                                const startDate = event.displayDate;
-                                const endDate = event.endTime?.toDate();
-
-                                let timeString;
-                                if (event.isAllDay) {
-                                    timeString = "Ganztägig";
-                                } else if (endDate) {
-                                    timeString = `${format(startDate, 'HH:mm')} - ${format(endDate, 'HH:mm')} Uhr`;
-                                } else {
-                                    timeString = `${format(startDate, 'HH:mm')} Uhr`;
-                                }
-
-                                return (
-                                    <Card key={`${event.id}-${event.displayDate.toISOString()}`}>
-                                        <CardHeader>
-                                            <CardTitle>{event.title}</CardTitle>
-                                            <div className="text-sm text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 pt-1">
-                                                <div className="flex items-center gap-1.5">
-                                                    <Clock className="h-4 w-4" />
-                                                    <span>{timeString}</span>
-                                                </div>
-                                                {event.location && (
-                                                    <div className="flex items-center gap-1.5">
-                                                        <MapPin className="h-4 w-4" />
-                                                        <span>{event.location}</span>
-                                                    </div>
-                                                )}
-                                                {recurrenceText && (
-                                                    <Badge variant="outline" className="flex items-center gap-1.5">
-                                                        <Repeat className="h-3 w-3" />
-                                                        <span>{recurrenceText}</span>
-                                                    </Badge>
-                                                )}
-                                            </div>
-                                        </CardHeader>
-                                        {(event.description || event.meetingPoint) && (
-                                            <CardContent className="space-y-2">
-                                                {event.meetingPoint && <p className="text-sm"><span className="font-semibold">Treffpunkt:</span> {event.meetingPoint}</p>}
-                                                {event.description && <p className="text-sm whitespace-pre-wrap">{event.description}</p>}
-                                            </CardContent>
-                                        )}
-                                    </Card>
-                                )
-                            })
+                            selectedEvents.map(event => (
+                               <EventCard event={event} key={`${event.id}-${event.displayDate.toISOString()}`} />
+                            ))
                         ) : (
                         !isLoading && (
                             <Card>
@@ -333,4 +450,4 @@ export default function KalenderPage() {
   );
 }
 
-    
+  

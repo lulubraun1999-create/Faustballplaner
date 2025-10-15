@@ -406,6 +406,20 @@
       },
       "required": ["id", "title", "date", "createdBy", "createdAt"]
     },
+     "EventResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "EventResponse",
+      "type": "object",
+      "description": "Represents a user's RSVP response to an event.",
+      "properties": {
+        "id": { "type": "string" },
+        "eventId": { "type": "string" },
+        "userId": { "type": "string" },
+        "status": { "type": "string", "enum": ["attending", "declined"] },
+        "respondedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "eventId", "userId", "status", "respondedAt"]
+    },
      "ChatMessage": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "ChatMessage",
@@ -628,6 +642,14 @@
         }
       },
        {
+        "path": "/events/{eventId}/responses/{responseId}",
+        "definition": {
+          "entityName": "EventResponse",
+          "schema": { "$ref": "#/backend/entities/EventResponse" },
+          "description": "Subcollection for RSVP responses to a specific event."
+        }
+      },
+       {
         "path": "/chat_rooms/{roomId}/messages/{messageId}",
         "definition": {
           "entityName": "ChatMessage",
@@ -651,3 +673,4 @@
 }
     
     
+  
