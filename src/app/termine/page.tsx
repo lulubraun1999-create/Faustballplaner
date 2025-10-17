@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -329,19 +328,19 @@ function EventForm({ onDone, event, categories, teams, isAdmin, eventTitles, loc
         endDate = combineDateAndTime(values.endDate, values.isAllDay ? undefined : values.endTime);
     }
     
-    let rsvpDeadline: Timestamp | null = null;
+    let rsvpDeadline: Timestamp | undefined = undefined;
     if(values.rsvpDeadlineDate && values.rsvpDeadlineTime) {
         const rsvpDate = combineDateAndTime(values.rsvpDeadlineDate, values.rsvpDeadlineTime);
         rsvpDeadline = Timestamp.fromDate(rsvpDate);
     }
 
-    const dataToSave: Omit<Event, 'id' | 'createdAt' | 'createdBy' | 'endTime'> & { endTime?: Timestamp | null, createdAt: any, createdBy: string } = {
+    const dataToSave: Omit<Event, 'id' | 'createdAt' | 'createdBy' | 'endTime'> & { endTime?: Timestamp | undefined, createdAt: any, createdBy: string } = {
       titleId: values.titleId,
       date: Timestamp.fromDate(startDate),
-      endTime: endDate ? Timestamp.fromDate(endDate) : null,
+      endTime: endDate ? Timestamp.fromDate(endDate) : undefined,
       isAllDay: values.isAllDay,
       recurrence: values.recurrence,
-      recurrenceEndDate: values.recurrenceEndDate ? Timestamp.fromDate(values.recurrenceEndDate) : null,
+      recurrenceEndDate: values.recurrenceEndDate ? Timestamp.fromDate(values.recurrenceEndDate) : undefined,
       targetTeamIds: values.targetTeamIds || [],
       rsvpDeadline: rsvpDeadline,
       locationId: values.locationId || '',
@@ -376,7 +375,7 @@ function EventForm({ onDone, event, categories, teams, isAdmin, eventTitles, loc
           <DialogTitle>{event ? 'Termin bearbeiten' : 'Neuen Termin erstellen'}</DialogTitle>
         </DialogHeader>
 
-        <FormField control={form.control} name="titleId" render={({ field }) => (
+         <FormField control={form.control} name="titleId" render={({ field }) => (
           <FormItem>
             <FormLabel>Titel</FormLabel>
              <div className="flex gap-2">
@@ -654,7 +653,11 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, eventTitles, loca
         return query(collection(firestore, 'events', event.id, 'responses'), where('eventDate', '==', Timestamp.fromDate(startOfDay(event.displayDate))));
     }, [firestore, event.id, event.displayDate]);
 
-    const { data: responsesForThisInstance, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
+    const { data: responsesForThisInstance, isLoading: responsesLoading, error } = useCollection<EventResponse>(responsesQuery);
+    
+    if (error) {
+        console.error("Error fetching responses:", error);
+    }
     
     const userResponse = useMemo(() => {
          return responsesForThisInstance?.find(r => r.userId === user?.uid);
@@ -816,11 +819,13 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, eventTitles, loca
                     <PopoverTrigger asChild>
                          <Button variant="link" className="p-0 h-auto text-muted-foreground" disabled={responsesLoading || (attendingCount === 0 && declinedCount === 0 && uncertainCount === 0)}>
                              {responsesLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Users className="h-4 w-4 mr-2" />}
-                            <span className="flex gap-2">
-                                <span className="text-green-600">{attendingCount} Zusagen</span>
-                                <span className="text-red-600">{declinedCount} Absagen</span>
-                                {uncertainCount > 0 && <span className="text-yellow-600">{uncertainCount} Unsicher</span>}
-                            </span>
+                             { error ? <span className="text-destructive">Fehler beim Laden</span> : 
+                                <span className="flex gap-2">
+                                    <span className="text-green-600">{attendingCount} Zusagen</span>
+                                    <span className="text-red-600">{declinedCount} Absagen</span>
+                                    {uncertainCount > 0 && <span className="text-yellow-600">{uncertainCount} Unsicher</span>}
+                                </span>
+                             }
                          </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-64">
@@ -1058,10 +1063,10 @@ export default function TerminePage() {
     setSelectedEvent(undefined);
   };
 
-  const handleDelete = () => {
-    if (!firestore || !eventToDelete) return;
+  const handleDelete = (event: Event) => {
+     if (!firestore) return;
     setIsDeleting(true);
-    const eventDocRef = doc(firestore, 'events', eventToDelete.id);
+    const eventDocRef = doc(firestore, 'events', event.id);
     deleteDoc(eventDocRef)
       .then(() => {
         toast({ title: 'Termin gelöscht' });
@@ -1117,7 +1122,7 @@ export default function TerminePage() {
                                         allUsers={allUsers || []}
                                         teams={teams || []}
                                         onEdit={handleOpenForm}
-                                        onDelete={setEventToDelete}
+                                        onDelete={handleDelete}
                                         eventTitles={eventTitles || []}
                                         locations={locations || []}
                                     />
@@ -1218,7 +1223,7 @@ export default function TerminePage() {
             </AlertDialogHeader>
             <AlertDialogFooter>
                 <AlertDialogCancel disabled={isDeleting}>Abbrechen</AlertDialogCancel>
-                <AlertDialogAction onClick={handleDelete} disabled={isDeleting} className="bg-destructive hover:bg-destructive/90">
+                <AlertDialogAction onClick={() => eventToDelete && handleDelete(eventToDelete)} disabled={isDeleting} className="bg-destructive hover:bg-destructive/90">
                     {isDeleting ? <Loader2 className="animate-spin" /> : 'Ja, löschen'}
                 </AlertDialogAction>
             </AlertDialogFooter>
@@ -1227,3 +1232,5 @@ export default function TerminePage() {
     </div>
   );
 }
+
+    
