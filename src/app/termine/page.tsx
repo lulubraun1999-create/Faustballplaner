@@ -187,7 +187,7 @@ function AddLocationForm({ onDone }: { onDone: () => void }) {
     return (
         <div className="space-y-4">
             <Form {...form}>
-                <form>
+                
                     <FormField control={form.control} name="name" render={({ field }) => (
                         <FormItem>
                             <FormLabel>Name des Ortes</FormLabel>
@@ -209,7 +209,7 @@ function AddLocationForm({ onDone }: { onDone: () => void }) {
                             <FormMessage />
                         </FormItem>
                     )} />
-                </form>
+                
             </Form>
             <Button type="button" onClick={handleLocalSubmit} className="w-full">Hinzufügen</Button>
         </div>
@@ -252,7 +252,7 @@ function AddEventTitleForm({ onDone }: { onDone: () => void }) {
     return (
          <div className="space-y-4">
             <Form {...form}>
-                <form>
+                
                     <FormField control={form.control} name="name" render={({ field }) => (
                         <FormItem>
                             <FormLabel>Name des Titels</FormLabel>
@@ -260,7 +260,7 @@ function AddEventTitleForm({ onDone }: { onDone: () => void }) {
                             <FormMessage />
                         </FormItem>
                     )} />
-                </form>
+                
             </Form>
             <Button type="button" onClick={handleLocalSubmit} className="w-full">Hinzufügen</Button>
         </div>
@@ -299,7 +299,7 @@ function DeleteLocationForm({ onDone, locations }: { onDone: () => void, locatio
 
     return (
         <Form {...form}>
-             <form>
+             
                 <div className="space-y-4">
                     <FormField control={form.control} name="locationId" render={({ field }) => (
                         <FormItem>
@@ -335,7 +335,7 @@ function DeleteLocationForm({ onDone, locations }: { onDone: () => void, locatio
                         </AlertDialogContent>
                     </AlertDialog>
                 </div>
-            </form>
+            
         </Form>
     );
 }
@@ -372,7 +372,7 @@ function DeleteEventTitleForm({ onDone, eventTitles }: { onDone: () => void, eve
 
     return (
         <Form {...form}>
-            <form>
+            
                 <div className="space-y-4">
                     <FormField control={form.control} name="titleId" render={({ field }) => (
                         <FormItem>
@@ -408,7 +408,7 @@ function DeleteEventTitleForm({ onDone, eventTitles }: { onDone: () => void, eve
                         </AlertDialogContent>
                     </AlertDialog>
                 </div>
-            </form>
+            
         </Form>
     );
 }
@@ -1121,13 +1121,7 @@ export default function TerminePage() {
     return doc(firestore, 'admins', user.uid);
   }, [firestore, user]);
 
-  const userDocRef = useMemo(() => {
-      if (!firestore || !user) return null;
-      return doc(firestore, 'users', user.uid);
-  }, [firestore, user]);
-
   const { data: adminDoc, isLoading: isAdminLoading } = useDoc(adminDocRef);
-  const { data: userData, isLoading: isUserLoading } = useDoc<UserData>(userDocRef);
   
   const eventsQuery = useMemo(() => {
     if (!firestore) return null;
@@ -1168,9 +1162,9 @@ export default function TerminePage() {
   const { data: eventTitles, isLoading: eventTitlesLoading } = useCollection<EventTitle>(eventTitlesQuery);
 
   
-  const isLoading = isAdminLoading || isUserLoading || eventsLoading || categoriesLoading || teamsLoading || usersLoading || locationsLoading || eventTitlesLoading;
+  const isLoading = isAdminLoading || eventsLoading || categoriesLoading || teamsLoading || usersLoading || locationsLoading || eventTitlesLoading;
 
-  const canEditEvents = !!adminDoc || userData?.adminRechte === true;
+  const canEditEvents = !!adminDoc;
   
   const groupedTeams = useMemo(() => {
     if (!categories || !teams) return [];
@@ -1437,5 +1431,3 @@ export default function TerminePage() {
     </div>
   );
 }
-
-

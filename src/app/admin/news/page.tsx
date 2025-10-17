@@ -204,13 +204,12 @@ export default function AdminNewsPage() {
     setIsClient(true);
   }, []);
   
-  const currentUserDocRef = useMemo(() => {
+  const adminDocRef = useMemo(() => {
     if (!firestore || !user) return null;
     return doc(firestore, 'admins', user.uid);
   }, [firestore, user]);
-  const { data: adminDoc, isLoading: isAdminDocLoading } = useDoc(currentUserDocRef);
-  const isAdmin = !!adminDoc;
-  
+  const { data: adminDoc, isLoading: isAdminLoading } = useDoc(adminDocRef);
+
   const newsQuery = useMemo(() => {
     if (!firestore) return null;
     return query(collection(firestore, 'news_articles'), orderBy('publicationDate', 'desc'));
@@ -243,7 +242,7 @@ export default function AdminNewsPage() {
 
 
   const renderContent = () => {
-    if (isLoading || isAdminDocLoading) {
+    if (isLoading || isAdminLoading) {
       return (
         <div className="flex justify-center items-center py-10">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -311,7 +310,7 @@ export default function AdminNewsPage() {
     );
   }
   
-  if (isClient && !isAdminDocLoading && !isAdmin) {
+  if (isClient && !isAdminLoading && !adminDoc) {
        return (
         <div className="flex min-h-screen w-full flex-col bg-background">
             <Header />
@@ -334,7 +333,7 @@ export default function AdminNewsPage() {
         <div className="mx-auto max-w-7xl">
           <div className="flex items-center justify-between mb-8">
             <h1 className="text-3xl font-bold">News verwalten</h1>
-            {isClient && isAdmin && (
+            {isClient && adminDoc && (
                 <Button variant="outline" onClick={() => handleOpenForm()}>
                     <PlusCircle className="mr-2 h-4 w-4" />
                     Neuen Artikel erstellen

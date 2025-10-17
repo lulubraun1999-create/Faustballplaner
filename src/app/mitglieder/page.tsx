@@ -156,11 +156,11 @@ export default function MitgliederPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedFilterTeamId, setSelectedFilterTeamId] = useState('all');
 
-  const currentUserDocRef = useMemo(() => {
+  const currentUserIsAdminQuery = useMemo(() => {
     if (!firestore || !authUser) return null;
     return doc(firestore, 'admins', authUser.uid);
   }, [firestore, authUser]);
-  const { data: adminDoc, isLoading: isAdminDocLoading } = useDoc(currentUserDocRef);
+  const { data: adminDoc, isLoading: isAdminDocLoading } = useDoc(currentUserIsAdminQuery);
   const isAdmin = !!adminDoc;
 
   const usersCollectionRef = useMemo(() => {
@@ -248,9 +248,6 @@ export default function MitgliederPage() {
     if (actionUser === null || selectedRole === undefined || !firestore) return;
     setIsSubmitting(true);
     try {
-        const userDocRef = doc(firestore, 'users', actionUser.id);
-        await updateDoc(userDocRef, { adminRechte: selectedRole });
-
         const adminDocRef = doc(firestore, 'admins', actionUser.id);
         if (selectedRole) {
             await setDoc(adminDocRef, { uid: actionUser.id });
