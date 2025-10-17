@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import { collection, query, orderBy, Timestamp } from 'firebase/firestore';
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { useFirestore, useCollection } from '@/firebase';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -55,10 +55,7 @@ const ArticleCard = ({ article }: { article: NewsArticle }) => {
 export default function AktuellesPage() {
   const firestore = useFirestore();
 
-  const newsQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, 'news_articles'), orderBy('publicationDate', 'desc'));
-  }, [firestore]);
+  const newsQuery = query(collection(firestore, 'news_articles'), orderBy('publicationDate', 'desc'));
 
   const { data: articles, isLoading, error } = useCollection<NewsArticle>(newsQuery);
 

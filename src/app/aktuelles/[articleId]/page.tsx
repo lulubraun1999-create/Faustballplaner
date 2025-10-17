@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { doc, Timestamp } from 'firebase/firestore';
-import { useFirestore, useDoc, useMemoFirebase, WithId } from '@/firebase';
+import { useFirestore, useDoc, WithId } from '@/firebase';
 import { Header } from '@/components/header';
 import { Loader2, ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
 import Image from 'next/image';
@@ -25,10 +25,7 @@ export default function ArticleDetailPage({ params }: { params: { articleId: str
   const firestore = useFirestore();
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
-  const articleRef = useMemoFirebase(() => {
-    if (!firestore || !params.articleId) return null;
-    return doc(firestore, 'news_articles', params.articleId);
-  }, [firestore, params.articleId]);
+  const articleRef = doc(firestore, 'news_articles', params.articleId);
 
   const { data: article, isLoading, error } = useDoc<NewsArticle>(articleRef);
   

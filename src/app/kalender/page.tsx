@@ -6,7 +6,7 @@ import { Header } from '@/components/header';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Calendar } from '@/components/ui/calendar';
 import { de } from 'date-fns/locale';
-import { useFirestore, useCollection, useMemoFirebase, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
+import { useFirestore, useCollection, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { collection, query, where, Timestamp, orderBy, doc, setDoc, serverTimestamp, onSnapshot, addDoc } from 'firebase/firestore';
 import { Loader2, CalendarIcon, Clock, MapPin, Repeat, Check, XIcon, Users, HelpCircle } from 'lucide-react';
 import {
@@ -113,12 +113,8 @@ const getRecurrenceText = (recurrence?: string) => {
 const EventCard = ({ event, allUsers, locations, eventTitles }: { event: DisplayEvent; allUsers: GroupMember[], locations: Location[], eventTitles: EventTitle[] }) => {
     const { user } = useUser();
     const firestore = useFirestore();
-    const location = locations.find(l => l.id === event.locationId);
 
-    const responsesQuery = useMemoFirebase(() => {
-        if (!firestore) return null;
-        return query(collection(firestore, 'events', event.id, 'responses'));
-    }, [firestore, event.id]);
+    const responsesQuery = event.id ? query(collection(firestore, 'events', event.id, 'responses')) : null;
 
     const { data: allResponses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
     
@@ -211,6 +207,8 @@ const EventCard = ({ event, allUsers, locations, eventTitles }: { event: Display
                 errorEmitter.emit('permission-error', permissionError);
             });
     };
+    
+    const location = locations.find(l => l.id === event.locationId);
 
     return (
         <Card key={`${event.id}-${event.displayDate.toISOString()}`}>
@@ -356,35 +354,12 @@ export default function KalenderPage() {
     localStorage.setItem('kalenderFilter', JSON.stringify(selectedTeamIds));
   }, [selectedTeamIds]);
 
-  const categoriesQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, 'team_categories'), orderBy('order'));
-  }, [firestore]);
-
-  const teamsQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, 'teams'));
-  }, [firestore]);
-    
-  const locationsQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, 'locations'));
-  }, [firestore]);
-  
-  const eventTitlesQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, 'event_titles'));
-  }, [firestore]);
-
-  const eventsQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, 'events'));
-  }, [firestore]);
-  
-  const groupMembersQuery = useMemoFirebase(() => {
-      if (!firestore) return null;
-      return collection(firestore, 'group_members');
-  }, [firestore]);
+  const categoriesQuery = query(collection(firestore, 'team_categories'), orderBy('order'));
+  const teamsQuery = collection(firestore, 'teams');
+  const locationsQuery = collection(firestore, 'locations');
+  const eventTitlesQuery = collection(firestore, 'event_titles');
+  const eventsQuery = collection(firestore, 'events');
+  const groupMembersQuery = collection(firestore, 'group_members');
 
   const { data: categories, isLoading: categoriesLoading } = useCollection<TeamCategory>(categoriesQuery);
   const { data: teams, isLoading: teamsLoading } = useCollection<Team>(teamsQuery);

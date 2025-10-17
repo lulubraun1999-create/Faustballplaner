@@ -2,7 +2,7 @@
 'use client';
 
 import { collection, Timestamp, doc, updateDoc, deleteDoc, setDoc, query, orderBy } from 'firebase/firestore';
-import { useFirestore, useCollection, useMemoFirebase, useUser, useDoc } from '@/firebase';
+import { useFirestore, useCollection, useUser, useDoc } from '@/firebase';
 import { Header } from '@/components/header';
 import {
   Table,
@@ -156,28 +156,13 @@ export default function MitgliederPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedFilterTeamId, setSelectedFilterTeamId] = useState('all');
 
-  const currentUserDocRef = useMemoFirebase(() => {
-    if (!firestore || !authUser) return null;
-    return doc(firestore, 'users', authUser.uid);
-  }, [firestore, authUser]);
-
+  const currentUserDocRef = authUser ? doc(firestore, 'users', authUser.uid) : null;
   const { data: currentUserData, isLoading: isUserDocLoading } = useDoc<User>(currentUserDocRef);
   const isAdmin = currentUserData?.adminRechte === true;
 
-  const usersCollectionRef = useMemoFirebase(() => {
-    if (!firestore || !isAdmin) return null;
-    return collection(firestore, 'users');
-  }, [firestore, isAdmin]);
-
-  const teamsCollectionRef = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return collection(firestore, 'teams');
-  }, [firestore]);
-
-  const categoriesQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, 'team_categories'), orderBy('order'));
-  }, [firestore]);
+  const usersCollectionRef = isAdmin ? collection(firestore, 'users') : null;
+  const teamsCollectionRef = collection(firestore, 'teams');
+  const categoriesQuery = query(collection(firestore, 'team_categories'), orderBy('order'));
 
   const { data: users, isLoading: usersLoading, error: usersError } = useCollection<User>(usersCollectionRef);
   const { data: teams, isLoading: teamsLoading, error: teamsError } = useCollection<Team>(teamsCollectionRef);

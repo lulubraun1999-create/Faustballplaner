@@ -6,7 +6,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useFirestore, useUser, useCollection, useMemoFirebase } from '@/firebase';
+import { useFirestore, useUser, useCollection } from '@/firebase';
 import { addDoc, collection, serverTimestamp, orderBy, query, Timestamp, doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Header } from '@/components/header';
@@ -342,10 +342,7 @@ function PollCard({ poll, allUsers }: { poll: Poll; allUsers: GroupMember[] }) {
     const [viewMode, setViewMode] = useState<'vote' | 'results'>('vote');
     const [showVoters, setShowVoters] = useState(false);
 
-    const responsesQuery = useMemoFirebase(() => {
-        if (!firestore) return null;
-        return collection(firestore, 'polls', poll.id, 'responses');
-    }, [firestore, poll.id]);
+    const responsesQuery = poll.id ? collection(firestore, 'polls', poll.id, 'responses') : null;
 
     const { data: responses, isLoading: responsesLoading } = useCollection<PollResponse>(responsesQuery);
     
@@ -618,25 +615,10 @@ export default function UmfragenPage() {
   const firestore = useFirestore();
   const { user } = useUser();
 
-  const categoriesQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, 'team_categories'), orderBy('order'));
-  }, [firestore]);
-
-  const teamsQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, 'teams'), orderBy('name'));
-  }, [firestore]);
-  
-  const groupMembersQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return collection(firestore, 'group_members');
-  }, [firestore]);
-  
-  const pollsQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, 'polls'), orderBy('createdAt', 'desc'));
-  }, [firestore]);
+  const categoriesQuery = query(collection(firestore, 'team_categories'), orderBy('order'));
+  const teamsQuery = query(collection(firestore, 'teams'), orderBy('name'));
+  const groupMembersQuery = collection(firestore, 'group_members');
+  const pollsQuery = query(collection(firestore, 'polls'), orderBy('createdAt', 'desc'));
 
   const { data: categories, isLoading: categoriesLoading } = useCollection<TeamCategory>(categoriesQuery);
   const { data: teams, isLoading: teamsLoading } = useCollection<Team>(teamsQuery);

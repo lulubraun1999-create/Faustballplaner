@@ -6,7 +6,7 @@ import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { collection, query, orderBy, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, Timestamp } from 'firebase/firestore';
-import { useFirestore, useCollection, useDoc, useMemoFirebase, useUser } from '@/firebase';
+import { useFirestore, useCollection, useDoc, useUser } from '@/firebase';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -208,20 +208,12 @@ export default function AdminNewsPage() {
     setIsClient(true);
   }, []);
   
-  const currentUserDocRef = useMemoFirebase(() => {
-    if (!firestore || !user) return null;
-    return doc(firestore, 'users', user.uid);
-  }, [firestore, user]);
-
+  const currentUserDocRef = user ? doc(firestore, 'users', user.uid) : null;
   const { data: currentUserData, isLoading: isUserLoading } = useDoc<UserData>(currentUserDocRef);
   
   const isAdmin = currentUserData?.adminRechte === true;
 
-  const newsQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, 'news_articles'), orderBy('publicationDate', 'desc'));
-  }, [firestore]);
-
+  const newsQuery = query(collection(firestore, 'news_articles'), orderBy('publicationDate', 'desc'));
   const { data: articles, isLoading, error } = useCollection<NewsArticle>(newsQuery);
 
   const handleOpenForm = (article?: NewsArticle) => {
@@ -379,7 +371,3 @@ export default function AdminNewsPage() {
     </div>
   );
 }
-
-    
-
-    

@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { useFirestore, useUser, useCollection, useDoc, useMemoFirebase } from '@/firebase';
+import { useFirestore, useUser, useCollection, useDoc } from '@/firebase';
 import { collection, query, orderBy, addDoc, serverTimestamp, Timestamp, doc, deleteDoc, where, getDocs, setDoc, onSnapshot } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Header } from '@/components/header';
@@ -85,18 +85,10 @@ export default function ChatPage() {
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
 
 
-  const currentUserDocRef = useMemoFirebase(() => {
-    if (!firestore || !user) return null;
-    return doc(firestore, 'users', user.uid);
-  }, [firestore, user]);
-
+  const currentUserDocRef = user ? doc(firestore, 'users', user.uid) : null;
   const { data: currentUserData, isLoading: isUserLoading } = useDoc<UserData>(currentUserDocRef);
   
-  const teamsQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return collection(firestore, 'teams');
-  }, [firestore]);
-  
+  const teamsQuery = collection(firestore, 'teams');
   const { data: teams, isLoading: areTeamsLoading } = useCollection<Team>(teamsQuery);
   
   const chatRooms = useMemo(() => {
@@ -172,10 +164,7 @@ export default function ChatPage() {
   }, [firestore, user, activeRoom]);
 
   
-  const messagesQuery = useMemoFirebase(() => {
-    if (!firestore || !activeRoom) return null;
-    return query(collection(firestore, 'chat_rooms', activeRoom.id, 'messages'), orderBy('timestamp', 'asc'));
-  }, [firestore, activeRoom]);
+  const messagesQuery = activeRoom ? query(collection(firestore, 'chat_rooms', activeRoom.id, 'messages'), orderBy('timestamp', 'asc')) : null;
 
   const { data: messages, isLoading: areMessagesLoading } = useCollection<ChatMessage>(messagesQuery);
   

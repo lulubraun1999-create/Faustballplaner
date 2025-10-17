@@ -6,7 +6,7 @@ import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { useFirestore, useCollection } from '@/firebase';
 import { collection, orderBy, query, addDoc, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { Loader2 } from 'lucide-react';
 import {
@@ -255,20 +255,9 @@ export default function MannschaftenPage() {
     setIsClient(true);
   }, []);
 
-  const categoriesQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, 'team_categories'), orderBy('order'));
-  }, [firestore]);
-
-  const teamsQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return collection(firestore, 'teams');
-  }, [firestore]);
-
-  const groupMembersQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return collection(firestore, 'group_members');
-  }, [firestore]);
+  const categoriesQuery = query(collection(firestore, 'team_categories'), orderBy('order'));
+  const teamsQuery = collection(firestore, 'teams');
+  const groupMembersQuery = collection(firestore, 'group_members');
 
 
   const { data: categories, isLoading: categoriesLoading } = useCollection<TeamCategory>(categoriesQuery);
