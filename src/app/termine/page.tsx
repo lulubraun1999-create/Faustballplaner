@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -438,12 +437,11 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showAddTitle, setShowAddTitle] = useState(false);
   const [showAddLocation, setShowAddLocation] = useState(false);
-  const [editMode, setEditMode] = useState<'single' | 'future' | null>(null);
   const [isEditModeDialog, setIsEditModeDialog] = useState(false);
   
   const getInitialFormValues = () => {
     if (event) {
-      const startDate = event.date.toDate();
+      const startDate = event.displayDate;
       const endDate = event.endTime?.toDate();
       const rsvpDate = event.rsvpDeadline?.toDate();
       return {
@@ -499,7 +497,7 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
 
 
   const handleFormSubmit = async (values: EventFormValues) => {
-     if (event && event.recurrence !== 'none') {
+     if (event && event.recurrence !== 'none' && event.recurrence) {
       setIsEditModeDialog(true);
     } else {
       await saveEvent(values, 'single');
@@ -525,6 +523,40 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
     }
 
     try {
+        const dataToSave: { [key: string]: any } = {
+            titleId: values.titleId,
+            isAllDay: values.isAllDay,
+            recurrence: values.recurrence,
+            targetTeamIds: values.targetTeamIds || [],
+            locationId: values.locationId || '',
+            meetingPoint: values.meetingPoint || '',
+            description: values.description || '',
+            createdBy: user.uid,
+            createdAt: event ? event.createdAt : serverTimestamp(),
+        };
+
+        const startDate = combineDateAndTime(values.date, values.isAllDay ? undefined : values.startTime);
+        dataToSave.date = Timestamp.fromDate(startDate);
+        
+        if (values.endDate && values.endTime && !values.isAllDay) {
+            dataToSave.endTime = Timestamp.fromDate(combineDateAndTime(values.endDate, values.endTime));
+        } else {
+             dataToSave.endTime = null;
+        }
+        
+        if (values.recurrence !== 'none' && values.recurrenceEndDate) {
+            dataToSave.recurrenceEndDate = Timestamp.fromDate(values.recurrenceEndDate);
+        } else {
+            dataToSave.recurrenceEndDate = null;
+        }
+        
+        if (values.rsvpDeadlineDate) {
+            dataToSave.rsvpDeadline = Timestamp.fromDate(combineDateAndTime(values.rsvpDeadlineDate, values.rsvpDeadlineTime));
+        } else {
+             dataToSave.rsvpDeadline = null;
+        }
+
+
         if (event && mode === 'single') {
             // Create an override for a single instance of a recurring event
             const overrideData: Partial<EventOverride> = {
@@ -556,43 +588,8 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
 
         } else {
             // Create a new event or update all future events
-             const dataToSave: { [key: string]: any } = {
-              titleId: values.titleId,
-              isAllDay: values.isAllDay,
-              recurrence: values.recurrence,
-              targetTeamIds: values.targetTeamIds || [],
-              locationId: values.locationId || '',
-              meetingPoint: values.meetingPoint || '',
-              description: values.description || '',
-              createdBy: user.uid,
-              createdAt: event ? event.createdAt : serverTimestamp(),
-            };
-            
-            const startDate = combineDateAndTime(values.date, values.isAllDay ? undefined : values.startTime);
-            dataToSave.date = Timestamp.fromDate(startDate);
-            
-            if (values.endDate && values.endTime && !values.isAllDay) {
-                dataToSave.endTime = Timestamp.fromDate(combineDateAndTime(values.endDate, values.endTime));
-            } else {
-                 dataToSave.endTime = null;
-            }
-            
-            if (values.recurrence !== 'none' && values.recurrenceEndDate) {
-                dataToSave.recurrenceEndDate = Timestamp.fromDate(values.recurrenceEndDate);
-            } else {
-                dataToSave.recurrenceEndDate = null;
-            }
-            
-            if (values.rsvpDeadlineDate) {
-                dataToSave.rsvpDeadline = Timestamp.fromDate(combineDateAndTime(values.rsvpDeadlineDate, values.rsvpDeadlineTime));
-            } else {
-                 dataToSave.rsvpDeadline = null;
-            }
-
             let promise;
-            let action: 'create' | 'update' = 'create';
             if (event) {
-                action = 'update';
                 if(mode === 'future') {
                     // When editing future events, we essentially create a NEW event series
                     // starting from the display date of the edited instance.
@@ -601,7 +598,6 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
                     const newRecurrenceEndDate = add(event.displayDate, { days: -1 });
                     await updateDoc(oldEventRef, { recurrenceEndDate: Timestamp.fromDate(newRecurrenceEndDate) });
                     promise = addDoc(collection(firestore, 'events'), dataToSave);
-                    action = 'create';
                 } else {
                      promise = updateDoc(doc(firestore, 'events', event.id), dataToSave);
                 }
@@ -624,315 +620,315 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
 
   return (
     <>
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-6">
-        <DialogHeader>
-          <DialogTitle>{event ? 'Termin bearbeiten' : 'Neuen Termin erstellen'}</DialogTitle>
-        </DialogHeader>
-        
-        <div className="flex gap-2 items-end">
-            <FormField control={form.control} name="titleId" render={({ field }) => (
-                <FormItem className="flex-grow">
-                    <FormLabel>Titel</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Wähle einen Titel" />
-                            </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                            {eventTitles.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
-                    <FormMessage />
-                </FormItem>
-            )} />
-            {canEdit && (
-                <Popover open={showAddTitle} onOpenChange={setShowAddTitle}>
-                    <PopoverTrigger asChild>
-                        <Button type="button" variant="outline"><PlusCircle /></Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-80">
-                        <Tabs defaultValue="add">
-                            <TabsList className="grid w-full grid-cols-2">
-                                <TabsTrigger value="add">Hinzufügen</TabsTrigger>
-                                <TabsTrigger value="delete">Löschen</TabsTrigger>
-                            </TabsList>
-                            <TabsContent value="add" className="pt-4">
-                                <AddEventTitleForm onDone={() => setShowAddTitle(false)} />
-                            </TabsContent>
-                            <TabsContent value="delete" className="pt-4">
-                                <DeleteEventTitleForm onDone={() => setShowAddTitle(false)} eventTitles={eventTitles}/>
-                            </TabsContent>
-                        </Tabs>
-                    </PopoverContent>
-                </Popover>
-            )}
-        </div>
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-6">
+          <DialogHeader>
+            <DialogTitle>{event ? 'Termin bearbeiten' : 'Neuen Termin erstellen'}</DialogTitle>
+          </DialogHeader>
+          
+          <div className="flex gap-2 items-end">
+              <FormField control={form.control} name="titleId" render={({ field }) => (
+                  <FormItem className="flex-grow">
+                      <FormLabel>Titel</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                              <SelectTrigger>
+                                  <SelectValue placeholder="Wähle einen Titel" />
+                              </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                              {eventTitles.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                          </SelectContent>
+                      </Select>
+                      <FormMessage />
+                  </FormItem>
+              )} />
+              {canEdit && (
+                  <Popover open={showAddTitle} onOpenChange={setShowAddTitle}>
+                      <PopoverTrigger asChild>
+                          <Button type="button" variant="outline"><PlusCircle /></Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-80">
+                          <Tabs defaultValue="add">
+                              <TabsList className="grid w-full grid-cols-2">
+                                  <TabsTrigger value="add">Hinzufügen</TabsTrigger>
+                                  <TabsTrigger value="delete">Löschen</TabsTrigger>
+                              </TabsList>
+                              <TabsContent value="add" className="pt-4">
+                                  <AddEventTitleForm onDone={() => setShowAddTitle(false)} />
+                              </TabsContent>
+                              <TabsContent value="delete" className="pt-4">
+                                  <DeleteEventTitleForm onDone={() => setShowAddTitle(false)} eventTitles={eventTitles}/>
+                              </TabsContent>
+                          </Tabs>
+                      </PopoverContent>
+                  </Popover>
+              )}
+          </div>
 
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
-            <FormField control={form.control} name="date" render={({ field }) => (
-                <FormItem className="flex flex-col">
-                    <FormLabel>Beginn</FormLabel>
-                    <Popover>
-                        <PopoverTrigger asChild>
-                        <FormControl>
-                            <Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                            {field.value ? format(field.value, 'dd.MM.yyyy') : <span>Datum</span>}
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                            </Button>
-                        </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus locale={de} />
-                        </PopoverContent>
-                    </Popover>
-                    <FormMessage />
-                </FormItem>
-            )} />
-            {!isAllDay && <FormField control={form.control} name="startTime" render={({ field }) => (
-                <FormItem>
-                    <FormLabel>Zeit</FormLabel>
-                    <FormControl><Input type="time" {...field} /></FormControl>
-                    <FormMessage />
-                </FormItem>
-            )} />}
-        </div>
-        
-         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
-            <FormField control={form.control} name="endDate" render={({ field }) => (
-                <FormItem className="flex flex-col">
-                    <FormLabel>Ende</FormLabel>
-                    <Popover>
-                        <PopoverTrigger asChild>
-                        <FormControl>
-                            <Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                            {field.value ? format(field.value, 'dd.MM.yyyy') : <span>Datum (optional)</span>}
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                            </Button>
-                        </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar mode="single" selected={field.value} onSelect={field.onChange} locale={de} />
-                        </PopoverContent>
-                    </Popover>
-                    <FormMessage />
-                </FormItem>
-            )} />
-            {!isAllDay && <FormField control={form.control} name="endTime" render={({ field }) => (
-                <FormItem>
-                    <FormLabel>Zeit</FormLabel>
-                    <FormControl><Input type="time" {...field} /></FormControl>
-                    <FormMessage />
-                </FormItem>
-            )} />}
-        </div>
-        
-        <FormField control={form.control} name="isAllDay" render={({ field }) => (
-            <FormItem className="flex flex-row items-center gap-3 space-y-0 rounded-lg border p-4">
-                 <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
-                <div className="space-y-0.5">
-                  <FormLabel>Ganztägiger Termin</FormLabel>
-                  <p className="text-[0.8rem] text-muted-foreground">Wenn aktiviert, werden die Zeitfelder ignoriert.</p>
-                </div>
-            </FormItem>
-        )} />
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
-            <FormField control={form.control} name="recurrence" render={({ field }) => (
-                <FormItem>
-                    <FormLabel>Wiederholung</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                        <SelectTrigger>
-                            <SelectValue placeholder="Wähle eine Wiederholungsregel" />
-                        </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                            <SelectItem value="none">Keine Wiederholung</SelectItem>
-                            <SelectItem value="weekly">Wöchentlich</SelectItem>
-                            <SelectItem value="biweekly">Alle 2 Wochen</SelectItem>
-                            <SelectItem value="monthly">Monatlich</SelectItem>
-                        </SelectContent>
-                    </Select>
-                    <FormMessage />
-                </FormItem>
-            )} />
-            {recurrence !== 'none' && (
-                <FormField control={form.control} name="recurrenceEndDate" render={({ field }) => (
-                    <FormItem className="flex flex-col">
-                        <FormLabel>Wiederholung endet am</FormLabel>
-                        <Popover>
-                            <PopoverTrigger asChild>
-                            <FormControl>
-                                <Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                                {field.value ? format(field.value, 'dd.MM.yyyy') : <span>Datum (optional)</span>}
-                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                                </Button>
-                            </FormControl>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar mode="single" selected={field.value} onSelect={field.onChange} locale={de} />
-                            </PopoverContent>
-                        </Popover>
-                        <FormMessage />
-                    </FormItem>
-                )} />
-            )}
-        </div>
-        
-        <FormField control={form.control} name="targetTeamIds" render={() => (
-            <FormItem>
-              <div className="mb-4">
-                <FormLabel className="text-base">Zielgruppen</FormLabel>
-                <p className="text-sm text-muted-foreground">Wähle die Mannschaften aus, für die dieser Termin gilt. Wenn keine ausgewählt ist, ist er für alle sichtbar.</p>
-              </div>
-              <Accordion type="multiple" className="w-full">
-                {groupedTeams.map(category => (
-                  <AccordionItem value={category.id} key={category.id}>
-                    <AccordionTrigger>{category.name}</AccordionTrigger>
-                    <AccordionContent>
-                      {category.teams.map(team => (
-                        <FormField key={team.id} control={form.control} name="targetTeamIds" render={({ field }) => (
-                            <FormItem key={team.id} className="flex flex-row items-start space-x-3 space-y-0 p-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+              <FormField control={form.control} name="date" render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                      <FormLabel>Beginn</FormLabel>
+                      <Popover>
+                          <PopoverTrigger asChild>
+                          <FormControl>
+                              <Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                              {field.value ? format(field.value, 'dd.MM.yyyy') : <span>Datum</span>}
+                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                              </Button>
+                          </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus locale={de} />
+                          </PopoverContent>
+                      </Popover>
+                      <FormMessage />
+                  </FormItem>
+              )} />
+              {!isAllDay && <FormField control={form.control} name="startTime" render={({ field }) => (
+                  <FormItem>
+                      <FormLabel>Zeit</FormLabel>
+                      <FormControl><Input type="time" {...field} /></FormControl>
+                      <FormMessage />
+                  </FormItem>
+              )} />}
+          </div>
+          
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+              <FormField control={form.control} name="endDate" render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                      <FormLabel>Ende</FormLabel>
+                      <Popover>
+                          <PopoverTrigger asChild>
+                          <FormControl>
+                              <Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                              {field.value ? format(field.value, 'dd.MM.yyyy') : <span>Datum (optional)</span>}
+                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                              </Button>
+                          </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar mode="single" selected={field.value} onSelect={field.onChange} locale={de} />
+                          </PopoverContent>
+                      </Popover>
+                      <FormMessage />
+                  </FormItem>
+              )} />
+              {!isAllDay && <FormField control={form.control} name="endTime" render={({ field }) => (
+                  <FormItem>
+                      <FormLabel>Zeit</FormLabel>
+                      <FormControl><Input type="time" {...field} /></FormControl>
+                      <FormMessage />
+                  </FormItem>
+              )} />}
+          </div>
+          
+          <FormField control={form.control} name="isAllDay" render={({ field }) => (
+              <FormItem className="flex flex-row items-center gap-3 space-y-0 rounded-lg border p-4">
+                   <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                  <div className="space-y-0.5">
+                    <FormLabel>Ganztägiger Termin</FormLabel>
+                    <p className="text-[0.8rem] text-muted-foreground">Wenn aktiviert, werden die Zeitfelder ignoriert.</p>
+                  </div>
+              </FormItem>
+          )} />
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+              <FormField control={form.control} name="recurrence" render={({ field }) => (
+                  <FormItem>
+                      <FormLabel>Wiederholung</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                          <SelectTrigger>
+                              <SelectValue placeholder="Wähle eine Wiederholungsregel" />
+                          </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                              <SelectItem value="none">Keine Wiederholung</SelectItem>
+                              <SelectItem value="weekly">Wöchentlich</SelectItem>
+                              <SelectItem value="biweekly">Alle 2 Wochen</SelectItem>
+                              <SelectItem value="monthly">Monatlich</SelectItem>
+                          </SelectContent>
+                      </Select>
+                      <FormMessage />
+                  </FormItem>
+              )} />
+              {recurrence !== 'none' && (
+                  <FormField control={form.control} name="recurrenceEndDate" render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                          <FormLabel>Wiederholung endet am</FormLabel>
+                          <Popover>
+                              <PopoverTrigger asChild>
                               <FormControl>
-                                <Checkbox
-                                  checked={field.value?.includes(team.id)}
-                                  onCheckedChange={(checked) => {
-                                    return checked
-                                      ? field.onChange([...(field.value || []), team.id])
-                                      : field.onChange(field.value?.filter((value) => value !== team.id));
-                                  }}
-                                />
+                                  <Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                                  {field.value ? format(field.value, 'dd.MM.yyyy') : <span>Datum (optional)</span>}
+                                  <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                  </Button>
                               </FormControl>
-                              <FormLabel className="font-normal">{team.name}</FormLabel>
-                            </FormItem>
-                          )}
-                        />
-                      ))}
-                    </AccordionContent>
-                  </AccordionItem>
-                ))}
-              </Accordion>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-auto p-0" align="start">
+                              <Calendar mode="single" selected={field.value} onSelect={field.onChange} locale={de} />
+                              </PopoverContent>
+                          </Popover>
+                          <FormMessage />
+                      </FormItem>
+                  )} />
+              )}
+          </div>
+          
+          <FormField control={form.control} name="targetTeamIds" render={() => (
+              <FormItem>
+                <div className="mb-4">
+                  <FormLabel className="text-base">Zielgruppen</FormLabel>
+                  <p className="text-sm text-muted-foreground">Wähle die Mannschaften aus, für die dieser Termin gilt. Wenn keine ausgewählt ist, ist er für alle sichtbar.</p>
+                </div>
+                <Accordion type="multiple" className="w-full">
+                  {groupedTeams.map(category => (
+                    <AccordionItem value={category.id} key={category.id}>
+                      <AccordionTrigger>{category.name}</AccordionTrigger>
+                      <AccordionContent>
+                        {category.teams.map(team => (
+                          <FormField key={team.id} control={form.control} name="targetTeamIds" render={({ field }) => (
+                              <FormItem key={team.id} className="flex flex-row items-start space-x-3 space-y-0 p-2">
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value?.includes(team.id)}
+                                    onCheckedChange={(checked) => {
+                                      return checked
+                                        ? field.onChange([...(field.value || []), team.id])
+                                        : field.onChange(field.value?.filter((value) => value !== team.id));
+                                    }}
+                                  />
+                                </FormControl>
+                                <FormLabel className="font-normal">{team.name}</FormLabel>
+                              </FormItem>
+                            )}
+                          />
+                        ))}
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
+                <FormMessage />
+              </FormItem>
+          )} />
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+              <FormField control={form.control} name="rsvpDeadlineDate" render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                      <FormLabel>Rückmeldung bis</FormLabel>
+                      <Popover>
+                          <PopoverTrigger asChild>
+                          <FormControl>
+                              <Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                              {field.value ? format(field.value, 'dd.MM.yyyy') : <span>Datum (optional)</span>}
+                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                              </Button>
+                          </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar mode="single" selected={field.value} onSelect={field.onChange} locale={de} />
+                          </PopoverContent>
+                      </Popover>
+                      <FormMessage />
+                  </FormItem>
+              )} />
+              <FormField control={form.control} name="rsvpDeadlineTime" render={({ field }) => (
+                  <FormItem>
+                      <FormLabel>Zeit</FormLabel>
+                      <FormControl><Input type="time" {...field} /></FormControl>
+                      <FormMessage />
+                  </FormItem>
+              )} />
+          </div>
+          
+         <div className="flex gap-2 items-end">
+              <FormField control={form.control} name="locationId" render={({ field }) => (
+                  <FormItem className="flex-grow">
+                      <FormLabel>Ort</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                              <SelectTrigger>
+                                  <SelectValue placeholder="Wähle einen Ort" />
+                              </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                              {locations.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)}
+                          </SelectContent>
+                      </Select>
+                      <FormMessage />
+                  </FormItem>
+              )} />
+               {canEdit && (
+                  <Popover open={showAddLocation} onOpenChange={setShowAddLocation}>
+                      <PopoverTrigger asChild>
+                          <Button type="button" variant="outline"><PlusCircle /></Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-80">
+                           <Tabs defaultValue="add">
+                              <TabsList className="grid w-full grid-cols-2">
+                                  <TabsTrigger value="add">Hinzufügen</TabsTrigger>
+                                  <TabsTrigger value="delete">Löschen</TabsTrigger>
+                              </TabsList>
+                              <TabsContent value="add" className="pt-4">
+                                  <AddLocationForm onDone={() => setShowAddLocation(false)} />
+                              </TabsContent>
+                              <TabsContent value="delete" className="pt-4">
+                                  <DeleteLocationForm onDone={() => setShowAddLocation(false)} locations={locations}/>
+                              </TabsContent>
+                          </Tabs>
+                      </PopoverContent>
+                  </Popover>
+              )}
+          </div>
+
+
+          <FormField control={form.control} name="meetingPoint" render={({ field }) => (
+            <FormItem>
+              <FormLabel>Treffpunkt (optional)</FormLabel>
+              <FormControl><Input placeholder="z.B. Vor dem Vereinsheim" {...field} /></FormControl>
               <FormMessage />
             </FormItem>
-        )} />
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
-            <FormField control={form.control} name="rsvpDeadlineDate" render={({ field }) => (
-                <FormItem className="flex flex-col">
-                    <FormLabel>Rückmeldung bis</FormLabel>
-                    <Popover>
-                        <PopoverTrigger asChild>
-                        <FormControl>
-                            <Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                            {field.value ? format(field.value, 'dd.MM.yyyy') : <span>Datum (optional)</span>}
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                            </Button>
-                        </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar mode="single" selected={field.value} onSelect={field.onChange} locale={de} />
-                        </PopoverContent>
-                    </Popover>
-                    <FormMessage />
-                </FormItem>
-            )} />
-            <FormField control={form.control} name="rsvpDeadlineTime" render={({ field }) => (
-                <FormItem>
-                    <FormLabel>Zeit</FormLabel>
-                    <FormControl><Input type="time" {...field} /></FormControl>
-                    <FormMessage />
-                </FormItem>
-            )} />
-        </div>
-        
-       <div className="flex gap-2 items-end">
-            <FormField control={form.control} name="locationId" render={({ field }) => (
-                <FormItem className="flex-grow">
-                    <FormLabel>Ort</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Wähle einen Ort" />
-                            </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                            {locations.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
-                    <FormMessage />
-                </FormItem>
-            )} />
-             {canEdit && (
-                <Popover open={showAddLocation} onOpenChange={setShowAddLocation}>
-                    <PopoverTrigger asChild>
-                        <Button type="button" variant="outline"><PlusCircle /></Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-80">
-                         <Tabs defaultValue="add">
-                            <TabsList className="grid w-full grid-cols-2">
-                                <TabsTrigger value="add">Hinzufügen</TabsTrigger>
-                                <TabsTrigger value="delete">Löschen</TabsTrigger>
-                            </TabsList>
-                            <TabsContent value="add" className="pt-4">
-                                <AddLocationForm onDone={() => setShowAddLocation(false)} />
-                            </TabsContent>
-                            <TabsContent value="delete" className="pt-4">
-                                <DeleteLocationForm onDone={() => setShowAddLocation(false)} locations={locations}/>
-                            </TabsContent>
-                        </Tabs>
-                    </PopoverContent>
-                </Popover>
-            )}
-        </div>
+          )} />
 
+          <FormField control={form.control} name="description" render={({ field }) => (
+            <FormItem>
+              <FormLabel>Beschreibung (optional)</FormLabel>
+              <FormControl><Textarea placeholder="Weitere Details zum Termin..." {...field} /></FormControl>
+              <FormMessage />
+            </FormItem>
+          )} />
 
-        <FormField control={form.control} name="meetingPoint" render={({ field }) => (
-          <FormItem>
-            <FormLabel>Treffpunkt (optional)</FormLabel>
-            <FormControl><Input placeholder="z.B. Vor dem Vereinsheim" {...field} /></FormControl>
-            <FormMessage />
-          </FormItem>
-        )} />
+          <DialogFooter>
+            <DialogClose asChild><Button type="button" variant="outline" disabled={isSubmitting}>Abbrechen</Button></DialogClose>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? <Loader2 className="animate-spin" /> : 'Speichern'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </Form>
 
-        <FormField control={form.control} name="description" render={({ field }) => (
-          <FormItem>
-            <FormLabel>Beschreibung (optional)</FormLabel>
-            <FormControl><Textarea placeholder="Weitere Details zum Termin..." {...field} /></FormControl>
-            <FormMessage />
-          </FormItem>
-        )} />
-
-        <DialogFooter>
-          <DialogClose asChild><Button type="button" variant="outline" disabled={isSubmitting}>Abbrechen</Button></DialogClose>
-          <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? <Loader2 className="animate-spin" /> : 'Speichern'}
-          </Button>
-        </DialogFooter>
-      </form>
-    </Form>
-
-    <AlertDialog open={isEditModeDialog} onOpenChange={setIsEditModeDialog}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Serientermin bearbeiten</AlertDialogTitle>
-          <AlertDialogDescription>
-            Sie bearbeiten einen Termin, der Teil einer Serie ist. Möchten Sie nur diesen einzelnen Termin ändern oder diesen und alle zukünftigen Termine in der Serie?
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-          <AlertDialogAction onClick={() => saveEvent(form.getValues(), 'single')}>
-            Nur diesen Termin
-          </AlertDialogAction>
-          <AlertDialogAction onClick={() => saveEvent(form.getValues(), 'future')}>
-            Diesen und zukünftige
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+      <AlertDialog open={isEditModeDialog} onOpenChange={setIsEditModeDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Serientermin bearbeiten</AlertDialogTitle>
+            <AlertDialogDescription>
+              Sie bearbeiten einen Termin, der Teil einer Serie ist. Möchten Sie nur diesen einzelnen Termin ändern oder diesen und alle zukünftigen Termine in der Serie?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction onClick={() => saveEvent(form.getValues(), 'single')}>
+              Nur diesen Termin
+            </AlertDialogAction>
+            <AlertDialogAction onClick={() => saveEvent(form.getValues(), 'future')}>
+              Diesen und zukünftige
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
@@ -1256,6 +1252,19 @@ export default function TerminePage() {
     return query(collection(firestore, 'events'));
   }, [firestore]);
   
+  const { data: eventsData, isLoading: eventsLoading, error } = useCollection<Event>(eventsQuery);
+
+  const eventOverridesQuery = useMemo(() => {
+    if (!firestore || !eventsData) return null;
+    // This is not efficient, but for now we fetch all overrides.
+    // A better approach would be to query overrides for events visible in the week.
+    const allEventIds = eventsData.map(e => e.id);
+    if(allEventIds.length === 0) return null;
+    // Firestore 'in' query supports up to 30 items.
+    // For more, we'd need multiple queries.
+    return query(collection(firestore, 'event_overrides'), where('eventId', 'in', allEventIds.slice(0,30)));
+  }, [firestore, eventsData]);
+  
   const categoriesQuery = useMemo(() => {
     if (!firestore) return null;
     return query(collection(firestore, 'team_categories'), orderBy('order'));
@@ -1280,20 +1289,7 @@ export default function TerminePage() {
     if (!firestore) return null;
     return query(collection(firestore, 'event_titles'));
   }, [firestore]);
-
-  const eventOverridesQuery = useMemo(() => {
-    if (!firestore) return null;
-    // This is not efficient, but for now we fetch all overrides.
-    // A better approach would be to query overrides for events visible in the week.
-    const allEventIds = (eventsData || []).map(e => e.id);
-    if(allEventIds.length === 0) return null;
-    // Firestore 'in' query supports up to 30 items.
-    // For more, we'd need multiple queries.
-    return query(collection(firestore, 'event_overrides'), where('eventId', 'in', allEventIds.slice(0,30)));
-  }, [firestore, eventsData]);
-
-
-  const { data: eventsData, isLoading: eventsLoading, error } = useCollection<Event>(eventsQuery);
+  
   const { data: categories, isLoading: categoriesLoading } = useCollection<TeamCategory>(categoriesQuery);
   const { data: teams, isLoading: teamsLoading } = useCollection<Team>(teamsQuery);
   const { data: allUsers, isLoading: usersLoading } = useCollection<GroupMember>(groupMembersQuery);
@@ -1609,5 +1605,3 @@ export default function TerminePage() {
     </div>
   );
 }
-
-
