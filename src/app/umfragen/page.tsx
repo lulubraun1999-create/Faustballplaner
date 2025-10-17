@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -150,12 +151,6 @@ function CreatePollForm({ onDone, categories, teams }: { onDone: () => void, cat
         onDone();
       })
       .catch((serverError) => {
-        const permissionError = new FirestorePermissionError({
-          path: pollsCollection.path,
-          operation: 'create',
-          requestResourceData: dataToSave,
-        });
-        errorEmitter.emit('permission-error', permissionError);
         toast({ variant: 'destructive', title: 'Fehler', description: "Berechtigungsfehler: " + serverError.message });
       })
       .finally(() => {
@@ -732,6 +727,5 @@ export default function UmfragenPage() {
     </div>
   );
 }
-
     
     

@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -159,12 +160,7 @@ function AddEventTitleForm({ onDone }: { onDone: () => void }) {
                 onDone();
             })
             .catch(serverError => {
-                 const permissionError = new FirestorePermissionError({
-                    path: eventTitlesCollection.path,
-                    operation: 'create',
-                    requestResourceData: values,
-                });
-                errorEmitter.emit('permission-error', permissionError);
+                toast({ variant: 'destructive', title: 'Fehler', description: "Berechtigungsfehler: " + serverError.message });
             })
             .finally(() => setIsSubmitting(false));
     };
@@ -213,12 +209,7 @@ function AddLocationForm({ onDone }: { onDone: () => void }) {
                 onDone();
             })
             .catch(serverError => {
-                 const permissionError = new FirestorePermissionError({
-                    path: locationsCollection.path,
-                    operation: 'create',
-                    requestResourceData: values,
-                });
-                errorEmitter.emit('permission-error', permissionError);
+                toast({ variant: 'destructive', title: 'Fehler', description: "Berechtigungsfehler: " + serverError.message });
             })
             .finally(() => setIsSubmitting(false));
     };
