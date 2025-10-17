@@ -375,35 +375,36 @@ function EventForm({ onDone, event, categories, teams, isAdmin, eventTitles, loc
         <DialogHeader>
           <DialogTitle>{event ? 'Termin bearbeiten' : 'Neuen Termin erstellen'}</DialogTitle>
         </DialogHeader>
+        
+        <div className="flex gap-2 items-end">
+            <FormField control={form.control} name="titleId" render={({ field }) => (
+                <FormItem className="flex-grow">
+                    <FormLabel>Titel</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Wähle einen Titel" />
+                            </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                            {eventTitles.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                    <FormMessage />
+                </FormItem>
+            )} />
+            {isAdmin && (
+                <Popover open={showAddTitle} onOpenChange={setShowAddTitle}>
+                    <PopoverTrigger asChild>
+                        <Button type="button" variant="outline"><PlusCircle /></Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80">
+                        <AddEventTitleForm onDone={() => setShowAddTitle(false)} />
+                    </PopoverContent>
+                </Popover>
+            )}
+        </div>
 
-         <FormField control={form.control} name="titleId" render={({ field }) => (
-          <FormItem>
-            <FormLabel>Titel</FormLabel>
-             <div className="flex gap-2">
-                <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                        <SelectTrigger>
-                            <SelectValue placeholder="Wähle einen Titel" />
-                        </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                        {eventTitles.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
-                    </SelectContent>
-                </Select>
-                 {isAdmin && (
-                    <Popover open={showAddTitle} onOpenChange={setShowAddTitle}>
-                        <PopoverTrigger asChild>
-                            <Button type="button" variant="outline"><PlusCircle /></Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-80">
-                            <AddEventTitleForm onDone={() => setShowAddTitle(false)} />
-                        </PopoverContent>
-                    </Popover>
-                )}
-            </div>
-            <FormMessage />
-          </FormItem>
-        )} />
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
             <FormField control={form.control} name="date" render={({ field }) => (
@@ -582,34 +583,34 @@ function EventForm({ onDone, event, categories, teams, isAdmin, eventTitles, loc
             )} />
         </div>
         
-        <FormField control={form.control} name="locationId" render={({ field }) => (
-          <FormItem>
-            <FormLabel>Ort</FormLabel>
-            <div className="flex gap-2">
-                <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                        <SelectTrigger>
-                            <SelectValue placeholder="Wähle einen Ort" />
-                        </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                        {locations.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)}
-                    </SelectContent>
-                </Select>
-                 {isAdmin && (
-                    <Popover open={showAddLocation} onOpenChange={setShowAddLocation}>
-                        <PopoverTrigger asChild>
-                            <Button type="button" variant="outline"><PlusCircle /></Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-80">
-                            <AddLocationForm onDone={() => setShowAddLocation(false)} />
-                        </PopoverContent>
-                    </Popover>
-                )}
-            </div>
-            <FormMessage />
-          </FormItem>
-        )} />
+       <div className="flex gap-2 items-end">
+            <FormField control={form.control} name="locationId" render={({ field }) => (
+                <FormItem className="flex-grow">
+                    <FormLabel>Ort</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Wähle einen Ort" />
+                            </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                            {locations.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                    <FormMessage />
+                </FormItem>
+            )} />
+             {isAdmin && (
+                <Popover open={showAddLocation} onOpenChange={setShowAddLocation}>
+                    <PopoverTrigger asChild>
+                        <Button type="button" variant="outline"><PlusCircle /></Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80">
+                        <AddLocationForm onDone={() => setShowAddLocation(false)} />
+                    </PopoverContent>
+                </Popover>
+            )}
+        </div>
 
 
         <FormField control={form.control} name="meetingPoint" render={({ field }) => (
@@ -1233,5 +1234,8 @@ export default function TerminePage() {
     </div>
   );
 }
+
+    
+
 
     
