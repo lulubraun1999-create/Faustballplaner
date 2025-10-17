@@ -129,7 +129,13 @@ const eventSchema = z.object({
 
 type EventFormValues = z.infer<typeof eventSchema>;
 
-const itemSchema = z.object({
+const locationSchema = z.object({
+    name: z.string().min(1, "Name ist erforderlich"),
+    address: z.string().min(1, "Adresse ist erforderlich"),
+    city: z.string().min(1, "Stadt ist erforderlich"),
+});
+
+const titleSchema = z.object({
     name: z.string().min(1, "Name ist erforderlich"),
 });
 
@@ -137,12 +143,12 @@ const itemSchema = z.object({
 function AddLocationForm({ onDone }: { onDone: () => void }) {
     const firestore = useFirestore();
     const { toast } = useToast();
-    const form = useForm({ 
-        resolver: zodResolver(itemSchema), 
-        defaultValues: { name: '' } 
+    const form = useForm<z.infer<typeof locationSchema>>({ 
+        resolver: zodResolver(locationSchema), 
+        defaultValues: { name: '', address: '', city: '' } 
     });
 
-    const onSubmit = (values: { name: string }) => {
+    const onSubmit = (values: z.infer<typeof locationSchema>) => {
         if (!firestore) return;
         const locationsCollection = collection(firestore, 'locations');
         addDoc(locationsCollection, values)
@@ -162,14 +168,29 @@ function AddLocationForm({ onDone }: { onDone: () => void }) {
 
     return (
         <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="flex items-center gap-2">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                 <FormField control={form.control} name="name" render={({ field }) => (
-                    <FormItem className="flex-1">
-                        <FormControl><Input placeholder="Neuer Ort..." {...field} /></FormControl>
+                    <FormItem>
+                        <FormLabel>Name des Ortes</FormLabel>
+                        <FormControl><Input placeholder="z.B. Fritz-Jacobi-Anlage" {...field} /></FormControl>
                         <FormMessage />
                     </FormItem>
                 )} />
-                <Button type="submit">Hinzufügen</Button>
+                 <FormField control={form.control} name="address" render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>Straße & Hausnummer</FormLabel>
+                        <FormControl><Input placeholder="z.B. Kalkstraße 46" {...field} /></FormControl>
+                        <FormMessage />
+                    </FormItem>
+                )} />
+                 <FormField control={form.control} name="city" render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>Stadt</FormLabel>
+                        <FormControl><Input placeholder="z.B. Leverkusen" {...field} /></FormControl>
+                        <FormMessage />
+                    </FormItem>
+                )} />
+                <Button type="submit" className="w-full">Hinzufügen</Button>
             </form>
         </Form>
     );
@@ -178,13 +199,13 @@ function AddLocationForm({ onDone }: { onDone: () => void }) {
 function AddEventTitleForm({ onDone }: { onDone: () => void }) {
     const firestore = useFirestore();
     const { toast } = useToast();
-    const form = useForm({ 
-        resolver: zodResolver(itemSchema), 
+    const form = useForm<z.infer<typeof titleSchema>>({ 
+        resolver: zodResolver(titleSchema), 
         defaultValues: { name: '' } 
     });
 
 
-    const onSubmit = (values: { name: string }) => {
+    const onSubmit = (values: z.infer<typeof titleSchema>) => {
         if (!firestore) return;
         const eventTitlesCollection = collection(firestore, 'event_titles');
         addDoc(eventTitlesCollection, values)
@@ -340,7 +361,7 @@ function EventForm({ onDone, event, categories, teams, isAdmin, eventTitles, loc
         toast({ title: event ? 'Termin aktualisiert' : 'Termin erstellt' });
         onDone();
     }).catch((serverError) => {
-        toast({ variant: 'destructive', title: 'Fehler', description: "Berechtigungsfehler: " + serverError.message });
+        toast({ variant: 'destructive', title: 'Fehler', description: serverError.message });
     }).finally(() => {
         setIsSubmitting(false);
     });
@@ -621,6 +642,7 @@ function EventForm({ onDone, event, categories, teams, isAdmin, eventTitles, loc
 const EventCard = ({ event, allUsers, teams, onEdit, onDelete, eventTitles, locations }: { event: DisplayEvent; allUsers: GroupMember[]; teams: Team[], onEdit: (event: Event) => void; onDelete: (event: Event) => void, eventTitles: EventTitle[], locations: Location[] }) => {
     const { user } = useUser();
     const firestore = useFirestore();
+    const {toast} = useToast();
     const location = locations.find(l => l.id === event.locationId);
     const {data: currentUserData} = useDoc<UserData>(user ? doc(firestore, 'users', user.uid) : null);
     const isAdmin = currentUserData?.adminRechte === true;
@@ -1204,6 +1226,7 @@ export default function TerminePage() {
     </div>
   );
 }
+
 
 
 
