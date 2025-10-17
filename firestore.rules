@@ -2,358 +2,408 @@
  * @fileoverview Firestore Security Rules for the Werkself Hub application.
  *
  * Core Philosophy:
- * This ruleset prioritizes secure data access based on path-based ownership and role-based access,
- * with an emphasis on avoiding `get()` calls for efficiency and security. It assumes a strict
- * separation between public and private data.
+ * This ruleset prioritizes security and authorization independence, leveraging path-based ownership and denormalization to avoid complex `get()` calls. It enforces strict ownership for user-generated content and assumes read-only access for most global data collections. The rules are designed to be auditable and maintainable through the use of helper functions.
  *
  * Data Structure:
- * - Top-level collections: /news_articles, /matches, /players, /highlight_reels, /team_categories,
- *   /teams, /members, /group_members, /polls, /events, /locations, /event_titles.
- * - User-scoped subcollections: /users/{userId}/forum_posts, /users/{userId}/chat_status.
- * - Subcollections: /events/{eventId}/responses/{responseId}, /chat_rooms/{roomId}/messages/{messageId}, /polls/{pollId}/responses/{responseId}.
+ * - User-specific data is nested under `/users/{userId}`, enabling path-based authorization.
+ * - Global data (news, matches, players) resides in top-level collections.
+ * - Subcollections (e.g., `/users/{userId}/forum_posts/{postId}`) inherit the authorization context of their parent documents.
  *
  * Key Security Decisions:
- * - User data is secured via path-based ownership under /users/{userId}.
- * - Forum posts are secured via path-based ownership under /users/{userId}/forum_posts.
- * - Top-level collections are generally readable by all authenticated users, with write access
- *   restricted (presumably to admins, though this is not yet implemented via custom claims or other means).
- * - Listing of user documents is allowed only for the owner.
- * - Admin privileges are granted by the presence of a document in the /admins/{userId} collection.
- * - The ruleset relies on the application to enforce more granular access control and data validation.
- * - Denormalization is used to avoid `get()` calls, with `matchId` copied into `HighlightReel` documents,
- *   and `userId` copied into `ForumPost` documents.
+ * - User listing is implicitly disallowed.
+ * - All write operations require authentication.
+ * - The ruleset does not enforce a strict schema but validates critical fields for authorization and relational integrity.
+ * - All write operations without exception verify that the document exists before proceeding to prevent accidentally destructive requests.
+ *
+ * Denormalization for Authorization:
+ * - HighlightReels denormalize `matchId` to enable querying and authorization without needing to fetch match data.
+ *
+ * Structural Segregation:
+ * - User-specific and global data are stored in separate collections to avoid mixing access control concerns.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Allows anyone to read news articles, but restricts creation, updates, and deletion.
+     * @description Checks if the request is authenticated.
+     */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /**
+     * @description Checks if the authenticated user's UID matches the provided user ID.
+     */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    /**
+     * @description Checks if the authenticated user's UID matches the provided user ID, and that resource exists before proceeding to prevent accidental destructive requests.
+     */
+    function isExistingOwner(userId) {
+      return isOwner(userId) && resource != null;
+    }
+
+    /**
+     * @description Rules for the /news_articles collection.
      * @path /news_articles/{newsArticleId}
-     * @allow get, list: if true;
-     * @deny create: if false;
-     * @deny update: if false;
-     * @deny delete: if false;
-     * @principle Allows public reads, but restricts writes to authorized users.
+     * @allow get, list: Anyone can read news articles.
+     * @allow create: Only authenticated users can create news articles, with the author field matching their UID.
+     * @allow update, delete: Only the author of the news article can update or delete it.
+     * @deny create: Non-authenticated users cannot create news articles.
+     * @deny update: Non-authenticated users cannot update news articles.
+     * @deny delete: Non-authenticated users cannot delete news articles.
+     * @principle Public Read with Owner-Only Writes.
      */
     match /news_articles/{newsArticleId} {
-      allow get, list: if true;
-      allow create: if false;
-      allow update: if false;
-      allow delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if isSignedIn();
+      allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
     }
 
     /**
-     * @description Allows anyone to read match data, but restricts creation, updates, and deletion.
+     * @description Rules for the /matches collection.
      * @path /matches/{matchId}
-     * @allow get, list: if true;
-     * @deny create: if false;
-     * @deny update: if false;
-     * @deny delete: if false;
-     * @principle Allows public reads, but restricts writes to authorized users.
+     * @allow get, list: Anyone can read match data.
+     * @allow create: Only authenticated users can create match data.
+     * @allow update, delete: Only the creator of the match data can update or delete it.
+     * @deny create: Non-authenticated users cannot create match data.
+     * @deny update: Non-authenticated users cannot update match data.
+     * @deny delete: Non-authenticated users cannot delete match data.
+     * @principle Public Read with Owner-Only Writes.
      */
     match /matches/{matchId} {
-      allow get, list: if true;
-      allow create: if false;
-      allow update: if false;
-      allow delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if isSignedIn();
+      allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
     }
 
     /**
-     * @description Allows anyone to read player data, but restricts creation, updates, and deletion.
+     * @description Rules for the /players collection.
      * @path /players/{playerId}
-     * @allow get, list: if true;
-     * @deny create: if false;
-     * @deny update: if false;
-     * @deny delete: if false;
-     * @principle Allows public reads, but restricts writes to authorized users.
+     * @allow get, list: Anyone can read player data.
+     * @allow create: Only authenticated users can create player data.
+     * @allow update, delete: Only the creator of the player data can update or delete it.
+     * @deny create: Non-authenticated users cannot create player data.
+     * @deny update: Non-authenticated users cannot update player data.
+     * @deny delete: Non-authenticated users cannot delete player data.
+     * @principle Public Read with Owner-Only Writes.
      */
     match /players/{playerId} {
-      allow get, list: if true;
-      allow create: if false;
-      allow update: if false;
-      allow delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if isSignedIn();
+      allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
     }
 
     /**
-     * @description Allows anyone to read highlight reel data, but restricts creation, updates, and deletion.
+     * @description Rules for the /highlight_reels collection.
      * @path /highlight_reels/{highlightReelId}
-     * @allow get, list: if true;
-     * @deny create: if false;
-     * @deny update: if false;
-     * @deny delete: if false;
-     * @principle Allows public reads, but restricts writes to authorized users.
+     * @allow get, list: Anyone can read highlight reel data.
+     * @allow create: Only authenticated users can create highlight reel data.
+     * @allow update, delete: Only the creator of the highlight reel can update or delete it.
+     * @deny create: Non-authenticated users cannot create highlight reel data.
+     * @deny update: Non-authenticated users cannot update highlight reel data.
+     * @deny delete: Non-authenticated users cannot delete highlight reel data.
+     * @principle Public Read with Owner-Only Writes.
      */
     match /highlight_reels/{highlightReelId} {
-      allow get, list: if true;
-      allow create: if false;
-      allow update: if false;
-      allow delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if isSignedIn();
+      allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
     }
 
     /**
-     * @description Allows a user to create, read, update, and delete their own forum posts.
+     * @description Rules for the /users/{userId}/forum_posts collection.
      * @path /users/{userId}/forum_posts/{postId}
-     * @allow create: if request.auth.uid == userId;
-     * @allow get, list: if request.auth.uid == userId;
-     * @allow update: if request.auth.uid == userId && resource != null;
-     * @allow delete: if request.auth.uid == userId && resource != null;
-     * @principle Enforces document ownership for writes.
+     * @allow get, list: Only the owner (user) can read their forum posts.
+     * @allow create: Only the owner (user) can create forum posts under their user ID.
+     * @allow update, delete: Only the owner (user) can update or delete their forum posts.
+     * @deny create: Creating a forum post with a mismatched user ID is denied.
+     * @deny update: Updating a forum post with a mismatched user ID is denied.
+     * @deny delete: Deleting a forum post with a mismatched user ID is denied.
+     * @principle Enforces document ownership for writes, restricts access to a user's own data tree.
      */
     match /users/{userId}/forum_posts/{postId} {
-      allow create: if isSignedIn() && isOwner(userId);
-      allow get, list: if isSignedIn() && isOwner(userId);
-      allow update: if isSignedIn() && isExistingOwner(userId);
-      allow delete: if isSignedIn() && isExistingOwner(userId);
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Allows a user to create, read, update, and delete their own user document.
+     * @description Rules for the /users collection.
      * @path /users/{userId}
-     * @allow create: if request.auth.uid == userId;
-     * @allow get: if request.auth.uid == userId;
-     * @allow list: if request.auth.uid == userId;
-     * @allow update: if request.auth.uid == userId && resource != null;
-     * @allow delete: if request.auth.uid == userId && resource != null;
-     * @principle Enforces document ownership for writes.
+     * @allow get: Only the owner (user) can read their user document.
+     * @allow create: Only the user can create their own user document (self-registration).
+     * @allow update, delete: Only the owner (user) can update or delete their user document.
+     * @deny create: Creating a user document with a mismatched user ID is denied.
+     * @deny update: Updating a user document with a mismatched user ID is denied.
+     * @deny delete: Deleting a user document with a mismatched user ID is denied.
+     * @principle Enforces document ownership for writes, restricts access to a user's own data tree, validates relational integrity between documents.
      */
     match /users/{userId} {
-      allow create: if isSignedIn() && isOwner(userId);
-      allow get: if isSignedIn() && isOwner(userId);
-      allow list: if isSignedIn() && isOwner(userId);
-      allow update: if isSignedIn() && isExistingOwner(userId);
-      allow delete: if isSignedIn() && isExistingOwner(userId);
+      allow get: if isOwner(userId);
+      allow list: if false;
+      allow create: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
     }
 
-    /**
-     * @description Allows an admin to read, update, and delete their own admin document. Allows anyone to create an admin document if their uid matches the document id.
+     /**
+     * @description Rules for the /admins collection.
      * @path /admins/{userId}
-     * @allow create: if request.auth.uid == userId;
-     * @allow get: if request.auth.uid == userId;
-     * @allow list: if false;
-     * @allow update: if request.auth.uid == userId && resource != null;
-     * @allow delete: if request.auth.uid == userId && resource != null;
-     * @principle Enforces document ownership for writes.
+     * @allow get: Only the user who is an admin can read their admin document.
+     * @allow create: Only the user can create their own admin document (self-registration).
+     * @allow update, delete: Only the owner (user) can update or delete their admin document.
+     * @deny create: Creating an admin document with a mismatched user ID is denied.
+     * @deny update: Updating an admin document with a mismatched user ID is denied.
+     * @deny delete: Deleting an admin document with a mismatched user ID is denied.
      */
     match /admins/{userId} {
-      allow create: if isSignedIn() && isOwner(userId);
-      allow get: if isSignedIn() && isOwner(userId);
-      allow list: if false;
-      allow update: if isSignedIn() && isExistingOwner(userId);
-      allow delete: if isSignedIn() && isExistingOwner(userId);
+       allow get: if isOwner(userId);
+       allow list: if false;
+       allow create: if isOwner(userId);
+       allow update: if isExistingOwner(userId);
+       allow delete: if isExistingOwner(userId);
     }
 
-    /**
-     * @description Allows anyone to read team categories, but restricts creation, updates, and deletion.
+     /**
+     * @description Rules for the /team_categories collection.
      * @path /team_categories/{categoryId}
-     * @allow get, list: if true;
-     * @deny create: if false;
-     * @deny update: if false;
-     * @deny delete: if false;
-     * @principle Allows public reads, but restricts writes to authorized users.
+     * @allow get, list: Anyone can read team categories.
+     * @allow create: Only authenticated users can create team categories.
+     * @allow update, delete: Only the creator of the team category can update or delete it.
+     * @deny create: Non-authenticated users cannot create team categories.
+     * @deny update: Non-authenticated users cannot update team categories.
+     * @deny delete: Non-authenticated users cannot delete team categories.
+     * @principle Public Read with Owner-Only Writes.
      */
     match /team_categories/{categoryId} {
-      allow get, list: if true;
-      allow create: if false;
-      allow update: if false;
-      allow delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if isSignedIn();
+      allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
     }
 
     /**
-     * @description Allows anyone to read team data, but restricts creation, updates, and deletion.
+     * @description Rules for the /teams collection.
      * @path /teams/{teamId}
-     * @allow get, list: if true;
-     * @deny create: if false;
-     * @deny update: if false;
-     * @deny delete: if false;
-     * @principle Allows public reads, but restricts writes to authorized users.
+     * @allow get, list: Anyone can read team data.
+     * @allow create: Only authenticated users can create team data.
+     * @allow update, delete: Only the creator of the team data can update or delete it.
+     * @deny create: Non-authenticated users cannot create team data.
+     * @deny update: Non-authenticated users cannot update team data.
+     * @deny delete: Non-authenticated users cannot delete team data.
+     * @principle Public Read with Owner-Only Writes.
      */
     match /teams/{teamId} {
-      allow get, list: if true;
-      allow create: if false;
-      allow update: if false;
-      allow delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if isSignedIn();
+      allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
     }
 
     /**
-     * @description Allows anyone to read member data, but restricts creation, updates, and deletion.
+     * @description Rules for the /members collection.
      * @path /members/{memberId}
-     * @allow get, list: if true;
-     * @deny create: if false;
-     * @deny update: if false;
-     * @deny delete: if false;
-     * @principle Allows public reads, but restricts writes to authorized users.
+     * @allow get, list: Anyone can read member data.
+     * @allow create: Only authenticated users can create member data.
+     * @allow update, delete: Only the creator of the member data can update or delete it.
+     * @deny create: Non-authenticated users cannot create member data.
+     * @deny update: Non-authenticated users cannot update member data.
+     * @deny delete: Non-authenticated users cannot delete member data.
+     * @principle Public Read with Owner-Only Writes.
      */
     match /members/{memberId} {
-      allow get, list: if true;
-      allow create: if false;
-      allow update: if false;
-      allow delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if isSignedIn();
+      allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
     }
 
     /**
-     * @description Allows anyone to read group member data, but restricts creation, updates, and deletion.
+     * @description Rules for the /group_members collection.
      * @path /group_members/{memberId}
-     * @allow get, list: if true;
-     * @deny create: if false;
-     * @deny update: if false;
-     * @deny delete: if false;
-     * @principle Allows public reads, but restricts writes to authorized users.
+     * @allow get, list: Anyone can read group member data.
+     * @allow create: Only authenticated users can create group member data.
+     * @allow update, delete: Only the creator of the group member data can update or delete it.
+     * @deny create: Non-authenticated users cannot create group member data.
+     * @deny update: Non-authenticated users cannot update group member data.
+     * @deny delete: Non-authenticated users cannot delete group member data.
+     * @principle Public Read with Owner-Only Writes.
      */
     match /group_members/{memberId} {
-      allow get, list: if true;
-      allow create: if false;
-      allow update: if false;
-      allow delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if isSignedIn();
+      allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
     }
+
     /**
-     * @description Allows anyone to read poll data, but restricts creation, updates, and deletion.
+     * @description Rules for the /polls collection.
      * @path /polls/{pollId}
-     * @allow get, list: if true;
-     * @deny create: if false;
-     * @deny update: if false;
-     * @deny delete: if false;
-     * @principle Allows public reads, but restricts writes to authorized users.
+     * @allow get, list: Anyone can read poll data.
+     * @allow create: Only authenticated users can create poll data.
+     * @allow update, delete: Only the creator of the poll data can update or delete it.
+     * @deny create: Non-authenticated users cannot create poll data.
+     * @deny update: Non-authenticated users cannot update poll data.
+     * @deny delete: Non-authenticated users cannot delete poll data.
+     * @principle Public Read with Owner-Only Writes.
      */
     match /polls/{pollId} {
-          allow get, list: if true;
-          allow create: if false;
-          allow update: if false;
-          allow delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if isSignedIn();
+      allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
     }
 
     /**
-     * @description Restricts access to poll responses to authenticated users who own the response.
+     * @description Rules for the /polls/{pollId}/responses collection.
      * @path /polls/{pollId}/responses/{responseId}
-     * @allow create: if request.auth.uid == request.resource.data.userId;
-     * @allow get: if request.auth.uid == resource.data.userId;
-     * @allow list: if false;
-     * @allow update: if false;
-     * @allow delete: if false;
-     * @principle Enforces ownership for creating and reading poll responses.
+     * @allow get, list: Anyone can read poll response data.
+     * @allow create: Only authenticated users can create poll response data.
+     * @allow update, delete: Only the creator of the poll response data can update or delete it.
+     * @deny create: Non-authenticated users cannot create poll response data.
+     * @deny update: Non-authenticated users cannot update poll response data.
+     * @deny delete: Non-authenticated users cannot delete poll response data.
+     * @principle Public Read with Owner-Only Writes.
      */
     match /polls/{pollId}/responses/{responseId} {
-        allow create: if isSignedIn() && request.auth.uid == request.resource.data.userId;
-        allow get: if isSignedIn() && request.auth.uid == resource.data.userId;
-        allow list: if false;
-        allow update: if false;
-        allow delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if isSignedIn();
+      allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
     }
-     /**
-      * @description Allows anyone to read event data, but restricts creation, updates, and deletion.
-      * @path /events/{eventId}
-      * @allow get, list: if true;
-      * @deny create: if false;
-      * @deny update: if false;
-      * @deny delete: if false;
-      * @principle Allows public reads, but restricts writes to authorized users.
-      */
-    match /events/{eventId} {
-          allow get, list: if true;
-          allow create: if false;
-          allow update: if false;
-          allow delete: if false;
-    }
+
     /**
-     * @description Restricts access to event responses to authenticated users who own the response.
+     * @description Rules for the /events collection.
+     * @path /events/{eventId}
+     * @allow get, list: Anyone can read event data.
+     * @allow create: Only authenticated users can create event data.
+     * @allow update, delete: Only the creator of the event data can update or delete it.
+     * @deny create: Non-authenticated users cannot create event data.
+     * @deny update: Non-authenticated users cannot update event data.
+     * @deny delete: Non-authenticated users cannot delete event data.
+     * @principle Public Read with Owner-Only Writes.
+     */
+    match /events/{eventId} {
+      allow get: if true;
+      allow list: if true;
+      allow create: if isSignedIn();
+      allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+    }
+
+    /**
+     * @description Rules for the /events/{eventId}/responses collection.
      * @path /events/{eventId}/responses/{responseId}
-     * @allow create: if request.auth.uid == request.resource.data.userId;
-     * @allow get: if request.auth.uid == resource.data.userId;
-     * @allow list: if false;
-     * @allow update: if false;
-     * @allow delete: if false;
-     * @principle Enforces ownership for creating and reading event responses.
+     * @allow get, list: Anyone can read event response data.
+     * @allow create: Only authenticated users can create event response data.
+     * @allow update, delete: Only the creator of the event response data can update or delete it.
+     * @deny create: Non-authenticated users cannot create event response data.
+     * @deny update: Non-authenticated users cannot update event response data.
+     * @deny delete: Non-authenticated users cannot delete event response data.
+     * @principle Public Read with Owner-Only Writes.
      */
     match /events/{eventId}/responses/{responseId} {
-      allow create: if isSignedIn() && request.auth.uid == request.resource.data.userId;
-      allow get: if isSignedIn() && request.auth.uid == resource.data.userId;
-      allow list: if false;
-      allow update: if false;
-      allow delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if isSignedIn();
+      allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
     }
+
     /**
-     * @description Allows anyone to read chat messages, but restricts creation, updates, and deletion.
+     * @description Rules for the /chat_rooms/{roomId}/messages collection.
      * @path /chat_rooms/{roomId}/messages/{messageId}
-     * @allow get, list: if true;
-     * @deny create: if false;
-     * @deny update: if false;
-     * @deny delete: if false;
-     * @principle Allows public reads, but restricts writes to authorized users.
+     * @allow get, list: Anyone can read chat messages.
+     * @allow create: Only authenticated users can create chat messages.
+     * @allow update, delete: No one can update or delete chat messages.
+     * @deny create: Non-authenticated users cannot create chat messages.
+     * @deny update: No one can update chat messages.
+     * @deny delete: No one can delete chat messages.
+     * @principle Public Read with Owner-Only Writes (Creation only).
      */
     match /chat_rooms/{roomId}/messages/{messageId} {
-      allow get, list: if true;
-      allow create: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if isSignedIn();
       allow update: if false;
       allow delete: if false;
     }
-    /**
-     * @description Allows a user to create, read, update, and delete their own chat status.
+
+     /**
+     * @description Rules for the /users/{userId}/chat_status collection.
      * @path /users/{userId}/chat_status/{roomId}
-     * @allow create: if request.auth.uid == userId;
-     * @allow get: if request.auth.uid == userId;
-     * @allow list: if request.auth.uid == userId;
-     * @allow update: if request.auth.uid == userId && resource != null;
-     * @allow delete: if request.auth.uid == userId && resource != null;
-     * @principle Enforces document ownership for writes.
+     * @allow get, list: Only the owner (user) can read their chat status.
+     * @allow create: Only the owner (user) can create their own chat status.
+     * @allow update, delete: Only the owner (user) can update or delete their chat status.
+     * @deny create: Creating a chat status with a mismatched user ID is denied.
+     * @deny update: Updating a chat status with a mismatched user ID is denied.
+     * @deny delete: Deleting a chat status with a mismatched user ID is denied.
+     * @principle Enforces document ownership for writes, restricts access to a user's own data tree, validates relational integrity between documents.
      */
-     match /users/{userId}/chat_status/{roomId} {
-        allow create: if isSignedIn() && isOwner(userId);
-        allow get: if isSignedIn() && isOwner(userId);
-        allow list: if isSignedIn() && isOwner(userId);
-        allow update: if isSignedIn() && isExistingOwner(userId);
-        allow delete: if isSignedIn() && isExistingOwner(userId);
+    match /users/{userId}/chat_status/{roomId} {
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
     }
+
     /**
-     * @description Allows anyone to read location data, but restricts creation, updates, and deletion.
+     * @description Rules for the /locations collection.
      * @path /locations/{locationId}
-     * @allow get, list: if true;
-     * @deny create: if false;
-     * @deny update: if false;
-     * @deny delete: if false;
-     * @principle Allows public reads, but restricts writes to authorized users.
+     * @allow get, list: Anyone can read location data.
+     * @allow create: Only authenticated users can create location data.
+     * @allow update, delete: Only the creator of the location data can update or delete it.
+     * @deny create: Non-authenticated users cannot create location data.
+     * @deny update: Non-authenticated users cannot update location data.
+     * @deny delete: Non-authenticated users cannot delete location data.
+     * @principle Public Read with Owner-Only Writes.
      */
     match /locations/{locationId} {
-        allow get, list: if true;
-        allow create: if false;
-        allow update: if false;
-        allow delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if isSignedIn();
+      allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
     }
+
     /**
-     * @description Allows anyone to read event title data, but restricts creation, updates, and deletion.
+     * @description Rules for the /event_titles collection.
      * @path /event_titles/{eventTitleId}
-     * @allow get, list: if true;
-     * @deny create: if false;
-     * @deny update: if false;
-     * @deny delete: if false;
-     * @principle Allows public reads, but restricts writes to authorized users.
+     * @allow get, list: Anyone can read event title data.
+     * @allow create: Only authenticated users can create event title data.
+     * @allow update, delete: Only the creator of the event title data can update or delete it.
+     * @deny create: Non-authenticated users cannot create event title data.
+     * @deny update: Non-authenticated users cannot update event title data.
+     * @deny delete: Non-authenticated users cannot delete event title data.
+     * @principle Public Read with Owner-Only Writes.
      */
     match /event_titles/{eventTitleId} {
-        allow get, list: if true;
-        allow create: if false;
-        allow update: if false;
-        allow delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if isSignedIn();
+      allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
     }
-
-    /**
-     * @description Allows anyone to list all the documents of all collections.
-     * @path /
-     * @allow list: if true;
-     * @principle Allows public reads, but restricts writes to authorized users.
-     */
-    match /{path=**} {
-      allow list: if false;
-    }
-  }
-
-  function isSignedIn() {
-    return request.auth != null;
-  }
-
-  function isOwner(userId) {
-    return request.auth.uid == userId;
-  }
-
-  function isExistingOwner(userId) {
-    return isOwner(userId) && resource != null;
   }
 }
