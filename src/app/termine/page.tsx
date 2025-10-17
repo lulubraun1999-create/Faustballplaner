@@ -18,7 +18,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { PlusCircle, Trash2, Loader2, CalendarIcon, Edit, Clock, MapPin, Users, Repeat, ChevronLeft, ChevronRight, Check, XIcon, HelpCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, add, startOfWeek, eachDayOfInterval, isSameDay, startOfDay, addWeeks, isWithinInterval } from 'date-fns';
@@ -35,6 +35,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 
 interface Event {
@@ -139,6 +140,13 @@ const titleSchema = z.object({
     name: z.string().min(1, "Name ist erforderlich"),
 });
 
+const deleteLocationSchema = z.object({
+    locationId: z.string().min(1, "Bitte einen Ort zum Löschen auswählen."),
+});
+const deleteTitleSchema = z.object({
+    titleId: z.string().min(1, "Bitte einen Titel zum Löschen auswählen."),
+});
+
 
 function AddLocationForm({ onDone }: { onDone: () => void }) {
     const firestore = useFirestore();
@@ -148,30 +156,32 @@ function AddLocationForm({ onDone }: { onDone: () => void }) {
         defaultValues: { name: '', address: '', city: '' }
     });
 
-    const handleLocalSubmit = async (e: React.MouseEvent<HTMLButtonElement>) => {
+    const handleLocalSubmit = (e: React.MouseEvent<HTMLButtonElement>) => {
         e.preventDefault();
-        const isValid = await form.trigger();
-        if (!isValid) return;
+        
+        form.trigger().then(isValid => {
+            if (!isValid) return;
 
-        const values = form.getValues();
-        if (!firestore) return;
-        
-        const locationsCollection = collection(firestore, 'locations');
-        
-        addDoc(locationsCollection, values)
-            .then(() => {
-                toast({ title: "Ort hinzugefügt" });
-                onDone();
-                form.reset();
-            })
-            .catch(serverError => {
-                const permissionError = new FirestorePermissionError({
-                    path: locationsCollection.path,
-                    operation: 'create',
-                    requestResourceData: values,
+            const values = form.getValues();
+            if (!firestore) return;
+            
+            const locationsCollection = collection(firestore, 'locations');
+            
+            addDoc(locationsCollection, values)
+                .then(() => {
+                    toast({ title: "Ort hinzugefügt" });
+                    onDone();
+                    form.reset();
+                })
+                .catch(serverError => {
+                     const permissionError = new FirestorePermissionError({
+                        path: locationsCollection.path,
+                        operation: 'create',
+                        requestResourceData: values,
+                    });
+                    errorEmitter.emit('permission-error', permissionError);
                 });
-                errorEmitter.emit('permission-error', permissionError);
-            });
+        });
     };
 
     return (
@@ -210,32 +220,33 @@ function AddEventTitleForm({ onDone }: { onDone: () => void }) {
         defaultValues: { name: '' }
     });
 
-    const handleLocalSubmit = async (e: React.MouseEvent<HTMLButtonElement>) => {
+    const handleLocalSubmit = (e: React.MouseEvent<HTMLButtonElement>) => {
         e.preventDefault();
-        const isValid = await form.trigger();
-        if (!isValid) return;
+        form.trigger().then(isValid => {
+            if (!isValid) return;
 
-        const values = form.getValues();
-        if (!firestore) return;
-        const eventTitlesCollection = collection(firestore, 'event_titles');
-        addDoc(eventTitlesCollection, values)
-            .then(() => {
-                toast({ title: "Titel hinzugefügt" });
-                onDone();
-                form.reset();
-            })
-            .catch(serverError => {
-                const permissionError = new FirestorePermissionError({
-                    path: eventTitlesCollection.path,
-                    operation: 'create',
-                    requestResourceData: values,
+            const values = form.getValues();
+            if (!firestore) return;
+            const eventTitlesCollection = collection(firestore, 'event_titles');
+            addDoc(eventTitlesCollection, values)
+                .then(() => {
+                    toast({ title: "Titel hinzugefügt" });
+                    onDone();
+                    form.reset();
+                })
+                .catch(serverError => {
+                    const permissionError = new FirestorePermissionError({
+                        path: eventTitlesCollection.path,
+                        operation: 'create',
+                        requestResourceData: values,
+                    });
+                    errorEmitter.emit('permission-error', permissionError);
                 });
-                errorEmitter.emit('permission-error', permissionError);
-            });
+        });
     };
 
     return (
-        <div className="space-y-4">
+         <div className="space-y-4">
              <FormField control={form.control} name="name" render={({ field }) => (
                 <FormItem>
                     <FormLabel>Name des Titels</FormLabel>
@@ -248,6 +259,143 @@ function AddEventTitleForm({ onDone }: { onDone: () => void }) {
     );
 }
 
+function DeleteLocationForm({ onDone, locations }: { onDone: () => void, locations: Location[] }) {
+    const firestore = useFirestore();
+    const { toast } = useToast();
+    const form = useForm<z.infer<typeof deleteLocationSchema>>({
+        resolver: zodResolver(deleteLocationSchema),
+    });
+
+    const handleLocalSubmit = (e: React.MouseEvent<HTMLButtonElement>) => {
+        e.preventDefault();
+        form.trigger().then(isValid => {
+            if (!isValid) return;
+            const { locationId } = form.getValues();
+            if (!firestore || !locationId) return;
+
+            deleteDoc(doc(firestore, 'locations', locationId))
+                .then(() => {
+                    toast({ title: "Ort gelöscht" });
+                    onDone();
+                    form.reset();
+                })
+                .catch(serverError => {
+                     const permissionError = new FirestorePermissionError({
+                        path: `locations/${locationId}`,
+                        operation: 'delete',
+                    });
+                    errorEmitter.emit('permission-error', permissionError);
+                });
+        });
+    };
+
+    return (
+        <div className="space-y-4">
+            <FormField control={form.control} name="locationId" render={({ field }) => (
+                <FormItem>
+                    <FormLabel>Ort zum Löschen auswählen</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Wähle einen Ort" />
+                            </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                            {locations.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                    <FormMessage />
+                </FormItem>
+            )} />
+            <AlertDialog>
+                <AlertDialogTrigger asChild>
+                    <Button type="button" variant="destructive" className="w-full" disabled={!form.watch('locationId')}>Löschen</Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Sind Sie sicher?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Diese Aktion kann nicht rückgängig gemacht werden. Der Ort wird dauerhaft gelöscht.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleLocalSubmit} className="bg-destructive hover:bg-destructive/90">Ja, löschen</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        </div>
+    );
+}
+
+function DeleteEventTitleForm({ onDone, eventTitles }: { onDone: () => void, eventTitles: EventTitle[] }) {
+    const firestore = useFirestore();
+    const { toast } = useToast();
+    const form = useForm<z.infer<typeof deleteTitleSchema>>({
+        resolver: zodResolver(deleteTitleSchema),
+    });
+
+    const handleLocalSubmit = (e: React.MouseEvent<HTMLButtonElement>) => {
+        e.preventDefault();
+        form.trigger().then(isValid => {
+            if (!isValid) return;
+            const { titleId } = form.getValues();
+            if (!firestore || !titleId) return;
+
+            deleteDoc(doc(firestore, 'event_titles', titleId))
+                .then(() => {
+                    toast({ title: "Titel gelöscht" });
+                    onDone();
+                    form.reset();
+                })
+                .catch(serverError => {
+                    const permissionError = new FirestorePermissionError({
+                        path: `event_titles/${titleId}`,
+                        operation: 'delete',
+                    });
+                    errorEmitter.emit('permission-error', permissionError);
+                });
+        });
+    };
+
+    return (
+        <div className="space-y-4">
+            <FormField control={form.control} name="titleId" render={({ field }) => (
+                <FormItem>
+                    <FormLabel>Titel zum Löschen auswählen</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Wähle einen Titel" />
+                            </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                            {eventTitles.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                    <FormMessage />
+                </FormItem>
+            )} />
+            <AlertDialog>
+                <AlertDialogTrigger asChild>
+                     <Button type="button" variant="destructive" className="w-full" disabled={!form.watch('titleId')}>Löschen</Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Sind Sie sicher?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Diese Aktion kann nicht rückgängig gemacht werden. Der Titel wird dauerhaft gelöscht.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleLocalSubmit} className="bg-destructive hover:bg-destructive/90">Ja, löschen</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        </div>
+    );
+}
 
 function EventForm({ onDone, event, categories, teams, isAdmin, eventTitles, locations }: { onDone: () => void, event?: Event, categories: TeamCategory[], teams: Team[], isAdmin: boolean, eventTitles: EventTitle[], locations: Location[] }) {
   const { user } = useUser();
@@ -410,7 +558,18 @@ function EventForm({ onDone, event, categories, teams, isAdmin, eventTitles, loc
                         <Button type="button" variant="outline"><PlusCircle /></Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-80">
-                        <AddEventTitleForm onDone={() => setShowAddTitle(false)} />
+                        <Tabs defaultValue="add">
+                            <TabsList className="grid w-full grid-cols-2">
+                                <TabsTrigger value="add">Hinzufügen</TabsTrigger>
+                                <TabsTrigger value="delete">Löschen</TabsTrigger>
+                            </TabsList>
+                            <TabsContent value="add" className="pt-4">
+                                <AddEventTitleForm onDone={() => setShowAddTitle(false)} />
+                            </TabsContent>
+                            <TabsContent value="delete" className="pt-4">
+                                <DeleteEventTitleForm onDone={() => setShowAddTitle(false)} eventTitles={eventTitles}/>
+                            </TabsContent>
+                        </Tabs>
                     </PopoverContent>
                 </Popover>
             )}
@@ -617,7 +776,18 @@ function EventForm({ onDone, event, categories, teams, isAdmin, eventTitles, loc
                         <Button type="button" variant="outline"><PlusCircle /></Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-80">
-                        <AddLocationForm onDone={() => setShowAddLocation(false)} />
+                         <Tabs defaultValue="add">
+                            <TabsList className="grid w-full grid-cols-2">
+                                <TabsTrigger value="add">Hinzufügen</TabsTrigger>
+                                <TabsTrigger value="delete">Löschen</TabsTrigger>
+                            </TabsList>
+                            <TabsContent value="add" className="pt-4">
+                                <AddLocationForm onDone={() => setShowAddLocation(false)} />
+                            </TabsContent>
+                            <TabsContent value="delete" className="pt-4">
+                                <DeleteLocationForm onDone={() => setShowAddLocation(false)} locations={locations}/>
+                            </TabsContent>
+                        </Tabs>
                     </PopoverContent>
                 </Popover>
             )}
@@ -1251,5 +1421,6 @@ export default function TerminePage() {
     </div>
   );
 }
+
 
 
