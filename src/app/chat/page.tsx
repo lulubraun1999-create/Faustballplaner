@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { useFirestore, useUser, useCollection, useDoc, useMemoFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
+import { useFirestore, useUser, useCollection, useDoc, useMemoFirebase } from '@/firebase';
 import { collection, query, orderBy, addDoc, serverTimestamp, Timestamp, doc, deleteDoc, where, getDocs, setDoc, onSnapshot } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Header } from '@/components/header';
@@ -202,12 +202,11 @@ export default function ChatPage() {
             setNewMessage('');
         })
         .catch((serverError) => {
-            const permissionError = new FirestorePermissionError({
-                path: messagesCollection.path,
-                operation: 'create',
-                requestResourceData: messageData,
+             toast({
+                variant: "destructive",
+                title: "Fehler beim Senden",
+                description: serverError.message,
             });
-            errorEmitter.emit('permission-error', permissionError);
         })
         .finally(() => {
             setIsSending(false);
@@ -220,11 +219,11 @@ export default function ChatPage() {
     
     deleteDoc(messageRef)
         .catch((serverError) => {
-            const permissionError = new FirestorePermissionError({
-                path: messageRef.path,
-                operation: 'delete',
+            toast({
+                variant: "destructive",
+                title: "Fehler beim Löschen",
+                description: serverError.message,
             });
-            errorEmitter.emit('permission-error', permissionError);
         });
   }
 

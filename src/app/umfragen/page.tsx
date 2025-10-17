@@ -6,7 +6,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useFirestore, useUser, useCollection, useMemoFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
+import { useFirestore, useUser, useCollection, useMemoFirebase } from '@/firebase';
 import { addDoc, collection, serverTimestamp, orderBy, query, Timestamp, doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Header } from '@/components/header';
@@ -417,12 +417,11 @@ function PollCard({ poll, allUsers }: { poll: Poll; allUsers: GroupMember[] }) {
                 setViewMode('results');
             })
             .catch((serverError) => {
-                 const permissionError = new FirestorePermissionError({
-                    path: `polls/${poll.id}/responses/${userResponse ? userResponse.id : ''}`,
-                    operation: userResponse ? 'update' : 'create',
-                    requestResourceData: responseData,
+                toast({
+                    variant: "destructive",
+                    title: "Fehler",
+                    description: serverError.message,
                 });
-                errorEmitter.emit('permission-error', permissionError);
             })
             .finally(() => {
                 setIsSubmitting(false);
@@ -434,11 +433,11 @@ function PollCard({ poll, allUsers }: { poll: Poll; allUsers: GroupMember[] }) {
       const pollRef = doc(firestore, 'polls', poll.id);
       deleteDoc(pollRef)
         .catch((serverError) => {
-          const permissionError = new FirestorePermissionError({
-            path: pollRef.path,
-            operation: 'delete',
+          toast({
+            variant: "destructive",
+            title: "Fehler beim Löschen",
+            description: serverError.message,
           });
-          errorEmitter.emit('permission-error', permissionError);
         });
     }
 
@@ -453,11 +452,11 @@ function PollCard({ poll, allUsers }: { poll: Poll; allUsers: GroupMember[] }) {
           setCustomOption('');
         })
         .catch((serverError) => {
-          const permissionError = new FirestorePermissionError({
-            path: responseRef.path,
-            operation: 'delete',
-          });
-          errorEmitter.emit('permission-error', permissionError);
+            toast({
+                variant: "destructive",
+                title: "Fehler",
+                description: serverError.message,
+            });
         });
     };
 

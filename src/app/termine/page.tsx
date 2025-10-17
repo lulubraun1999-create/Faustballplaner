@@ -6,7 +6,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useFirestore, useUser, useCollection, useDoc, useMemoFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
+import { useFirestore, useUser, useCollection, useDoc, useMemoFirebase } from '@/firebase';
 import { addDoc, collection, serverTimestamp, orderBy, query, Timestamp, doc, updateDoc, deleteDoc, setDoc, where } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Header } from '@/components/header';
@@ -35,20 +35,6 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-
-// HARDCODED DATA TO AVOID FIRESTORE PERMISSION ISSUES
-const eventTitles: EventTitle[] = [
-    { id: 'training', name: 'Training' },
-    { id: 'spieltag', name: 'Spieltag' },
-    { id: 'sitzung', name: 'Sitzung' },
-    { id: 'turnier', name: 'Turnier' },
-    { id: 'sonstiges', name: 'Sonstiges' },
-];
-
-const locations: Location[] = [
-    { id: 'fritz_jacobi', name: 'Fritz-Jacobi-Anlage', address: 'Kalkstr. 45', city: 'Leverkusen' },
-    { id: 'andere', name: 'Anderer Ort', address: '', city: '' },
-];
 
 
 interface Event {
@@ -143,11 +129,92 @@ const eventSchema = z.object({
 
 type EventFormValues = z.infer<typeof eventSchema>;
 
-function EventForm({ onDone, event, categories, teams, isAdmin }: { onDone: () => void, event?: Event, categories: TeamCategory[], teams: Team[], isAdmin: boolean }) {
+const itemSchema = z.object({ name: z.string().min(1, "Name ist erforderlich") });
+
+function AddLocationForm({ onDone }: { onDone: () => void }) {
+    const firestore = useFirestore();
+    const { toast } = useToast();
+    const form = useForm({ resolver: zodResolver(itemSchema), defaultValues: { name: '' } });
+
+    const onSubmit = (values: z.infer<typeof itemSchema>) => {
+        if (!firestore) return;
+        const locationsCollection = collection(firestore, 'locations');
+        addDoc(locationsCollection, values)
+            .then(() => {
+                toast({ title: "Ort hinzugefügt" });
+                onDone();
+                form.reset();
+            })
+            .catch(serverError => {
+                 toast({
+                    variant: "destructive",
+                    title: "Fehler beim Speichern",
+                    description: serverError.message,
+                });
+            });
+    };
+
+    return (
+        <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="flex items-center gap-2">
+                <FormField control={form.control} name="name" render={({ field }) => (
+                    <FormItem className="flex-1">
+                        <FormControl><Input placeholder="Neuer Ort..." {...field} /></FormControl>
+                        <FormMessage />
+                    </FormItem>
+                )} />
+                <Button type="submit">Hinzufügen</Button>
+            </form>
+        </Form>
+    );
+}
+
+function AddEventTitleForm({ onDone }: { onDone: () => void }) {
+    const firestore = useFirestore();
+    const { toast } = useToast();
+    const form = useForm({ resolver: zodResolver(itemSchema), defaultValues: { name: '' } });
+
+    const onSubmit = (values: z.infer<typeof itemSchema>) => {
+        if (!firestore) return;
+        const eventTitlesCollection = collection(firestore, 'event_titles');
+        addDoc(eventTitlesCollection, values)
+            .then(() => {
+                toast({ title: "Titel hinzugefügt" });
+                onDone();
+                form.reset();
+            })
+            .catch(serverError => {
+                 toast({
+                    variant: "destructive",
+                    title: "Fehler beim Speichern",
+                    description: serverError.message,
+                });
+            });
+    };
+
+    return (
+        <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="flex items-center gap-2">
+                <FormField control={form.control} name="name" render={({ field }) => (
+                    <FormItem className="flex-1">
+                        <FormControl><Input placeholder="Neuer Titel..." {...field} /></FormControl>
+                        <FormMessage />
+                    </FormItem>
+                )} />
+                <Button type="submit">Hinzufügen</Button>
+            </form>
+        </Form>
+    );
+}
+
+
+function EventForm({ onDone, event, categories, teams, isAdmin, eventTitles, locations }: { onDone: () => void, event?: Event, categories: TeamCategory[], teams: Team[], isAdmin: boolean, eventTitles: EventTitle[], locations: Location[] }) {
   const { user } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showAddTitle, setShowAddTitle] = useState(false);
+  const [showAddLocation, setShowAddLocation] = useState(false);
   
   const getInitialFormValues = () => {
     if (event) {
@@ -252,29 +319,21 @@ function EventForm({ onDone, event, categories, teams, isAdmin }: { onDone: () =
       createdAt: event ? event.createdAt : serverTimestamp(),
     };
     
+    let promise;
     if (event) {
-      const eventRef = doc(firestore, 'events', event.id);
-      updateDoc(eventRef, dataToSave as { [x: string]: any; })
-        .then(() => {
-          toast({ title: 'Termin aktualisiert' });
-          onDone();
-        })
-        .catch((serverError) => {
-          toast({ variant: 'destructive', title: 'Fehler', description: "Berechtigungsfehler: " + serverError.message });
-        })
-        .finally(() => setIsSubmitting(false));
+        promise = updateDoc(doc(firestore, 'events', event.id), dataToSave as { [x: string]: any; });
     } else {
-      const eventsCollection = collection(firestore, 'events');
-      addDoc(eventsCollection, dataToSave)
-        .then(() => {
-          toast({ title: 'Termin erstellt' });
-          onDone();
-        })
-        .catch((serverError) => {
-          toast({ variant: 'destructive', title: 'Fehler', description: "Berechtigungsfehler: " + serverError.message });
-        })
-        .finally(() => setIsSubmitting(false));
+        promise = addDoc(collection(firestore, 'events'), dataToSave);
     }
+
+    promise.then(() => {
+        toast({ title: event ? 'Termin aktualisiert' : 'Termin erstellt' });
+        onDone();
+    }).catch((serverError) => {
+        toast({ variant: 'destructive', title: 'Fehler', description: "Berechtigungsfehler: " + serverError.message });
+    }).finally(() => {
+        setIsSubmitting(false);
+    });
   };
 
   return (
@@ -299,6 +358,16 @@ function EventForm({ onDone, event, categories, teams, isAdmin }: { onDone: () =
                         {eventTitles.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
                     </SelectContent>
                 </Select>
+                 {isAdmin && (
+                    <Popover open={showAddTitle} onOpenChange={setShowAddTitle}>
+                        <PopoverTrigger asChild>
+                            <Button type="button" variant="outline"><PlusCircle /></Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-80">
+                            <AddEventTitleForm onDone={() => setShowAddTitle(false)} />
+                        </PopoverContent>
+                    </Popover>
+                )}
             </div>
             <FormMessage />
           </FormItem>
@@ -495,6 +564,16 @@ function EventForm({ onDone, event, categories, teams, isAdmin }: { onDone: () =
                         {locations.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)}
                     </SelectContent>
                 </Select>
+                 {isAdmin && (
+                    <Popover open={showAddLocation} onOpenChange={setShowAddLocation}>
+                        <PopoverTrigger asChild>
+                            <Button type="button" variant="outline"><PlusCircle /></Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-80">
+                            <AddLocationForm onDone={() => setShowAddLocation(false)} />
+                        </PopoverContent>
+                    </Popover>
+                )}
             </div>
             <FormMessage />
           </FormItem>
@@ -529,7 +608,7 @@ function EventForm({ onDone, event, categories, teams, isAdmin }: { onDone: () =
   );
 }
 
-const EventCard = ({ event, allUsers, teams, onEdit, onDelete }: { event: DisplayEvent; allUsers: GroupMember[]; teams: Team[], onEdit: (event: Event) => void; onDelete: (event: Event) => void }) => {
+const EventCard = ({ event, allUsers, teams, onEdit, onDelete, eventTitles, locations }: { event: DisplayEvent; allUsers: GroupMember[]; teams: Team[], onEdit: (event: Event) => void; onDelete: (event: Event) => void, eventTitles: EventTitle[], locations: Location[] }) => {
     const { user } = useUser();
     const firestore = useFirestore();
     const location = locations.find(l => l.id === event.locationId);
@@ -642,12 +721,11 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete }: { event: Displa
 
         setDoc(responseRef, data, { merge: true })
             .catch(serverError => {
-                const permissionError = new FirestorePermissionError({
-                    path: responseRef.path,
-                    operation: 'write',
-                    requestResourceData: data,
+                toast({
+                    variant: "destructive",
+                    title: "Fehler",
+                    description: serverError.message,
                 });
-                errorEmitter.emit('permission-error', permissionError);
             });
     };
 
@@ -827,6 +905,16 @@ export default function TerminePage() {
     if (!firestore) return null;
     return query(collection(firestore, 'group_members'));
   }, [firestore]);
+  
+  const locationsQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'locations'));
+  }, [firestore]);
+
+  const eventTitlesQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'event_titles'));
+  }, [firestore]);
 
 
   const { data: currentUserData, isLoading: isUserLoading } = useDoc<UserData>(currentUserDocRef);
@@ -834,9 +922,11 @@ export default function TerminePage() {
   const { data: categories, isLoading: categoriesLoading } = useCollection<TeamCategory>(categoriesQuery);
   const { data: teams, isLoading: teamsLoading } = useCollection<Team>(teamsQuery);
   const { data: allUsers, isLoading: usersLoading } = useCollection<GroupMember>(groupMembersQuery);
+  const { data: locations, isLoading: locationsLoading } = useCollection<Location>(locationsQuery);
+  const { data: eventTitles, isLoading: eventTitlesLoading } = useCollection<EventTitle>(eventTitlesQuery);
 
   
-  const isLoading = isUserLoading || eventsLoading || categoriesLoading || teamsLoading || usersLoading;
+  const isLoading = isUserLoading || eventsLoading || categoriesLoading || teamsLoading || usersLoading || locationsLoading || eventTitlesLoading;
 
   const isAdmin = currentUserData?.adminRechte === true;
   
@@ -945,11 +1035,11 @@ export default function TerminePage() {
         setEventToDelete(null);
       })
       .catch((serverError) => {
-        const permissionError = new FirestorePermissionError({
-          path: eventDocRef.path,
-          operation: 'delete',
+        toast({
+          variant: "destructive",
+          title: "Fehler beim Löschen",
+          description: serverError.message,
         });
-        errorEmitter.emit('permission-error', permissionError);
       })
       .finally(() => {
         setIsDeleting(false);
@@ -995,6 +1085,8 @@ export default function TerminePage() {
                                         teams={teams || []}
                                         onEdit={handleOpenForm}
                                         onDelete={setEventToDelete}
+                                        eventTitles={eventTitles || []}
+                                        locations={locations || []}
                                     />
                                 ))}
                             </div>
@@ -1078,7 +1170,7 @@ export default function TerminePage() {
           {isLoading ? (
              <div className="flex items-center justify-center p-8"><Loader2 className="h-8 w-8 animate-spin text-primary"/></div>
           ) : (
-             <EventForm onDone={handleFormDone} event={selectedEvent} categories={categories || []} teams={teams || []} isAdmin={isAdmin}/>
+             <EventForm onDone={handleFormDone} event={selectedEvent} categories={categories || []} teams={teams || []} isAdmin={isAdmin} eventTitles={eventTitles || []} locations={locations || []} />
           )}
         </DialogContent>
       </Dialog>
@@ -1102,3 +1194,4 @@ export default function TerminePage() {
     </div>
   );
 }
+
