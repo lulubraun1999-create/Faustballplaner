@@ -36,6 +36,21 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 
+// HARDCODED DATA TO AVOID FIRESTORE PERMISSION ISSUES
+const eventTitles: EventTitle[] = [
+    { id: 'training', name: 'Training' },
+    { id: 'spieltag', name: 'Spieltag' },
+    { id: 'sitzung', name: 'Sitzung' },
+    { id: 'turnier', name: 'Turnier' },
+    { id: 'sonstiges', name: 'Sonstiges' },
+];
+
+const locations: Location[] = [
+    { id: 'fritz_jacobi', name: 'Fritz-Jacobi-Anlage', address: 'Kalkstr. 45', city: 'Leverkusen' },
+    { id: 'andere', name: 'Anderer Ort', address: '', city: '' },
+];
+
+
 interface Event {
   id: string;
   titleId: string;
@@ -128,142 +143,12 @@ const eventSchema = z.object({
 
 type EventFormValues = z.infer<typeof eventSchema>;
 
-const locationSchema = z.object({
-    name: z.string().min(1, 'Name ist erforderlich.'),
-    address: z.string().min(1, 'Adresse ist erforderlich.'),
-    city: z.string().min(1, 'Ort ist erforderlich.'),
-});
-type LocationFormValues = z.infer<typeof locationSchema>;
-
-const eventTitleSchema = z.object({
-    name: z.string().min(1, 'Name ist erforderlich.'),
-});
-type EventTitleFormValues = z.infer<typeof eventTitleSchema>;
-
-function AddEventTitleForm({ onDone }: { onDone: () => void }) {
-    const firestore = useFirestore();
-    const { toast } = useToast();
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    
-    const form = useForm<EventTitleFormValues>({
-        resolver: zodResolver(eventTitleSchema),
-        defaultValues: { name: '' },
-    });
-
-    const onSubmit = (values: EventTitleFormValues) => {
-        if (!firestore) return;
-        setIsSubmitting(true);
-        const eventTitlesCollection = collection(firestore, 'event_titles');
-        addDoc(eventTitlesCollection, values)
-            .then(() => {
-                toast({ title: 'Titel hinzugefügt' });
-                onDone();
-            })
-            .catch(serverError => {
-                toast({ variant: 'destructive', title: 'Fehler', description: "Berechtigungsfehler: " + serverError.message });
-            })
-            .finally(() => setIsSubmitting(false));
-    };
-
-    return (
-        <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <DialogHeader>
-                    <DialogTitle>Neuen Termin-Titel hinzufügen</DialogTitle>
-                </DialogHeader>
-                 <FormField control={form.control} name="name" render={({ field }) => (
-                    <FormItem>
-                        <FormLabel>Name des Titels</FormLabel>
-                        <FormControl><Input placeholder="z.B. Training" {...field} /></FormControl>
-                        <FormMessage />
-                    </FormItem>
-                )} />
-                <DialogFooter>
-                    <DialogClose asChild><Button type="button" variant="outline" disabled={isSubmitting}>Abbrechen</Button></DialogClose>
-                    <Button type="submit" disabled={isSubmitting}>
-                        {isSubmitting ? <Loader2 className="animate-spin" /> : 'Speichern'}
-                    </Button>
-                </DialogFooter>
-            </form>
-        </Form>
-    );
-}
-
-function AddLocationForm({ onDone }: { onDone: () => void }) {
-    const firestore = useFirestore();
-    const { toast } = useToast();
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    
-    const form = useForm<LocationFormValues>({
-        resolver: zodResolver(locationSchema),
-        defaultValues: { name: '', address: '', city: '' },
-    });
-
-    const onSubmit = (values: LocationFormValues) => {
-        if (!firestore) return;
-        setIsSubmitting(true);
-        const locationsCollection = collection(firestore, 'locations');
-        addDoc(locationsCollection, values)
-            .then(() => {
-                toast({ title: 'Ort hinzugefügt' });
-                onDone();
-            })
-            .catch(serverError => {
-                toast({ variant: 'destructive', title: 'Fehler', description: "Berechtigungsfehler: " + serverError.message });
-            })
-            .finally(() => setIsSubmitting(false));
-    };
-
-    return (
-        <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <DialogHeader>
-                    <DialogTitle>Neuen Ort hinzufügen</DialogTitle>
-                </DialogHeader>
-                 <FormField control={form.control} name="name" render={({ field }) => (
-                    <FormItem>
-                        <FormLabel>Name des Ortes</FormLabel>
-                        <FormControl><Input placeholder="z.B. Fritz-Jacobi-Anlage" {...field} /></FormControl>
-                        <FormMessage />
-                    </FormItem>
-                )} />
-                 <FormField control={form.control} name="address" render={({ field }) => (
-                    <FormItem>
-                        <FormLabel>Straße und Hausnummer</FormLabel>
-                        <FormControl><Input placeholder="z.B. Kalkstr. 45" {...field} /></FormControl>
-                        <FormMessage />
-                    </FormItem>
-                )} />
-                 <FormField control={form.control} name="city" render={({ field }) => (
-                    <FormItem>
-                        <FormLabel>Stadt</FormLabel>
-                        <FormControl><Input placeholder="z.B. Leverkusen" {...field} /></FormControl>
-                        <FormMessage />
-                    </FormItem>
-                )} />
-                <DialogFooter>
-                    <DialogClose asChild><Button type="button" variant="outline" disabled={isSubmitting}>Abbrechen</Button></DialogClose>
-                    <Button type="submit" disabled={isSubmitting}>
-                        {isSubmitting ? <Loader2 className="animate-spin" /> : 'Speichern'}
-                    </Button>
-                </DialogFooter>
-            </form>
-        </Form>
-    );
-}
-
-function EventForm({ onDone, event, categories, teams, locations, eventTitles, isAdmin }: { onDone: () => void, event?: Event, categories: TeamCategory[], teams: Team[], locations: Location[], eventTitles: EventTitle[], isAdmin: boolean }) {
+function EventForm({ onDone, event, categories, teams, isAdmin }: { onDone: () => void, event?: Event, categories: TeamCategory[], teams: Team[], isAdmin: boolean }) {
   const { user } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLocationFormOpen, setIsLocationFormOpen] = useState(false);
-  const [isEventTitleFormOpen, setIsEventTitleFormOpen] = useState(false);
-  const [locationToDelete, setLocationToDelete] = useState<Location | null>(null);
-  const [isDeletingLocation, setIsDeletingLocation] = useState(false);
-  const [titleToDelete, setTitleToDelete] = useState<EventTitle | null>(null);
-  const [isDeletingTitle, setIsDeletingTitle] = useState(false);
-
+  
   const getInitialFormValues = () => {
     if (event) {
       const startDate = event.date.toDate();
@@ -310,10 +195,7 @@ function EventForm({ onDone, event, categories, teams, locations, eventTitles, i
   });
   
   const isAllDay = form.watch('isAllDay');
-  const selectedLocationId = form.watch('locationId');
-  const selectedTitleId = form.watch('titleId');
   const recurrence = form.watch('recurrence');
-
 
   const groupedTeams = useMemo(() => {
     if (!categories || !teams) return [];
@@ -323,47 +205,6 @@ function EventForm({ onDone, event, categories, teams, locations, eventTitles, i
     }));
   }, [categories, teams]);
 
-  const handleDeleteLocation = async () => {
-    if (!firestore || !locationToDelete) return;
-    setIsDeletingLocation(true);
-    const locationRef = doc(firestore, 'locations', locationToDelete.id);
-    try {
-      await deleteDoc(locationRef);
-      toast({ title: 'Ort gelöscht' });
-      form.setValue('locationId', ''); // Reset selection in form
-      setLocationToDelete(null);
-    } catch (serverError: any) {
-      toast({ variant: 'destructive', title: 'Fehler beim Löschen', description: serverError.message });
-      const permissionError = new FirestorePermissionError({
-        path: locationRef.path,
-        operation: 'delete',
-      });
-      errorEmitter.emit('permission-error', permissionError);
-    } finally {
-      setIsDeletingLocation(false);
-    }
-  };
-  
-  const handleDeleteTitle = async () => {
-    if (!firestore || !titleToDelete) return;
-    setIsDeletingTitle(true);
-    const titleRef = doc(firestore, 'event_titles', titleToDelete.id);
-    try {
-      await deleteDoc(titleRef);
-      toast({ title: 'Titel gelöscht' });
-      form.setValue('titleId', ''); // Reset selection in form
-      setTitleToDelete(null);
-    } catch (serverError: any) {
-      toast({ variant: 'destructive', title: 'Fehler beim Löschen', description: serverError.message });
-      const permissionError = new FirestorePermissionError({
-        path: titleRef.path,
-        operation: 'delete',
-      });
-      errorEmitter.emit('permission-error', permissionError);
-    } finally {
-      setIsDeletingTitle(false);
-    }
-  };
 
   const onSubmit = (values: EventFormValues) => {
     if (!user || !firestore) {
@@ -419,12 +260,7 @@ function EventForm({ onDone, event, categories, teams, locations, eventTitles, i
           onDone();
         })
         .catch((serverError) => {
-          const permissionError = new FirestorePermissionError({
-            path: eventRef.path,
-            operation: 'update',
-            requestResourceData: dataToSave,
-          });
-          errorEmitter.emit('permission-error', permissionError);
+          toast({ variant: 'destructive', title: 'Fehler', description: "Berechtigungsfehler: " + serverError.message });
         })
         .finally(() => setIsSubmitting(false));
     } else {
@@ -435,12 +271,7 @@ function EventForm({ onDone, event, categories, teams, locations, eventTitles, i
           onDone();
         })
         .catch((serverError) => {
-          const permissionError = new FirestorePermissionError({
-            path: eventsCollection.path,
-            operation: 'create',
-            requestResourceData: dataToSave,
-          });
-          errorEmitter.emit('permission-error', permissionError);
+          toast({ variant: 'destructive', title: 'Fehler', description: "Berechtigungsfehler: " + serverError.message });
         })
         .finally(() => setIsSubmitting(false));
     }
@@ -468,25 +299,6 @@ function EventForm({ onDone, event, categories, teams, locations, eventTitles, i
                         {eventTitles.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
                     </SelectContent>
                 </Select>
-                {isAdmin && (
-                  <div className="flex gap-2">
-                    <Button type="button" variant="outline" onClick={() => setIsEventTitleFormOpen(true)}>
-                        <PlusCircle className="mr-2 h-4 w-4" /> Neu
-                    </Button>
-                     <Button 
-                        type="button" 
-                        variant="destructive" 
-                        size="icon" 
-                        disabled={!selectedTitleId}
-                        onClick={() => {
-                            const title = eventTitles.find(t => t.id === selectedTitleId);
-                            if (title) setTitleToDelete(title);
-                        }}
-                        >
-                        <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                )}
             </div>
             <FormMessage />
           </FormItem>
@@ -683,25 +495,6 @@ function EventForm({ onDone, event, categories, teams, locations, eventTitles, i
                         {locations.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)}
                     </SelectContent>
                 </Select>
-                {isAdmin && (
-                  <div className="flex gap-2">
-                    <Button type="button" variant="outline" onClick={() => setIsLocationFormOpen(true)}>
-                        <PlusCircle className="mr-2 h-4 w-4" /> Neu
-                    </Button>
-                     <Button 
-                        type="button" 
-                        variant="destructive" 
-                        size="icon" 
-                        disabled={!selectedLocationId}
-                        onClick={() => {
-                            const location = locations.find(l => l.id === selectedLocationId);
-                            if (location) setLocationToDelete(location);
-                        }}
-                        >
-                        <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                )}
             </div>
             <FormMessage />
           </FormItem>
@@ -732,57 +525,11 @@ function EventForm({ onDone, event, categories, teams, locations, eventTitles, i
         </DialogFooter>
       </form>
     </Form>
-
-    <Dialog open={isLocationFormOpen} onOpenChange={setIsLocationFormOpen}>
-        <DialogContent>
-            <AddLocationForm onDone={() => setIsLocationFormOpen(false)} />
-        </DialogContent>
-    </Dialog>
-    
-    <Dialog open={isEventTitleFormOpen} onOpenChange={setIsEventTitleFormOpen}>
-        <DialogContent>
-            <AddEventTitleForm onDone={() => setIsEventTitleFormOpen(false)} />
-        </DialogContent>
-    </Dialog>
-
-    <AlertDialog open={!!locationToDelete} onOpenChange={(open) => !open && setLocationToDelete(null)}>
-        <AlertDialogContent>
-            <AlertDialogHeader>
-                <AlertDialogTitle>Sind Sie sicher?</AlertDialogTitle>
-                <AlertDialogDescription>
-                    Diese Aktion kann nicht rückgängig gemacht werden. Dadurch wird der Ort "{locationToDelete?.name}" dauerhaft gelöscht.
-                </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-                <AlertDialogCancel disabled={isDeletingLocation}>Abbrechen</AlertDialogCancel>
-                <AlertDialogAction onClick={handleDeleteLocation} disabled={isDeletingLocation} className="bg-destructive hover:bg-destructive/90">
-                    {isDeletingLocation ? <Loader2 className="animate-spin" /> : 'Ja, löschen'}
-                </AlertDialogAction>
-            </AlertDialogFooter>
-        </AlertDialogContent>
-    </AlertDialog>
-
-     <AlertDialog open={!!titleToDelete} onOpenChange={(open) => !open && setTitleToDelete(null)}>
-        <AlertDialogContent>
-            <AlertDialogHeader>
-                <AlertDialogTitle>Sind Sie sicher?</AlertDialogTitle>
-                <AlertDialogDescription>
-                    Diese Aktion kann nicht rückgängig gemacht werden. Dadurch wird der Titel "{titleToDelete?.name}" dauerhaft gelöscht.
-                </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-                <AlertDialogCancel disabled={isDeletingTitle}>Abbrechen</AlertDialogCancel>
-                <AlertDialogAction onClick={handleDeleteTitle} disabled={isDeletingTitle} className="bg-destructive hover:bg-destructive/90">
-                    {isDeletingTitle ? <Loader2 className="animate-spin" /> : 'Ja, löschen'}
-                </AlertDialogAction>
-            </AlertDialogFooter>
-        </AlertDialogContent>
-    </AlertDialog>
     </>
   );
 }
 
-const EventCard = ({ event, allUsers, locations, teams, eventTitles, onEdit, onDelete }: { event: DisplayEvent; allUsers: GroupMember[]; locations: Location[]; teams: Team[], eventTitles: EventTitle[], onEdit: (event: Event) => void; onDelete: (event: Event) => void }) => {
+const EventCard = ({ event, allUsers, teams, onEdit, onDelete }: { event: DisplayEvent; allUsers: GroupMember[]; teams: Team[], onEdit: (event: Event) => void; onDelete: (event: Event) => void }) => {
     const { user } = useUser();
     const firestore = useFirestore();
     const location = locations.find(l => l.id === event.locationId);
@@ -1076,16 +823,6 @@ export default function TerminePage() {
     return query(collection(firestore, 'teams'), orderBy('name'));
   }, [firestore]);
   
-  const locationsQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, 'locations'), orderBy('name'));
-  }, [firestore]);
-  
-  const eventTitlesQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, 'event_titles'), orderBy('name'));
-  }, [firestore]);
-  
   const groupMembersQuery = useMemoFirebase(() => {
     if (!firestore) return null;
     return query(collection(firestore, 'group_members'));
@@ -1096,12 +833,10 @@ export default function TerminePage() {
   const { data: eventsData, isLoading: eventsLoading, error } = useCollection<Event>(eventsQuery);
   const { data: categories, isLoading: categoriesLoading } = useCollection<TeamCategory>(categoriesQuery);
   const { data: teams, isLoading: teamsLoading } = useCollection<Team>(teamsQuery);
-  const { data: locations, isLoading: locationsLoading } = useCollection<Location>(locationsQuery);
-  const { data: eventTitles, isLoading: eventTitlesLoading } = useCollection<EventTitle>(eventTitlesQuery);
   const { data: allUsers, isLoading: usersLoading } = useCollection<GroupMember>(groupMembersQuery);
 
   
-  const isLoading = isUserLoading || eventsLoading || categoriesLoading || teamsLoading || locationsLoading || usersLoading || eventTitlesLoading;
+  const isLoading = isUserLoading || eventsLoading || categoriesLoading || teamsLoading || usersLoading;
 
   const isAdmin = currentUserData?.adminRechte === true;
   
@@ -1257,9 +992,7 @@ export default function TerminePage() {
                                         key={`${event.id}-${event.displayDate.toISOString()}`}
                                         event={event}
                                         allUsers={allUsers || []}
-                                        locations={locations || []}
                                         teams={teams || []}
-                                        eventTitles={eventTitles || []}
                                         onEdit={handleOpenForm}
                                         onDelete={setEventToDelete}
                                     />
@@ -1345,7 +1078,7 @@ export default function TerminePage() {
           {isLoading ? (
              <div className="flex items-center justify-center p-8"><Loader2 className="h-8 w-8 animate-spin text-primary"/></div>
           ) : (
-             <EventForm onDone={handleFormDone} event={selectedEvent} categories={categories || []} teams={teams || []} locations={locations || []} eventTitles={eventTitles || []} isAdmin={isAdmin}/>
+             <EventForm onDone={handleFormDone} event={selectedEvent} categories={categories || []} teams={teams || []} isAdmin={isAdmin}/>
           )}
         </DialogContent>
       </Dialog>
