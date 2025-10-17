@@ -324,11 +324,11 @@ function EventForm({ onDone, event, categories, teams, isAdmin, eventTitles, loc
     }
 
     const startDate = combineDateAndTime(values.date, values.isAllDay ? undefined : values.startTime);
-    let endDate : Date | undefined = undefined;
+    let endDate : Timestamp | undefined = undefined;
     if (values.endDate && values.endTime) {
-        endDate = combineDateAndTime(values.endDate, values.isAllDay ? undefined : values.endTime);
+        endDate = Timestamp.fromDate(combineDateAndTime(values.endDate, values.isAllDay ? undefined : values.endTime));
     } else if (values.endDate) {
-        endDate = combineDateAndTime(values.endDate, undefined);
+        endDate = Timestamp.fromDate(combineDateAndTime(values.endDate, undefined));
     }
     
     let rsvpDeadline: Timestamp | undefined = undefined;
@@ -340,7 +340,7 @@ function EventForm({ onDone, event, categories, teams, isAdmin, eventTitles, loc
     const dataToSave: Omit<Event, 'id' | 'createdAt' | 'createdBy' | 'endTime'> & { endTime?: Timestamp | undefined, createdAt: any, createdBy: string } = {
       titleId: values.titleId,
       date: Timestamp.fromDate(startDate),
-      endTime: endDate ? Timestamp.fromDate(endDate) : undefined,
+      endTime: endDate,
       isAllDay: values.isAllDay,
       recurrence: values.recurrence,
       recurrenceEndDate: values.recurrenceEndDate ? Timestamp.fromDate(values.recurrenceEndDate) : undefined,
@@ -928,16 +928,18 @@ export default function TerminePage() {
     localStorage.setItem('termineFilter', JSON.stringify(selectedTeamIds));
   }, [selectedTeamIds]);
 
-  const eventsQuery = useMemo(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, 'events'));
-  }, [firestore]);
-  
   const currentUserDocRef = useMemo(() => {
     if (!firestore || !user) return null;
     return doc(firestore, 'users', user.uid);
   }, [firestore, user]);
 
+  const { data: currentUserData, isLoading: isUserLoading } = useDoc<UserData>(currentUserDocRef);
+  
+  const eventsQuery = useMemo(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'events'));
+  }, [firestore]);
+  
   const categoriesQuery = useMemo(() => {
     if (!firestore) return null;
     return query(collection(firestore, 'team_categories'), orderBy('order'));
@@ -964,7 +966,6 @@ export default function TerminePage() {
   }, [firestore]);
 
 
-  const { data: currentUserData, isLoading: isUserLoading } = useDoc<UserData>(currentUserDocRef);
   const { data: eventsData, isLoading: eventsLoading, error } = useCollection<Event>(eventsQuery);
   const { data: categories, isLoading: categoriesLoading } = useCollection<TeamCategory>(categoriesQuery);
   const { data: teams, isLoading: teamsLoading } = useCollection<Team>(teamsQuery);
@@ -1131,7 +1132,7 @@ export default function TerminePage() {
                                         allUsers={allUsers || []}
                                         teams={teams || []}
                                         onEdit={handleOpenForm}
-                                        onDelete={handleDelete}
+                                        onDelete={setEventToDelete}
                                         eventTitles={eventTitles || []}
                                         locations={locations || []}
                                     />
@@ -1246,4 +1247,5 @@ export default function TerminePage() {
 
 
     
+
 
