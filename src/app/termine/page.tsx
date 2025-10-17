@@ -6,7 +6,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useFirestore, useUser, useCollection, useDoc } from '@/firebase';
+import { useFirestore, useUser, useCollection, useDoc, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { addDoc, collection, serverTimestamp, orderBy, query, Timestamp, doc, updateDoc, deleteDoc, setDoc, where } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Header } from '@/components/header';
@@ -155,7 +155,9 @@ function AddLocationForm({ onDone }: { onDone: () => void }) {
 
         const values = form.getValues();
         if (!firestore) return;
+        
         const locationsCollection = collection(firestore, 'locations');
+        
         addDoc(locationsCollection, values)
             .then(() => {
                 toast({ title: "Ort hinzugefügt" });
@@ -163,11 +165,12 @@ function AddLocationForm({ onDone }: { onDone: () => void }) {
                 form.reset();
             })
             .catch(serverError => {
-                 toast({
-                    variant: "destructive",
-                    title: "Fehler beim Speichern",
-                    description: serverError.message,
+                const permissionError = new FirestorePermissionError({
+                    path: locationsCollection.path,
+                    operation: 'create',
+                    requestResourceData: values,
                 });
+                errorEmitter.emit('permission-error', permissionError);
             });
     };
 
@@ -222,11 +225,12 @@ function AddEventTitleForm({ onDone }: { onDone: () => void }) {
                 form.reset();
             })
             .catch(serverError => {
-                 toast({
-                    variant: "destructive",
-                    title: "Fehler beim Speichern",
-                    description: serverError.message,
+                const permissionError = new FirestorePermissionError({
+                    path: eventTitlesCollection.path,
+                    operation: 'create',
+                    requestResourceData: values,
                 });
+                errorEmitter.emit('permission-error', permissionError);
             });
     };
 
@@ -1247,4 +1251,5 @@ export default function TerminePage() {
     </div>
   );
 }
+
 
