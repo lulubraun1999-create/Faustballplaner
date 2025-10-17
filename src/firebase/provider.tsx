@@ -5,7 +5,34 @@ import React, { createContext, useContext, ReactNode, useMemo, useState, useEffe
 import { FirebaseApp } from 'firebase/app';
 import { Firestore } from 'firebase/firestore';
 import { Auth, User, onAuthStateChanged } from 'firebase/auth';
-import { FirebaseErrorListener } from '@/components/FirebaseErrorListener'
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
+
+/**
+ * An invisible component that listens for globally emitted 'permission-error' events.
+ * It throws any received error to be caught by Next.js's global-error.tsx.
+ * INTEGRATED into FirebaseProvider to avoid circular dependencies.
+ */
+function FirebaseErrorListener() {
+  const [error, setError] = useState<FirestorePermissionError | null>(null);
+
+  useEffect(() => {
+    const handleError = (error: FirestorePermissionError) => {
+      setError(error);
+    };
+    errorEmitter.on('permission-error', handleError);
+    return () => {
+      errorEmitter.off('permission-error', handleError);
+    };
+  }, []);
+
+  if (error) {
+    throw error;
+  }
+
+  return null;
+}
+
 
 interface FirebaseProviderProps {
   children: ReactNode;
