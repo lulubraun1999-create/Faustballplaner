@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useForm, Controller } from 'react-hook-form';
@@ -6,7 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useEffect, useState, useMemo } from 'react';
 import { doc, setDoc, deleteDoc, Timestamp, collection } from 'firebase/firestore';
-import { useAuth, useUser, useFirestore, useDoc, useCollection, useMemoFirebase } from '@/firebase';
+import { useAuth, useUser, useFirestore, useDoc, useCollection } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -366,7 +367,7 @@ export default function ProfileSettingsPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isChangingEmail, setIsChangingEmail] = useState(false);
 
-  const userDocRef = useMemoFirebase(() => {
+  const userDocRef = useMemo(() => {
     if (!firestore || !user) return null;
     return doc(firestore, 'users', user.uid);
   }, [firestore, user]);
@@ -606,3 +607,4 @@ export default function ProfileSettingsPage() {
     </div>
   );
 }
+

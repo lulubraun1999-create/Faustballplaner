@@ -1,11 +1,12 @@
 
+
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useFirestore, useUser, useCollection, useDoc, useMemoFirebase } from '@/firebase';
+import { useFirestore, useUser, useCollection, useDoc } from '@/firebase';
 import { addDoc, collection, serverTimestamp, orderBy, query, Timestamp, doc, updateDoc, deleteDoc, setDoc, where } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Header } from '@/components/header';
@@ -647,7 +648,7 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, eventTitles, loca
     const {data: currentUserData} = useDoc<UserData>(user ? doc(firestore, 'users', user.uid) : null);
     const isAdmin = currentUserData?.adminRechte === true;
 
-    const responsesQuery = useMemoFirebase(() => {
+    const responsesQuery = useMemo(() => {
         if (!firestore) return null;
         // Query for responses for the specific event instance date
         return query(collection(firestore, 'events', event.id, 'responses'), where('eventDate', '==', Timestamp.fromDate(startOfDay(event.displayDate))));
@@ -919,37 +920,37 @@ export default function TerminePage() {
     localStorage.setItem('termineFilter', JSON.stringify(selectedTeamIds));
   }, [selectedTeamIds]);
 
-  const eventsQuery = useMemoFirebase(() => {
+  const eventsQuery = useMemo(() => {
     if (!firestore) return null;
     return query(collection(firestore, 'events'));
   }, [firestore]);
   
-  const currentUserDocRef = useMemoFirebase(() => {
+  const currentUserDocRef = useMemo(() => {
     if (!firestore || !user) return null;
     return doc(firestore, 'users', user.uid);
   }, [firestore, user]);
 
-  const categoriesQuery = useMemoFirebase(() => {
+  const categoriesQuery = useMemo(() => {
     if (!firestore) return null;
     return query(collection(firestore, 'team_categories'), orderBy('order'));
   }, [firestore]);
 
-  const teamsQuery = useMemoFirebase(() => {
+  const teamsQuery = useMemo(() => {
     if (!firestore) return null;
     return query(collection(firestore, 'teams'), orderBy('name'));
   }, [firestore]);
   
-  const groupMembersQuery = useMemoFirebase(() => {
+  const groupMembersQuery = useMemo(() => {
     if (!firestore) return null;
     return query(collection(firestore, 'group_members'));
   }, [firestore]);
   
-  const locationsQuery = useMemoFirebase(() => {
+  const locationsQuery = useMemo(() => {
     if (!firestore) return null;
     return query(collection(firestore, 'locations'));
   }, [firestore]);
 
-  const eventTitlesQuery = useMemoFirebase(() => {
+  const eventTitlesQuery = useMemo(() => {
     if (!firestore) return null;
     return query(collection(firestore, 'event_titles'));
   }, [firestore]);

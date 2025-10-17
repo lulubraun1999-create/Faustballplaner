@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -114,7 +115,10 @@ const EventCard = ({ event, allUsers, locations, eventTitles }: { event: Display
     const { user } = useUser();
     const firestore = useFirestore();
 
-    const responsesQuery = event.id ? query(collection(firestore, 'events', event.id, 'responses')) : null;
+    const responsesQuery = useMemo(() => {
+        if (!event.id || !firestore) return null;
+        return query(collection(firestore, 'events', event.id, 'responses'))
+    }, [firestore, event.id]);
 
     const { data: allResponses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
     
@@ -354,12 +358,36 @@ export default function KalenderPage() {
     localStorage.setItem('kalenderFilter', JSON.stringify(selectedTeamIds));
   }, [selectedTeamIds]);
 
-  const categoriesQuery = query(collection(firestore, 'team_categories'), orderBy('order'));
-  const teamsQuery = collection(firestore, 'teams');
-  const locationsQuery = collection(firestore, 'locations');
-  const eventTitlesQuery = collection(firestore, 'event_titles');
-  const eventsQuery = collection(firestore, 'events');
-  const groupMembersQuery = collection(firestore, 'group_members');
+  const categoriesQuery = useMemo(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'team_categories'), orderBy('order'));
+  }, [firestore]);
+  
+  const teamsQuery = useMemo(() => {
+    if (!firestore) return null;
+    return collection(firestore, 'teams');
+  }, [firestore]);
+  
+  const locationsQuery = useMemo(() => {
+    if (!firestore) return null;
+    return collection(firestore, 'locations');
+  }, [firestore]);
+
+  const eventTitlesQuery = useMemo(() => {
+    if (!firestore) return null;
+    return collection(firestore, 'event_titles');
+  }, [firestore]);
+
+  const eventsQuery = useMemo(() => {
+    if (!firestore) return null;
+    return collection(firestore, 'events');
+  }, [firestore]);
+
+  const groupMembersQuery = useMemo(() => {
+    if (!firestore) return null;
+    return collection(firestore, 'group_members');
+  }, [firestore]);
+
 
   const { data: categories, isLoading: categoriesLoading } = useCollection<TeamCategory>(categoriesQuery);
   const { data: teams, isLoading: teamsLoading } = useCollection<Team>(teamsQuery);
@@ -566,3 +594,4 @@ export default function KalenderPage() {
     </div>
   );
 }
+
