@@ -190,7 +190,7 @@ function AddLocationForm({ onDone }: { onDone: () => void }) {
                         <FormMessage />
                     </FormItem>
                 )} />
-                <Button type="submit" className="w-full">Hinzufügen</Button>
+                <Button type="submit" className="w-full" variant="destructive">Hinzufügen</Button>
             </form>
         </Form>
     );
@@ -232,7 +232,7 @@ function AddEventTitleForm({ onDone }: { onDone: () => void }) {
                         <FormMessage />
                     </FormItem>
                 )} />
-                <Button type="submit">Hinzufügen</Button>
+                <Button type="submit" variant="destructive">Hinzufügen</Button>
             </form>
         </Form>
     );
@@ -629,7 +629,7 @@ function EventForm({ onDone, event, categories, teams, isAdmin, eventTitles, loc
 
         <DialogFooter>
           <DialogClose asChild><Button type="button" variant="outline" disabled={isSubmitting}>Abbrechen</Button></DialogClose>
-          <Button type="submit" disabled={isSubmitting}>
+          <Button type="submit" disabled={isSubmitting} variant="destructive">
             {isSubmitting ? <Loader2 className="animate-spin" /> : 'Speichern'}
           </Button>
         </DialogFooter>
@@ -1226,6 +1226,7 @@ export default function TerminePage() {
     </div>
   );
 }
+
 
 
 
