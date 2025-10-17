@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -147,7 +148,12 @@ function AddLocationForm({ onDone }: { onDone: () => void }) {
         defaultValues: { name: '', address: '', city: '' }
     });
 
-    const handleLocalSubmit = form.handleSubmit((values) => {
+    const handleLocalSubmit = async (e: React.MouseEvent<HTMLButtonElement>) => {
+        e.preventDefault();
+        const isValid = await form.trigger();
+        if (!isValid) return;
+
+        const values = form.getValues();
         if (!firestore) return;
         const locationsCollection = collection(firestore, 'locations');
         addDoc(locationsCollection, values)
@@ -163,35 +169,33 @@ function AddLocationForm({ onDone }: { onDone: () => void }) {
                     description: serverError.message,
                 });
             });
-    });
+    };
 
     return (
-        <Form {...form}>
-            <div className="space-y-4">
-                <FormField control={form.control} name="name" render={({ field }) => (
-                    <FormItem>
-                        <FormLabel>Name des Ortes</FormLabel>
-                        <FormControl><Input placeholder="z.B. Fritz-Jacobi-Anlage" {...field} /></FormControl>
-                        <FormMessage />
-                    </FormItem>
-                )} />
-                 <FormField control={form.control} name="address" render={({ field }) => (
-                    <FormItem>
-                        <FormLabel>Straße & Hausnummer</FormLabel>
-                        <FormControl><Input placeholder="z.B. Kalkstraße 46" {...field} /></FormControl>
-                        <FormMessage />
-                    </FormItem>
-                )} />
-                 <FormField control={form.control} name="city" render={({ field }) => (
-                    <FormItem>
-                        <FormLabel>Stadt</FormLabel>
-                        <FormControl><Input placeholder="z.B. Leverkusen" {...field} /></FormControl>
-                        <FormMessage />
-                    </FormItem>
-                )} />
-                <Button type="button" onClick={(e) => { e.preventDefault(); handleLocalSubmit(); }} className="w-full">Hinzufügen</Button>
-            </div>
-        </Form>
+        <div className="space-y-4">
+            <FormField control={form.control} name="name" render={({ field }) => (
+                <FormItem>
+                    <FormLabel>Name des Ortes</FormLabel>
+                    <FormControl><Input placeholder="z.B. Fritz-Jacobi-Anlage" {...field} /></FormControl>
+                    <FormMessage />
+                </FormItem>
+            )} />
+             <FormField control={form.control} name="address" render={({ field }) => (
+                <FormItem>
+                    <FormLabel>Straße & Hausnummer</FormLabel>
+                    <FormControl><Input placeholder="z.B. Kalkstraße 46" {...field} /></FormControl>
+                    <FormMessage />
+                </FormItem>
+            )} />
+             <FormField control={form.control} name="city" render={({ field }) => (
+                <FormItem>
+                    <FormLabel>Stadt</FormLabel>
+                    <FormControl><Input placeholder="z.B. Leverkusen" {...field} /></FormControl>
+                    <FormMessage />
+                </FormItem>
+            )} />
+            <Button type="button" onClick={handleLocalSubmit} className="w-full">Hinzufügen</Button>
+        </div>
     );
 }
 
@@ -203,7 +207,12 @@ function AddEventTitleForm({ onDone }: { onDone: () => void }) {
         defaultValues: { name: '' }
     });
 
-    const handleLocalSubmit = form.handleSubmit((values) => {
+    const handleLocalSubmit = async (e: React.MouseEvent<HTMLButtonElement>) => {
+        e.preventDefault();
+        const isValid = await form.trigger();
+        if (!isValid) return;
+
+        const values = form.getValues();
         if (!firestore) return;
         const eventTitlesCollection = collection(firestore, 'event_titles');
         addDoc(eventTitlesCollection, values)
@@ -219,21 +228,19 @@ function AddEventTitleForm({ onDone }: { onDone: () => void }) {
                     description: serverError.message,
                 });
             });
-    });
+    };
 
     return (
-        <Form {...form}>
-            <div className="space-y-4">
-                 <FormField control={form.control} name="name" render={({ field }) => (
-                    <FormItem>
-                        <FormLabel>Name des Titels</FormLabel>
-                        <FormControl><Input placeholder="z.B. Training" {...field} /></FormControl>
-                        <FormMessage />
-                    </FormItem>
-                )} />
-                <Button type="button" onClick={(e) => { e.preventDefault(); handleLocalSubmit(); }} className="w-full">Hinzufügen</Button>
-            </div>
-        </Form>
+        <div className="space-y-4">
+             <FormField control={form.control} name="name" render={({ field }) => (
+                <FormItem>
+                    <FormLabel>Name des Titels</FormLabel>
+                    <FormControl><Input placeholder="z.B. Training" {...field} /></FormControl>
+                    <FormMessage />
+                </FormItem>
+            )} />
+            <Button type="button" onClick={handleLocalSubmit} className="w-full">Hinzufügen</Button>
+        </div>
     );
 }
 
@@ -1240,3 +1247,4 @@ export default function TerminePage() {
     </div>
   );
 }
+
