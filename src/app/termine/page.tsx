@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -143,12 +142,12 @@ const titleSchema = z.object({
 function AddLocationForm({ onDone }: { onDone: () => void }) {
     const firestore = useFirestore();
     const { toast } = useToast();
-    const form = useForm<z.infer<typeof locationSchema>>({ 
-        resolver: zodResolver(locationSchema), 
-        defaultValues: { name: '', address: '', city: '' } 
+    const form = useForm<z.infer<typeof locationSchema>>({
+        resolver: zodResolver(locationSchema),
+        defaultValues: { name: '', address: '', city: '' }
     });
 
-    const onSubmit = (values: z.infer<typeof locationSchema>) => {
+    const handleLocalSubmit = form.handleSubmit((values) => {
         if (!firestore) return;
         const locationsCollection = collection(firestore, 'locations');
         addDoc(locationsCollection, values)
@@ -164,11 +163,11 @@ function AddLocationForm({ onDone }: { onDone: () => void }) {
                     description: serverError.message,
                 });
             });
-    };
+    });
 
     return (
         <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <div className="space-y-4">
                 <FormField control={form.control} name="name" render={({ field }) => (
                     <FormItem>
                         <FormLabel>Name des Ortes</FormLabel>
@@ -190,8 +189,8 @@ function AddLocationForm({ onDone }: { onDone: () => void }) {
                         <FormMessage />
                     </FormItem>
                 )} />
-                <Button type="submit" className="w-full">Hinzufügen</Button>
-            </form>
+                <Button type="button" onClick={(e) => { e.preventDefault(); handleLocalSubmit(); }} className="w-full">Hinzufügen</Button>
+            </div>
         </Form>
     );
 }
@@ -199,13 +198,12 @@ function AddLocationForm({ onDone }: { onDone: () => void }) {
 function AddEventTitleForm({ onDone }: { onDone: () => void }) {
     const firestore = useFirestore();
     const { toast } = useToast();
-    const form = useForm<z.infer<typeof titleSchema>>({ 
-        resolver: zodResolver(titleSchema), 
-        defaultValues: { name: '' } 
+    const form = useForm<z.infer<typeof titleSchema>>({
+        resolver: zodResolver(titleSchema),
+        defaultValues: { name: '' }
     });
 
-
-    const onSubmit = (values: z.infer<typeof titleSchema>) => {
+    const handleLocalSubmit = form.handleSubmit((values) => {
         if (!firestore) return;
         const eventTitlesCollection = collection(firestore, 'event_titles');
         addDoc(eventTitlesCollection, values)
@@ -221,11 +219,11 @@ function AddEventTitleForm({ onDone }: { onDone: () => void }) {
                     description: serverError.message,
                 });
             });
-    };
+    });
 
     return (
         <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <div className="space-y-4">
                  <FormField control={form.control} name="name" render={({ field }) => (
                     <FormItem>
                         <FormLabel>Name des Titels</FormLabel>
@@ -233,8 +231,8 @@ function AddEventTitleForm({ onDone }: { onDone: () => void }) {
                         <FormMessage />
                     </FormItem>
                 )} />
-                <Button type="submit" className="w-full">Hinzufügen</Button>
-            </form>
+                <Button type="button" onClick={(e) => { e.preventDefault(); handleLocalSubmit(); }} className="w-full">Hinzufügen</Button>
+            </div>
         </Form>
     );
 }
@@ -1242,10 +1240,3 @@ export default function TerminePage() {
     </div>
   );
 }
-
-    
-
-
-    
-
-
