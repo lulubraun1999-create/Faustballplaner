@@ -1105,7 +1105,7 @@ export default function TerminePage() {
                 
                 return (
                     <div key={dayKey}>
-                        <h2 className={cn("font-bold text-lg mb-2 sticky top-16 bg-background py-2 border-b", isToday && "text-primary")}>
+                        <h2 className={cn("font-bold text-lg mb-2 sticky top-16 bg-background py-2 border-b", isToday && "text-destructive")}>
                             {format(day, 'eeee, dd. MMMM', {locale: de})}
                         </h2>
                         {dayEvents.length > 0 ? (
