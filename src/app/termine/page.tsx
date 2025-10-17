@@ -68,6 +68,24 @@ interface EventResponse {
     respondedAt: Timestamp;
 }
 
+interface EventOverride {
+  id: string;
+  eventId: string;
+  originalDate: Timestamp;
+  isCancelled?: boolean;
+  titleId?: string;
+  date?: Timestamp;
+  endTime?: Timestamp;
+  isAllDay?: boolean;
+  targetTeamIds?: string[];
+  rsvpDeadline?: Timestamp;
+  locationId?: string;
+  meetingPoint?: string;
+  description?: string;
+  updatedAt?: Timestamp;
+}
+
+
 interface GroupMember {
   id: string;
   vorname?: string;
@@ -413,13 +431,15 @@ function DeleteEventTitleForm({ onDone, eventTitles }: { onDone: () => void, eve
     );
 }
 
-function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, locations }: { onDone: () => void, event?: Event, categories: TeamCategory[], teams: Team[], canEdit: boolean, eventTitles: EventTitle[], locations: Location[] }) {
+function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, locations }: { onDone: () => void, event?: DisplayEvent, categories: TeamCategory[], teams: Team[], canEdit: boolean, eventTitles: EventTitle[], locations: Location[] }) {
   const { user } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showAddTitle, setShowAddTitle] = useState(false);
   const [showAddLocation, setShowAddLocation] = useState(false);
+  const [editMode, setEditMode] = useState<'single' | 'future' | null>(null);
+  const [isEditModeDialog, setIsEditModeDialog] = useState(false);
   
   const getInitialFormValues = () => {
     if (event) {
@@ -478,7 +498,15 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
   }, [categories, teams]);
 
 
-  const onSubmit = (values: EventFormValues) => {
+  const handleFormSubmit = async (values: EventFormValues) => {
+     if (event && event.recurrence !== 'none') {
+      setIsEditModeDialog(true);
+    } else {
+      await saveEvent(values, 'single');
+    }
+  }
+
+  const saveEvent = async (values: EventFormValues, mode: 'single' | 'future') => {
     if (!user || !firestore) {
       toast({ variant: 'destructive', title: 'Nicht authentifiziert' });
       return;
@@ -496,54 +524,108 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
         return newDate;
     }
 
-    const startDate = combineDateAndTime(values.date, values.isAllDay ? undefined : values.startTime);
-    
-    const dataToSave: { [key: string]: any } = {
-      titleId: values.titleId,
-      date: Timestamp.fromDate(startDate),
-      isAllDay: values.isAllDay,
-      recurrence: values.recurrence,
-      targetTeamIds: values.targetTeamIds || [],
-      locationId: values.locationId || '',
-      meetingPoint: values.meetingPoint || '',
-      description: values.description || '',
-      createdBy: user.uid,
-      createdAt: event ? event.createdAt : serverTimestamp(),
-    };
+    try {
+        if (event && mode === 'single') {
+            // Create an override for a single instance of a recurring event
+            const overrideData: Partial<EventOverride> = {
+                eventId: event.id,
+                originalDate: Timestamp.fromDate(event.displayDate),
+                updatedAt: serverTimestamp(),
+            };
 
-    if (values.endDate && values.endTime) {
-        dataToSave.endTime = Timestamp.fromDate(combineDateAndTime(values.endDate, values.isAllDay ? undefined : values.endTime));
-    }
-    
-    if (values.recurrence !== 'none' && values.recurrenceEndDate) {
-        dataToSave.recurrenceEndDate = Timestamp.fromDate(values.recurrenceEndDate);
-    }
-    
-    if (values.rsvpDeadlineDate && values.rsvpDeadlineTime) {
-        dataToSave.rsvpDeadline = Timestamp.fromDate(combineDateAndTime(values.rsvpDeadlineDate, values.rsvpDeadlineTime));
-    }
-    
-    let promise;
-    if (event) {
-        promise = updateDoc(doc(firestore, 'events', event.id), dataToSave);
-    } else {
-        promise = addDoc(collection(firestore, 'events'), dataToSave);
-    }
+            const changedValues: Partial<EventOverride> = {};
+            const originalEventDate = event.date.toDate();
 
-    promise.then(() => {
+            const newStartDate = combineDateAndTime(values.date, values.startTime);
+            if (newStartDate.getTime() !== originalEventDate.getTime()) {
+                changedValues.date = Timestamp.fromDate(newStartDate);
+            }
+             if (values.endTime && values.endDate) {
+                const newEndDate = combineDateAndTime(values.endDate, values.endTime);
+                if (newEndDate.getTime() !== event.endTime?.toDate().getTime()) {
+                    changedValues.endTime = Timestamp.fromDate(newEndDate);
+                }
+            }
+            // Add other fields to compare...
+            if (values.titleId !== event.titleId) changedValues.titleId = values.titleId;
+            if (values.locationId !== event.locationId) changedValues.locationId = values.locationId;
+            // etc for all fields
+
+            const overrideRef = doc(collection(firestore, 'events', event.id, 'overrides'));
+            await setDoc(overrideRef, { ...overrideData, ...changedValues });
+
+        } else {
+            // Create a new event or update all future events
+             const dataToSave: { [key: string]: any } = {
+              titleId: values.titleId,
+              isAllDay: values.isAllDay,
+              recurrence: values.recurrence,
+              targetTeamIds: values.targetTeamIds || [],
+              locationId: values.locationId || '',
+              meetingPoint: values.meetingPoint || '',
+              description: values.description || '',
+              createdBy: user.uid,
+              createdAt: event ? event.createdAt : serverTimestamp(),
+            };
+            
+            const startDate = combineDateAndTime(values.date, values.isAllDay ? undefined : values.startTime);
+            dataToSave.date = Timestamp.fromDate(startDate);
+            
+            if (values.endDate && values.endTime && !values.isAllDay) {
+                dataToSave.endTime = Timestamp.fromDate(combineDateAndTime(values.endDate, values.endTime));
+            } else {
+                 dataToSave.endTime = null;
+            }
+            
+            if (values.recurrence !== 'none' && values.recurrenceEndDate) {
+                dataToSave.recurrenceEndDate = Timestamp.fromDate(values.recurrenceEndDate);
+            } else {
+                dataToSave.recurrenceEndDate = null;
+            }
+            
+            if (values.rsvpDeadlineDate) {
+                dataToSave.rsvpDeadline = Timestamp.fromDate(combineDateAndTime(values.rsvpDeadlineDate, values.rsvpDeadlineTime));
+            } else {
+                 dataToSave.rsvpDeadline = null;
+            }
+
+            let promise;
+            let action: 'create' | 'update' = 'create';
+            if (event) {
+                action = 'update';
+                if(mode === 'future') {
+                    // When editing future events, we essentially create a NEW event series
+                    // starting from the display date of the edited instance.
+                    // The old event series should have its recurrenceEndDate set to before this instance.
+                    const oldEventRef = doc(firestore, 'events', event.id);
+                    const newRecurrenceEndDate = add(event.displayDate, { days: -1 });
+                    await updateDoc(oldEventRef, { recurrenceEndDate: Timestamp.fromDate(newRecurrenceEndDate) });
+                    promise = addDoc(collection(firestore, 'events'), dataToSave);
+                    action = 'create';
+                } else {
+                     promise = updateDoc(doc(firestore, 'events', event.id), dataToSave);
+                }
+            } else {
+                promise = addDoc(collection(firestore, 'events'), dataToSave);
+            }
+            await promise;
+        }
+
         toast({ title: event ? 'Termin aktualisiert' : 'Termin erstellt' });
         onDone();
-    }).catch((serverError) => {
+
+    } catch(serverError: any) {
         toast({ variant: 'destructive', title: 'Fehler', description: serverError.message });
-    }).finally(() => {
+    } finally {
         setIsSubmitting(false);
-    });
+        setIsEditModeDialog(false);
+    }
   };
 
   return (
     <>
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-6">
         <DialogHeader>
           <DialogTitle>{event ? 'Termin bearbeiten' : 'Neuen Termin erstellen'}</DialogTitle>
         </DialogHeader>
@@ -831,11 +913,31 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
         </DialogFooter>
       </form>
     </Form>
+
+    <AlertDialog open={isEditModeDialog} onOpenChange={setIsEditModeDialog}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Serientermin bearbeiten</AlertDialogTitle>
+          <AlertDialogDescription>
+            Sie bearbeiten einen Termin, der Teil einer Serie ist. Möchten Sie nur diesen einzelnen Termin ändern oder diesen und alle zukünftigen Termine in der Serie?
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+          <AlertDialogAction onClick={() => saveEvent(form.getValues(), 'single')}>
+            Nur diesen Termin
+          </AlertDialogAction>
+          <AlertDialogAction onClick={() => saveEvent(form.getValues(), 'future')}>
+            Diesen und zukünftige
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
     </>
   );
 }
 
-const EventCard = ({ event, allUsers, teams, onEdit, onDelete, eventTitles, locations, canEdit }: { event: DisplayEvent; allUsers: GroupMember[]; teams: Team[], onEdit: (event: Event) => void; onDelete: (event: Event) => void, eventTitles: EventTitle[], locations: Location[], canEdit: boolean }) => {
+const EventCard = ({ event, allUsers, teams, onEdit, onDelete, eventTitles, locations, canEdit }: { event: DisplayEvent; allUsers: GroupMember[]; teams: Team[], onEdit: (event: DisplayEvent) => void; onDelete: (event: Event) => void, eventTitles: EventTitle[], locations: Location[], canEdit: boolean }) => {
     const { user } = useUser();
     const firestore = useFirestore();
     const {toast} = useToast();
@@ -935,8 +1037,23 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, eventTitles, loca
         if (!user || !firestore) return;
 
         const responseCollectionRef = collection(firestore, 'events', event.id, 'responses');
-        const eventDateAsTimestamp = Timestamp.fromDate(startOfDay(event.displayDate));
         
+        if (userResponse && userResponse.status === status) {
+            // User is toggling off their current status, so delete the response
+            const responseRef = doc(responseCollectionRef, userResponse.id);
+            deleteDoc(responseRef)
+                .catch(serverError => {
+                    toast({
+                        variant: "destructive",
+                        title: "Fehler",
+                        description: serverError.message,
+                    });
+                });
+            return;
+        }
+
+        // Set or update the response
+        const eventDateAsTimestamp = Timestamp.fromDate(startOfDay(event.displayDate));
         const responseDocId = userResponse?.id || doc(responseCollectionRef).id;
         
         const data: Omit<EventResponse, 'id'| 'respondedAt' | 'eventId'> & { respondedAt: any, eventId: string } = {
@@ -1088,7 +1205,7 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, eventTitles, loca
 
 export default function TerminePage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [selectedEvent, setSelectedEvent] = useState<Event | undefined>(undefined);
+  const [selectedEvent, setSelectedEvent] = useState<DisplayEvent | undefined>(undefined);
   const [eventToDelete, setEventToDelete] = useState<Event | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -1164,6 +1281,17 @@ export default function TerminePage() {
     return query(collection(firestore, 'event_titles'));
   }, [firestore]);
 
+  const eventOverridesQuery = useMemo(() => {
+    if (!firestore) return null;
+    // This is not efficient, but for now we fetch all overrides.
+    // A better approach would be to query overrides for events visible in the week.
+    const allEventIds = (eventsData || []).map(e => e.id);
+    if(allEventIds.length === 0) return null;
+    // Firestore 'in' query supports up to 30 items.
+    // For more, we'd need multiple queries.
+    return query(collection(firestore, 'event_overrides'), where('eventId', 'in', allEventIds.slice(0,30)));
+  }, [firestore, eventsData]);
+
 
   const { data: eventsData, isLoading: eventsLoading, error } = useCollection<Event>(eventsQuery);
   const { data: categories, isLoading: categoriesLoading } = useCollection<TeamCategory>(categoriesQuery);
@@ -1171,9 +1299,10 @@ export default function TerminePage() {
   const { data: allUsers, isLoading: usersLoading } = useCollection<GroupMember>(groupMembersQuery);
   const { data: locations, isLoading: locationsLoading } = useCollection<Location>(locationsQuery);
   const { data: eventTitles, isLoading: eventTitlesLoading } = useCollection<EventTitle>(eventTitlesQuery);
+  const { data: overridesData, isLoading: overridesLoading } = useCollection<EventOverride>(eventOverridesQuery);
 
   
-  const isLoading = isUserLoading || eventsLoading || categoriesLoading || teamsLoading || usersLoading || locationsLoading || eventTitlesLoading;
+  const isLoading = isUserLoading || eventsLoading || categoriesLoading || teamsLoading || usersLoading || locationsLoading || eventTitlesLoading || overridesLoading;
 
   
   const groupedTeams = useMemo(() => {
@@ -1245,7 +1374,15 @@ export default function TerminePage() {
         if (isWithinInterval(currentDate, interval)) {
              const dayKey = format(currentDate, 'yyyy-MM-dd');
              if (!weeklyEventsMap.has(dayKey)) weeklyEventsMap.set(dayKey, []);
-             weeklyEventsMap.get(dayKey)?.push({ ...event, displayDate: currentDate });
+
+             // Check for overrides
+             const override = overridesData?.find(o => o.eventId === event.id && isSameDay(o.originalDate.toDate(), currentDate));
+             if(override && override.isCancelled) {
+                // don't add this instance
+             } else {
+                const finalEvent = override ? { ...event, ...override, id: event.id, displayDate: override.date?.toDate() || currentDate } : { ...event, displayDate: currentDate };
+                weeklyEventsMap.get(dayKey)?.push(finalEvent);
+             }
         }
 
         switch (event.recurrence) {
@@ -1263,10 +1400,10 @@ export default function TerminePage() {
     });
 
     return weeklyEventsMap;
-  }, [eventsData, currentWeekStart, currentWeekEnd, selectedTeamIds, selectedTitleIds]);
+  }, [eventsData, overridesData, currentWeekStart, currentWeekEnd, selectedTeamIds, selectedTitleIds]);
 
 
-  const handleOpenForm = (event?: Event) => {
+  const handleOpenForm = (event?: DisplayEvent) => {
     setSelectedEvent(event);
     setIsFormOpen(true);
   };
@@ -1472,4 +1609,5 @@ export default function TerminePage() {
     </div>
   );
 }
+
 

@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Calendar } from '@/components/ui/calendar';
 import { de } from 'date-fns/locale';
 import { useFirestore, useCollection, useUser, errorEmitter, FirestorePermissionError, useDoc } from '@/firebase';
-import { collection, query, where, Timestamp, orderBy, doc, setDoc, serverTimestamp, onSnapshot, addDoc } from 'firebase/firestore';
+import { collection, query, where, Timestamp, orderBy, doc, setDoc, serverTimestamp, onSnapshot, addDoc, deleteDoc } from 'firebase/firestore';
 import { Loader2, CalendarIcon, Clock, MapPin, Repeat, Check, XIcon, Users, HelpCircle } from 'lucide-react';
 import {
   format,
@@ -187,8 +187,23 @@ const EventCard = ({ event, allUsers, locations, eventTitles }: { event: Display
         if (!user || !firestore) return;
 
         const responseCollectionRef = collection(firestore, 'events', event.id, 'responses');
-        const eventDateAsTimestamp = Timestamp.fromDate(startOfDay(event.displayDate));
         
+        if (userResponse && userResponse.status === status) {
+            // User is toggling off their current status, so delete the response
+            const responseRef = doc(responseCollectionRef, userResponse.id);
+            deleteDoc(responseRef)
+                .catch(serverError => {
+                    const permissionError = new FirestorePermissionError({
+                        path: responseRef.path,
+                        operation: 'delete',
+                    });
+                    errorEmitter.emit('permission-error', permissionError);
+                });
+            return;
+        }
+
+        // Set or update the response
+        const eventDateAsTimestamp = Timestamp.fromDate(startOfDay(event.displayDate));
         const responseDocId = userResponse?.id || doc(responseCollectionRef).id;
         
         const data: Omit<EventResponse, 'id'| 'respondedAt' | 'eventId'> & { respondedAt: any, eventId: string } = {
@@ -636,6 +651,7 @@ export default function KalenderPage() {
     </div>
   );
 }
+
 
 
 

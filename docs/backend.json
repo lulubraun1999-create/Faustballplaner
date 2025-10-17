@@ -497,6 +497,29 @@
             "name": { "type": "string", "description": "The name of the event title (e.g., 'Training', 'Spieltag')." }
         },
         "required": ["id", "name"]
+    },
+    "EventOverride": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "EventOverride",
+      "type": "object",
+      "description": "Represents an override for a single instance of a recurring event.",
+      "properties": {
+        "id": { "type": "string" },
+        "eventId": { "type": "string", "description": "The ID of the recurring event being overridden." },
+        "originalDate": { "type": "string", "format": "date-time", "description": "The original date of the event instance that is being changed." },
+        "isCancelled": { "type": "boolean", "description": "If true, this specific instance of the event is cancelled." },
+        "titleId": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "endTime": { "type": "string", "format": "date-time" },
+        "isAllDay": { "type": "boolean" },
+        "targetTeamIds": { "type": "array", "items": { "type": "string" } },
+        "rsvpDeadline": { "type": "string", "format": "date-time" },
+        "locationId": { "type": "string" },
+        "meetingPoint": { "type": "string" },
+        "description": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "eventId", "originalDate"]
     }
   },
   "auth": {
@@ -669,6 +692,14 @@
           "entityName": "Event",
           "schema": { "$ref": "#/backend/entities/Event" },
           "description": "Collection of all events and appointments."
+        }
+      },
+      {
+        "path": "/events/{eventId}/overrides/{overrideId}",
+        "definition": {
+          "entityName": "EventOverride",
+          "schema": { "$ref": "#/backend/entities/EventOverride" },
+          "description": "Subcollection for overrides of specific instances of a recurring event."
         }
       },
        {
