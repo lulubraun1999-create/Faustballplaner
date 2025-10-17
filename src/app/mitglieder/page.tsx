@@ -1,7 +1,7 @@
 
 'use client';
 
-import { collection, Timestamp, doc, updateDoc, deleteDoc, setDoc, query, orderBy } from 'firebase/firestore';
+import { collection, Timestamp, doc, updateDoc, deleteDoc, setDoc, query, orderBy, getDoc } from 'firebase/firestore';
 import { useFirestore, useCollection, useUser, useDoc } from '@/firebase';
 import { Header } from '@/components/header';
 import {
@@ -17,7 +17,7 @@ import { Loader2, ShieldAlert, Shield, Trash2, Users } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   AlertDialog,
@@ -158,15 +158,16 @@ export default function MitgliederPage() {
 
   const currentUserDocRef = useMemo(() => {
     if (!firestore || !authUser) return null;
-    return doc(firestore, 'users', authUser.uid);
+    return doc(firestore, 'admins', authUser.uid);
   }, [firestore, authUser]);
-  const { data: currentUserData, isLoading: isUserDocLoading } = useDoc<User>(currentUserDocRef);
-  const isAdmin = currentUserData?.adminRechte === true;
+  const { data: adminDoc, isLoading: isAdminDocLoading } = useDoc(currentUserDocRef);
+  const isAdmin = !!adminDoc;
 
   const usersCollectionRef = useMemo(() => {
     if (!firestore || !isAdmin) return null;
     return collection(firestore, 'users');
   }, [firestore, isAdmin]);
+
   const teamsCollectionRef = useMemo(() => {
     if (!firestore) return null;
     return collection(firestore, 'teams');
@@ -181,7 +182,7 @@ export default function MitgliederPage() {
   const { data: categories, isLoading: categoriesLoading, error: categoriesError } = useCollection<TeamCategory>(categoriesQuery);
 
   
-  const isLoading = isAuthLoading || isUserDocLoading || usersLoading || teamsLoading || categoriesLoading;
+  const isLoading = isAuthLoading || isAdminDocLoading || usersLoading || teamsLoading || categoriesLoading;
   const error = usersError || teamsError || categoriesError;
 
   
@@ -198,16 +199,18 @@ export default function MitgliederPage() {
     if (selectedFilterTeamId === 'all') return users;
     return users.filter(user => user.teamIds?.includes(selectedFilterTeamId));
   }, [users, selectedFilterTeamId]);
-
+  
   // Action handlers
   const openDeleteAlert = (user: User) => {
     setActionUser(user);
     setIsDeleteAlertOpen(true);
   };
   
-  const openRoleDialog = (user: User) => {
+  const openRoleDialog = async (user: User) => {
+    if(!firestore) return;
     setActionUser(user);
-    setSelectedRole(user.adminRechte);
+    const adminDocSnap = await getDoc(doc(firestore, 'admins', user.id));
+    setSelectedRole(adminDocSnap.exists());
     setIsRoleDialogOpen(true);
   };
   
@@ -224,9 +227,13 @@ export default function MitgliederPage() {
         await deleteDoc(doc(firestore, 'users', actionUser.id));
         await deleteDoc(doc(firestore, 'members', actionUser.id));
         await deleteDoc(doc(firestore, 'group_members', actionUser.id));
-        if(actionUser.adminRechte) {
-            await deleteDoc(doc(firestore, 'admins', actionUser.id));
+        
+        const adminDocRef = doc(firestore, 'admins', actionUser.id);
+        const adminDocSnap = await getDoc(adminDocRef);
+        if(adminDocSnap.exists()) {
+            await deleteDoc(adminDocRef);
         }
+
         toast({ title: 'Benutzer gelöscht', description: 'Das Benutzerkonto wurde erfolgreich entfernt.' });
         setIsDeleteAlertOpen(false);
         setActionUser(null);
@@ -299,7 +306,6 @@ export default function MitgliederPage() {
         setIsSubmitting(false);
     }
   };
-
 
   const renderContent = () => {
     if (isLoading) {

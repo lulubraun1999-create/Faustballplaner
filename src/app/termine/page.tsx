@@ -74,10 +74,6 @@ interface GroupMember {
   nachname?: string;
 }
 
-interface UserData {
-  adminRechte?: boolean;
-}
-
 interface TeamCategory {
   id: string;
   name: string;
@@ -185,30 +181,32 @@ function AddLocationForm({ onDone }: { onDone: () => void }) {
     };
 
     return (
-        <div className="space-y-4">
-            <FormField control={form.control} name="name" render={({ field }) => (
-                <FormItem>
-                    <FormLabel>Name des Ortes</FormLabel>
-                    <FormControl><Input placeholder="z.B. Fritz-Jacobi-Anlage" {...field} /></FormControl>
-                    <FormMessage />
-                </FormItem>
-            )} />
-             <FormField control={form.control} name="address" render={({ field }) => (
-                <FormItem>
-                    <FormLabel>Straße & Hausnummer</FormLabel>
-                    <FormControl><Input placeholder="z.B. Kalkstraße 46" {...field} /></FormControl>
-                    <FormMessage />
-                </FormItem>
-            )} />
-             <FormField control={form.control} name="city" render={({ field }) => (
-                <FormItem>
-                    <FormLabel>Stadt</FormLabel>
-                    <FormControl><Input placeholder="z.B. Leverkusen" {...field} /></FormControl>
-                    <FormMessage />
-                </FormItem>
-            )} />
-            <Button type="button" onClick={handleLocalSubmit} className="w-full">Hinzufügen</Button>
-        </div>
+        <Form {...form}>
+            <div className="space-y-4">
+                <FormField control={form.control} name="name" render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>Name des Ortes</FormLabel>
+                        <FormControl><Input placeholder="z.B. Fritz-Jacobi-Anlage" {...field} /></FormControl>
+                        <FormMessage />
+                    </FormItem>
+                )} />
+                 <FormField control={form.control} name="address" render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>Straße & Hausnummer</FormLabel>
+                        <FormControl><Input placeholder="z.B. Kalkstraße 46" {...field} /></FormControl>
+                        <FormMessage />
+                    </FormItem>
+                )} />
+                 <FormField control={form.control} name="city" render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>Stadt</FormLabel>
+                        <FormControl><Input placeholder="z.B. Leverkusen" {...field} /></FormControl>
+                        <FormMessage />
+                    </FormItem>
+                )} />
+                <Button type="button" onClick={handleLocalSubmit} className="w-full">Hinzufügen</Button>
+            </div>
+        </Form>
     );
 }
 
@@ -246,16 +244,18 @@ function AddEventTitleForm({ onDone }: { onDone: () => void }) {
     };
 
     return (
-         <div className="space-y-4">
-             <FormField control={form.control} name="name" render={({ field }) => (
-                <FormItem>
-                    <FormLabel>Name des Titels</FormLabel>
-                    <FormControl><Input placeholder="z.B. Training" {...field} /></FormControl>
-                    <FormMessage />
-                </FormItem>
-            )} />
-            <Button type="button" onClick={handleLocalSubmit} className="w-full">Hinzufügen</Button>
-        </div>
+        <Form {...form}>
+             <div className="space-y-4">
+                 <FormField control={form.control} name="name" render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>Name des Titels</FormLabel>
+                        <FormControl><Input placeholder="z.B. Training" {...field} /></FormControl>
+                        <FormMessage />
+                    </FormItem>
+                )} />
+                <Button type="button" onClick={handleLocalSubmit} className="w-full">Hinzufügen</Button>
+            </div>
+        </Form>
     );
 }
 
@@ -290,41 +290,43 @@ function DeleteLocationForm({ onDone, locations }: { onDone: () => void, locatio
     };
 
     return (
-        <div className="space-y-4">
-            <FormField control={form.control} name="locationId" render={({ field }) => (
-                <FormItem>
-                    <FormLabel>Ort zum Löschen auswählen</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Wähle einen Ort" />
-                            </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                            {locations.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
-                    <FormMessage />
-                </FormItem>
-            )} />
-            <AlertDialog>
-                <AlertDialogTrigger asChild>
-                    <Button type="button" variant="destructive" className="w-full" disabled={!form.watch('locationId')}>Löschen</Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Sind Sie sicher?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            Diese Aktion kann nicht rückgängig gemacht werden. Der Ort wird dauerhaft gelöscht.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleLocalSubmit} className="bg-destructive hover:bg-destructive/90">Ja, löschen</AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
-        </div>
+        <Form {...form}>
+            <div className="space-y-4">
+                <FormField control={form.control} name="locationId" render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>Ort zum Löschen auswählen</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Wähle einen Ort" />
+                                </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                                {locations.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                        <FormMessage />
+                    </FormItem>
+                )} />
+                <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                        <Button type="button" variant="destructive" className="w-full" disabled={!form.watch('locationId')}>Löschen</Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Sind Sie sicher?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                Diese Aktion kann nicht rückgängig gemacht werden. Der Ort wird dauerhaft gelöscht.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleLocalSubmit} className="bg-destructive hover:bg-destructive/90">Ja, löschen</AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            </div>
+        </Form>
     );
 }
 
@@ -359,41 +361,43 @@ function DeleteEventTitleForm({ onDone, eventTitles }: { onDone: () => void, eve
     };
 
     return (
-        <div className="space-y-4">
-            <FormField control={form.control} name="titleId" render={({ field }) => (
-                <FormItem>
-                    <FormLabel>Titel zum Löschen auswählen</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Wähle einen Titel" />
-                            </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                            {eventTitles.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
-                    <FormMessage />
-                </FormItem>
-            )} />
-            <AlertDialog>
-                <AlertDialogTrigger asChild>
-                     <Button type="button" variant="destructive" className="w-full" disabled={!form.watch('titleId')}>Löschen</Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Sind Sie sicher?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            Diese Aktion kann nicht rückgängig gemacht werden. Der Titel wird dauerhaft gelöscht.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleLocalSubmit} className="bg-destructive hover:bg-destructive/90">Ja, löschen</AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
-        </div>
+        <Form {...form}>
+            <div className="space-y-4">
+                <FormField control={form.control} name="titleId" render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>Titel zum Löschen auswählen</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Wähle einen Titel" />
+                                </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                                {eventTitles.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                        <FormMessage />
+                    </FormItem>
+                )} />
+                <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                         <Button type="button" variant="destructive" className="w-full" disabled={!form.watch('titleId')}>Löschen</Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Sind Sie sicher?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                Diese Aktion kann nicht rückgängig gemacht werden. Der Titel wird dauerhaft gelöscht.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleLocalSubmit} className="bg-destructive hover:bg-destructive/90">Ja, löschen</AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            </div>
+        </Form>
     );
 }
 
@@ -830,10 +834,10 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, eventTitles, loca
     
     const currentUserDocRef = useMemo(() => {
         if (!firestore || !user) return null;
-        return doc(firestore, 'users', user.uid);
+        return doc(firestore, 'admins', user.uid);
     }, [firestore, user]);
-    const {data: currentUserData} = useDoc<UserData>(currentUserDocRef);
-    const isAdmin = currentUserData?.adminRechte === true;
+    const {data: adminDoc} = useDoc(currentUserDocRef);
+    const isAdmin = !!adminDoc;
 
     const responsesQuery = useMemo(() => {
         if (!firestore) return null;
@@ -1109,10 +1113,10 @@ export default function TerminePage() {
 
   const currentUserDocRef = useMemo(() => {
     if (!firestore || !user) return null;
-    return doc(firestore, 'users', user.uid);
+    return doc(firestore, 'admins', user.uid);
   }, [firestore, user]);
 
-  const { data: currentUserData, isLoading: isUserLoading } = useDoc<UserData>(currentUserDocRef);
+  const { data: adminDoc, isLoading: isUserLoading } = useDoc(currentUserDocRef);
   
   const eventsQuery = useMemo(() => {
     if (!firestore) return null;
@@ -1155,7 +1159,7 @@ export default function TerminePage() {
   
   const isLoading = isUserLoading || eventsLoading || categoriesLoading || teamsLoading || usersLoading || locationsLoading || eventTitlesLoading;
 
-  const isAdmin = currentUserData?.adminRechte === true;
+  const isAdmin = !!adminDoc;
   
   const groupedTeams = useMemo(() => {
     if (!categories || !teams) return [];
@@ -1421,6 +1425,3 @@ export default function TerminePage() {
     </div>
   );
 }
-
-
-

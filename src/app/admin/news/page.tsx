@@ -60,10 +60,6 @@ interface NewsArticle {
   imageUrls?: string[];
 }
 
-interface UserData {
-  adminRechte?: boolean;
-}
-
 function NewsForm({ article, onDone }: { article?: NewsArticle, onDone: () => void }) {
   const firestore = useFirestore();
   const { toast } = useToast();
@@ -210,12 +206,11 @@ export default function AdminNewsPage() {
   
   const currentUserDocRef = useMemo(() => {
     if (!firestore || !user) return null;
-    return doc(firestore, 'users', user.uid);
+    return doc(firestore, 'admins', user.uid);
   }, [firestore, user]);
-  const { data: currentUserData, isLoading: isUserLoading } = useDoc<UserData>(currentUserDocRef);
+  const { data: adminDoc, isLoading: isAdminDocLoading } = useDoc(currentUserDocRef);
+  const isAdmin = !!adminDoc;
   
-  const isAdmin = currentUserData?.adminRechte === true;
-
   const newsQuery = useMemo(() => {
     if (!firestore) return null;
     return query(collection(firestore, 'news_articles'), orderBy('publicationDate', 'desc'));
@@ -248,7 +243,7 @@ export default function AdminNewsPage() {
 
 
   const renderContent = () => {
-    if (isLoading || isUserLoading) {
+    if (isLoading || isAdminDocLoading) {
       return (
         <div className="flex justify-center items-center py-10">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -316,7 +311,7 @@ export default function AdminNewsPage() {
     );
   }
   
-  if (isClient && !isUserLoading && !isAdmin) {
+  if (isClient && !isAdminDocLoading && !isAdmin) {
        return (
         <div className="flex min-h-screen w-full flex-col bg-background">
             <Header />
