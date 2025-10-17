@@ -36,7 +36,7 @@ import { Label } from '@/components/ui/label';
 
 interface Event {
   id: string;
-  title: string;
+  titleId: string;
   date: Timestamp;
   endTime?: Timestamp;
   isAllDay?: boolean;
@@ -51,6 +51,10 @@ interface Event {
   createdAt: Timestamp;
 }
 
+interface DisplayEvent extends Event {
+  displayDate: Date;
+}
+
 interface EventResponse {
     id: string;
     eventId: string;
@@ -60,10 +64,6 @@ interface EventResponse {
     respondedAt: Timestamp;
 }
 
-
-interface DisplayEvent extends Event {
-  displayDate: Date;
-}
 
 interface TeamCategory {
   id: string;
@@ -90,6 +90,11 @@ interface Location {
   city: string;
 }
 
+interface EventTitle {
+  id: string;
+  name: string;
+}
+
 
 const getRecurrenceText = (recurrence?: string) => {
   switch (recurrence) {
@@ -105,7 +110,7 @@ const getRecurrenceText = (recurrence?: string) => {
 };
 
 
-const EventCard = ({ event, allUsers, locations }: { event: DisplayEvent; allUsers: GroupMember[], locations: Location[] }) => {
+const EventCard = ({ event, allUsers, locations, eventTitles }: { event: DisplayEvent; allUsers: GroupMember[], locations: Location[], eventTitles: EventTitle[] }) => {
     const { user } = useUser();
     const firestore = useFirestore();
     const location = locations.find(l => l.id === event.locationId);
@@ -210,7 +215,7 @@ const EventCard = ({ event, allUsers, locations }: { event: DisplayEvent; allUse
     return (
         <Card key={`${event.id}-${event.displayDate.toISOString()}`}>
             <CardHeader>
-                <CardTitle>{event.title}</CardTitle>
+                <CardTitle>{eventTitles.find(t => t.id === event.titleId)?.name || 'Unbenannter Termin'}</CardTitle>
                  <div className="text-sm text-muted-foreground flex items-center gap-x-4 gap-y-1 pt-1">
                     <div className="flex items-center gap-1.5">
                         <Clock className="h-4 w-4 flex-shrink-0" />
@@ -255,7 +260,7 @@ const EventCard = ({ event, allUsers, locations }: { event: DisplayEvent; allUse
                              {responsesLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Users className="h-4 w-4 mr-2" />}
                             <span className="flex gap-2">
                                 <span className="text-green-600">{attendingCount} Zusagen</span>
-                                <span className="text-destructive">{declinedCount} Absagen</span>
+                                <span className="text-red-600">{declinedCount} Absagen</span>
                                 {uncertainCount > 0 && <span className="text-yellow-600">{uncertainCount} Unsicher</span>}
                             </span>
                          </Button>
@@ -365,6 +370,11 @@ export default function KalenderPage() {
     if (!firestore) return null;
     return query(collection(firestore, 'locations'));
   }, [firestore]);
+  
+  const eventTitlesQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'event_titles'));
+  }, [firestore]);
 
   const eventsQuery = useMemoFirebase(() => {
     if (!firestore) return null;
@@ -381,9 +391,10 @@ export default function KalenderPage() {
   const { data: eventsData, isLoading: eventsLoading, error } = useCollection<Event>(eventsQuery);
   const { data: allUsers, isLoading: usersLoading } = useCollection<GroupMember>(groupMembersQuery);
   const { data: locations, isLoading: locationsLoading } = useCollection<Location>(locationsQuery);
+  const { data: eventTitles, isLoading: eventTitlesLoading } = useCollection<EventTitle>(eventTitlesQuery);
   
 
-  const isLoading = categoriesLoading || teamsLoading || eventsLoading || usersLoading || locationsLoading;
+  const isLoading = categoriesLoading || teamsLoading || eventsLoading || usersLoading || locationsLoading || eventTitlesLoading;
 
  const groupedTeams = useMemo(() => {
     if (!categories || !teams) return [];
@@ -561,7 +572,7 @@ export default function KalenderPage() {
                         {error && <p className="text-destructive">Fehler: {error.message}</p>}
                         {!isLoading && selectedEvents.length > 0 ? (
                             selectedEvents.map(event => (
-                               <EventCard event={event} allUsers={allUsers || []} locations={locations || []} key={`${event.id}-${event.displayDate.toISOString()}`} />
+                               <EventCard event={event} allUsers={allUsers || []} locations={locations || []} eventTitles={eventTitles || []} key={`${event.id}-${event.displayDate.toISOString()}`} />
                             ))
                         ) : (
                         !isLoading && (

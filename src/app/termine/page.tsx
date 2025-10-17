@@ -37,7 +37,7 @@ import { Badge } from '@/components/ui/badge';
 
 interface Event {
   id: string;
-  title: string;
+  titleId: string;
   date: Timestamp;
   endTime?: Timestamp;
   isAllDay?: boolean;
@@ -94,8 +94,13 @@ interface Location {
   city: string;
 }
 
+interface EventTitle {
+  id: string;
+  name: string;
+}
+
 const eventSchema = z.object({
-  title: z.string().min(1, 'Titel ist erforderlich.'),
+  titleId: z.string().min(1, 'Titel ist erforderlich.'),
   date: z.date({ required_error: 'Startdatum ist erforderlich.' }),
   startTime: z.string().optional(),
   endTime: z.string().optional(),
@@ -128,6 +133,65 @@ const locationSchema = z.object({
     city: z.string().min(1, 'Ort ist erforderlich.'),
 });
 type LocationFormValues = z.infer<typeof locationSchema>;
+
+const eventTitleSchema = z.object({
+    name: z.string().min(1, 'Name ist erforderlich.'),
+});
+type EventTitleFormValues = z.infer<typeof eventTitleSchema>;
+
+function AddEventTitleForm({ onDone }: { onDone: () => void }) {
+    const firestore = useFirestore();
+    const { toast } = useToast();
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    
+    const form = useForm<EventTitleFormValues>({
+        resolver: zodResolver(eventTitleSchema),
+        defaultValues: { name: '' },
+    });
+
+    const onSubmit = (values: EventTitleFormValues) => {
+        if (!firestore) return;
+        setIsSubmitting(true);
+        const eventTitlesCollection = collection(firestore, 'event_titles');
+        addDoc(eventTitlesCollection, values)
+            .then(() => {
+                toast({ title: 'Titel hinzugefügt' });
+                onDone();
+            })
+            .catch(serverError => {
+                 const permissionError = new FirestorePermissionError({
+                    path: eventTitlesCollection.path,
+                    operation: 'create',
+                    requestResourceData: values,
+                });
+                errorEmitter.emit('permission-error', permissionError);
+            })
+            .finally(() => setIsSubmitting(false));
+    };
+
+    return (
+        <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <DialogHeader>
+                    <DialogTitle>Neuen Termin-Titel hinzufügen</DialogTitle>
+                </DialogHeader>
+                 <FormField control={form.control} name="name" render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>Name des Titels</FormLabel>
+                        <FormControl><Input placeholder="z.B. Training" {...field} /></FormControl>
+                        <FormMessage />
+                    </FormItem>
+                )} />
+                <DialogFooter>
+                    <DialogClose asChild><Button type="button" variant="outline" disabled={isSubmitting}>Abbrechen</Button></DialogClose>
+                    <Button type="submit" disabled={isSubmitting}>
+                        {isSubmitting ? <Loader2 className="animate-spin" /> : 'Speichern'}
+                    </Button>
+                </DialogFooter>
+            </form>
+        </Form>
+    );
+}
 
 function AddLocationForm({ onDone }: { onDone: () => void }) {
     const firestore = useFirestore();
@@ -197,14 +261,17 @@ function AddLocationForm({ onDone }: { onDone: () => void }) {
     );
 }
 
-function EventForm({ onDone, event, categories, teams, locations, isAdmin }: { onDone: () => void, event?: Event, categories: TeamCategory[], teams: Team[], locations: Location[], isAdmin: boolean }) {
+function EventForm({ onDone, event, categories, teams, locations, eventTitles, isAdmin }: { onDone: () => void, event?: Event, categories: TeamCategory[], teams: Team[], locations: Location[], eventTitles: EventTitle[], isAdmin: boolean }) {
   const { user } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLocationFormOpen, setIsLocationFormOpen] = useState(false);
+  const [isEventTitleFormOpen, setIsEventTitleFormOpen] = useState(false);
   const [locationToDelete, setLocationToDelete] = useState<Location | null>(null);
   const [isDeletingLocation, setIsDeletingLocation] = useState(false);
+  const [titleToDelete, setTitleToDelete] = useState<EventTitle | null>(null);
+  const [isDeletingTitle, setIsDeletingTitle] = useState(false);
 
   const getInitialFormValues = () => {
     if (event) {
@@ -212,7 +279,7 @@ function EventForm({ onDone, event, categories, teams, locations, isAdmin }: { o
       const endDate = event.endTime?.toDate();
       const rsvpDate = event.rsvpDeadline?.toDate();
       return {
-        title: event.title,
+        titleId: event.titleId,
         date: startDate,
         startTime: event.isAllDay ? '' : format(startDate, 'HH:mm'),
         endDate: endDate,
@@ -229,7 +296,7 @@ function EventForm({ onDone, event, categories, teams, locations, isAdmin }: { o
       };
     }
     return {
-      title: '',
+      titleId: '',
       date: undefined,
       startTime: '',
       endDate: undefined,
@@ -253,6 +320,7 @@ function EventForm({ onDone, event, categories, teams, locations, isAdmin }: { o
   
   const isAllDay = form.watch('isAllDay');
   const selectedLocationId = form.watch('locationId');
+  const selectedTitleId = form.watch('titleId');
   const recurrence = form.watch('recurrence');
 
 
@@ -282,6 +350,27 @@ function EventForm({ onDone, event, categories, teams, locations, isAdmin }: { o
       errorEmitter.emit('permission-error', permissionError);
     } finally {
       setIsDeletingLocation(false);
+    }
+  };
+  
+  const handleDeleteTitle = async () => {
+    if (!firestore || !titleToDelete) return;
+    setIsDeletingTitle(true);
+    const titleRef = doc(firestore, 'event_titles', titleToDelete.id);
+    try {
+      await deleteDoc(titleRef);
+      toast({ title: 'Titel gelöscht' });
+      form.setValue('titleId', ''); // Reset selection in form
+      setTitleToDelete(null);
+    } catch (serverError: any) {
+      toast({ variant: 'destructive', title: 'Fehler beim Löschen', description: serverError.message });
+      const permissionError = new FirestorePermissionError({
+        path: titleRef.path,
+        operation: 'delete',
+      });
+      errorEmitter.emit('permission-error', permissionError);
+    } finally {
+      setIsDeletingTitle(false);
     }
   };
 
@@ -316,7 +405,7 @@ function EventForm({ onDone, event, categories, teams, locations, isAdmin }: { o
     }
 
     const dataToSave: Omit<Event, 'id' | 'createdAt' | 'createdBy' | 'endTime'> & { endTime?: Timestamp | null, createdAt: any, createdBy: string } = {
-      title: values.title,
+      titleId: values.titleId,
       date: Timestamp.fromDate(startDate),
       endTime: endDate ? Timestamp.fromDate(endDate) : null,
       isAllDay: values.isAllDay,
@@ -374,10 +463,40 @@ function EventForm({ onDone, event, categories, teams, locations, isAdmin }: { o
           <DialogTitle>{event ? 'Termin bearbeiten' : 'Neuen Termin erstellen'}</DialogTitle>
         </DialogHeader>
 
-        <FormField control={form.control} name="title" render={({ field }) => (
+        <FormField control={form.control} name="titleId" render={({ field }) => (
           <FormItem>
             <FormLabel>Titel</FormLabel>
-            <FormControl><Input placeholder="z.B. Mannschaftstraining" {...field} /></FormControl>
+             <div className="flex gap-2">
+                <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Wähle einen Titel" />
+                        </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                        {eventTitles.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+                {isAdmin && (
+                  <div className="flex gap-2">
+                    <Button type="button" variant="outline" onClick={() => setIsEventTitleFormOpen(true)}>
+                        <PlusCircle className="mr-2 h-4 w-4" /> Neu
+                    </Button>
+                     <Button 
+                        type="button" 
+                        variant="destructive" 
+                        size="icon" 
+                        disabled={!selectedTitleId}
+                        onClick={() => {
+                            const title = eventTitles.find(t => t.id === selectedTitleId);
+                            if (title) setTitleToDelete(title);
+                        }}
+                        >
+                        <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+            </div>
             <FormMessage />
           </FormItem>
         )} />
@@ -628,6 +747,12 @@ function EventForm({ onDone, event, categories, teams, locations, isAdmin }: { o
             <AddLocationForm onDone={() => setIsLocationFormOpen(false)} />
         </DialogContent>
     </Dialog>
+    
+    <Dialog open={isEventTitleFormOpen} onOpenChange={setIsEventTitleFormOpen}>
+        <DialogContent>
+            <AddEventTitleForm onDone={() => setIsEventTitleFormOpen(false)} />
+        </DialogContent>
+    </Dialog>
 
     <AlertDialog open={!!locationToDelete} onOpenChange={(open) => !open && setLocationToDelete(null)}>
         <AlertDialogContent>
@@ -645,11 +770,28 @@ function EventForm({ onDone, event, categories, teams, locations, isAdmin }: { o
             </AlertDialogFooter>
         </AlertDialogContent>
     </AlertDialog>
+
+     <AlertDialog open={!!titleToDelete} onOpenChange={(open) => !open && setTitleToDelete(null)}>
+        <AlertDialogContent>
+            <AlertDialogHeader>
+                <AlertDialogTitle>Sind Sie sicher?</AlertDialogTitle>
+                <AlertDialogDescription>
+                    Diese Aktion kann nicht rückgängig gemacht werden. Dadurch wird der Titel "{titleToDelete?.name}" dauerhaft gelöscht.
+                </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+                <AlertDialogCancel disabled={isDeletingTitle}>Abbrechen</AlertDialogCancel>
+                <AlertDialogAction onClick={handleDeleteTitle} disabled={isDeletingTitle} className="bg-destructive hover:bg-destructive/90">
+                    {isDeletingTitle ? <Loader2 className="animate-spin" /> : 'Ja, löschen'}
+                </AlertDialogAction>
+            </AlertDialogFooter>
+        </AlertDialogContent>
+    </AlertDialog>
     </>
   );
 }
 
-const EventCard = ({ event, allUsers, locations, teams, onEdit, onDelete }: { event: DisplayEvent; allUsers: GroupMember[]; locations: Location[]; teams: Team[]; onEdit: (event: Event) => void; onDelete: (event: Event) => void }) => {
+const EventCard = ({ event, allUsers, locations, teams, eventTitles, onEdit, onDelete }: { event: DisplayEvent; allUsers: GroupMember[]; locations: Location[]; teams: Team[], eventTitles: EventTitle[], onEdit: (event: Event) => void; onDelete: (event: Event) => void }) => {
     const { user } = useUser();
     const firestore = useFirestore();
     const location = locations.find(l => l.id === event.locationId);
@@ -713,11 +855,12 @@ const EventCard = ({ event, allUsers, locations, teams, onEdit, onDelete }: { ev
     };
     
     const getEventTitle = () => {
+        const titleName = eventTitles.find(t => t.id === event.titleId)?.name || 'Unbekannter Termin';
         if (!event.targetTeamIds || event.targetTeamIds.length === 0) {
-            return event.title;
+            return titleName;
         }
         const teamNames = event.targetTeamIds.map(id => teams.find(t => t.id === id)?.name).filter(Boolean).join(', ');
-        return teamNames ? `${event.title} für ${teamNames}` : event.title;
+        return teamNames ? `${titleName} für ${teamNames}` : titleName;
     }
 
     const attendees = useMemo(() => {
@@ -826,7 +969,7 @@ const EventCard = ({ event, allUsers, locations, teams, onEdit, onDelete }: { ev
                              {responsesLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Users className="h-4 w-4 mr-2" />}
                             <span className="flex gap-2">
                                 <span className="text-green-600">{attendingCount} Zusagen</span>
-                                <span className="text-destructive">{declinedCount} Absagen</span>
+                                <span className="text-red-600">{declinedCount} Absagen</span>
                                 {uncertainCount > 0 && <span className="text-yellow-600">{uncertainCount} Unsicher</span>}
                             </span>
                          </Button>
@@ -947,6 +1090,11 @@ export default function TerminePage() {
     return query(collection(firestore, 'locations'), orderBy('name'));
   }, [firestore]);
   
+  const eventTitlesQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'event_titles'), orderBy('name'));
+  }, [firestore]);
+  
   const groupMembersQuery = useMemoFirebase(() => {
     if (!firestore) return null;
     return query(collection(firestore, 'group_members'));
@@ -958,10 +1106,11 @@ export default function TerminePage() {
   const { data: categories, isLoading: categoriesLoading } = useCollection<TeamCategory>(categoriesQuery);
   const { data: teams, isLoading: teamsLoading } = useCollection<Team>(teamsQuery);
   const { data: locations, isLoading: locationsLoading } = useCollection<Location>(locationsQuery);
+  const { data: eventTitles, isLoading: eventTitlesLoading } = useCollection<EventTitle>(eventTitlesQuery);
   const { data: allUsers, isLoading: usersLoading } = useCollection<GroupMember>(groupMembersQuery);
 
   
-  const isLoading = isUserLoading || eventsLoading || categoriesLoading || teamsLoading || locationsLoading || usersLoading;
+  const isLoading = isUserLoading || eventsLoading || categoriesLoading || teamsLoading || locationsLoading || usersLoading || eventTitlesLoading;
 
   const isAdmin = currentUserData?.adminRechte === true;
   
@@ -1119,6 +1268,7 @@ export default function TerminePage() {
                                         allUsers={allUsers || []}
                                         locations={locations || []}
                                         teams={teams || []}
+                                        eventTitles={eventTitles || []}
                                         onEdit={handleOpenForm}
                                         onDelete={setEventToDelete}
                                     />
@@ -1204,7 +1354,7 @@ export default function TerminePage() {
           {isLoading ? (
              <div className="flex items-center justify-center p-8"><Loader2 className="h-8 w-8 animate-spin text-primary"/></div>
           ) : (
-             <EventForm onDone={handleFormDone} event={selectedEvent} categories={categories || []} teams={teams || []} locations={locations || []} isAdmin={isAdmin}/>
+             <EventForm onDone={handleFormDone} event={selectedEvent} categories={categories || []} teams={teams || []} locations={locations || []} eventTitles={eventTitles || []} isAdmin={isAdmin}/>
           )}
         </DialogContent>
       </Dialog>
@@ -1214,7 +1364,7 @@ export default function TerminePage() {
             <AlertDialogHeader>
                 <AlertDialogTitle>Sind Sie absolut sicher?</AlertDialogTitle>
                 <AlertDialogDescription>
-                    Diese Aktion kann nicht rückgängig gemacht werden. Dadurch wird der Termin "{eventToDelete?.title}" dauerhaft gelöscht.
+                    Diese Aktion kann nicht rückgängig gemacht werden. Dadurch wird der Termin "{eventTitles?.find(t => t.id === eventToDelete?.titleId)?.name || 'Unbenannt'}" dauerhaft gelöscht.
                 </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

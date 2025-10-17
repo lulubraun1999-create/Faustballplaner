@@ -383,7 +383,7 @@
       "description": "Represents an event or appointment.",
       "properties": {
         "id": { "type": "string", "description": "Unique identifier for the event." },
-        "title": { "type": "string", "description": "The title of the event." },
+        "titleId": { "type": "string", "description": "Reference to the EventTitle in the 'event_titles' collection." },
         "date": { "type": "string", "format": "date-time", "description": "The date and start time of the event." },
         "endTime": { "type": "string", "format": "date-time", "description": "Optional end time of the event." },
         "isAllDay": { "type": "boolean", "description": "Indicates if the event lasts the whole day." },
@@ -405,7 +405,7 @@
         "createdBy": { "type": "string", "description": "User ID of the creator." },
         "createdAt": { "type": "string", "format": "date-time", "description": "The timestamp when the event was created." }
       },
-      "required": ["id", "title", "date", "createdBy", "createdAt"]
+      "required": ["id", "titleId", "date", "createdBy", "createdAt"]
     },
      "EventResponse": {
       "$schema": "http://json-schema.org/draft-07/schema#",
@@ -482,6 +482,17 @@
             "city": { "type": "string", "description": "The city of the location." }
         },
         "required": ["id", "name", "address", "city"]
+    },
+     "EventTitle": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "EventTitle",
+        "type": "object",
+        "description": "Represents a standard title for an event.",
+        "properties": {
+            "id": { "type": "string" },
+            "name": { "type": "string", "description": "The name of the event title (e.g., 'Training', 'Spieltag')." }
+        },
+        "required": ["id", "name"]
     }
   },
   "auth": {
@@ -688,6 +699,14 @@
           "entityName": "Location",
           "schema": { "$ref": "#/backend/entities/Location" },
           "description": "Collection of all event locations."
+        }
+      },
+      {
+        "path": "/event_titles/{eventTitleId}",
+        "definition": {
+          "entityName": "EventTitle",
+          "schema": { "$ref": "#/backend/entities/EventTitle" },
+          "description": "Collection of all standard event titles."
         }
       }
     ],
