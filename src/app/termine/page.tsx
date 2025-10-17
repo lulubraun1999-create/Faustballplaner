@@ -225,14 +225,15 @@ function AddEventTitleForm({ onDone }: { onDone: () => void }) {
 
     return (
         <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="flex items-center gap-2">
-                <FormField control={form.control} name="name" render={({ field }) => (
-                    <FormItem className="flex-1">
-                        <FormControl><Input placeholder="Neuer Titel..." {...field} /></FormControl>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                 <FormField control={form.control} name="name" render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>Name des Titels</FormLabel>
+                        <FormControl><Input placeholder="z.B. Training" {...field} /></FormControl>
                         <FormMessage />
                     </FormItem>
                 )} />
-                <Button type="submit" variant="destructive">Hinzufügen</Button>
+                <Button type="submit" className="w-full" variant="destructive">Hinzufügen</Button>
             </form>
         </Form>
     );
@@ -1226,10 +1227,3 @@ export default function TerminePage() {
     </div>
   );
 }
-
-
-
-
-
-
-
