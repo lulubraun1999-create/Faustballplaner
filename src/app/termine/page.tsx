@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -510,11 +511,11 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
       createdAt: event ? event.createdAt : serverTimestamp(),
     };
 
-    if (values.endDate) {
+    if (values.endDate && values.endTime) {
         dataToSave.endTime = Timestamp.fromDate(combineDateAndTime(values.endDate, values.isAllDay ? undefined : values.endTime));
     }
     
-    if (values.recurrenceEndDate) {
+    if (values.recurrence !== 'none' && values.recurrenceEndDate) {
         dataToSave.recurrenceEndDate = Timestamp.fromDate(values.recurrenceEndDate);
     }
     
@@ -1091,9 +1092,18 @@ export default function TerminePage() {
   const [eventToDelete, setEventToDelete] = useState<Event | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
+  
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>(() => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('termineFilter');
+      const saved = localStorage.getItem('termineTeamFilter');
+      return saved ? JSON.parse(saved) : [];
+    }
+    return [];
+  });
+
+  const [selectedTitleIds, setSelectedTitleIds] = useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('termineTitleFilter');
       return saved ? JSON.parse(saved) : [];
     }
     return [];
@@ -1109,8 +1119,12 @@ export default function TerminePage() {
   const weekDays = eachDayOfInterval({ start: currentWeekStart, end: currentWeekEnd });
 
   useEffect(() => {
-    localStorage.setItem('termineFilter', JSON.stringify(selectedTeamIds));
+    localStorage.setItem('termineTeamFilter', JSON.stringify(selectedTeamIds));
   }, [selectedTeamIds]);
+
+  useEffect(() => {
+    localStorage.setItem('termineTitleFilter', JSON.stringify(selectedTitleIds));
+  }, [selectedTitleIds]);
 
   const userDocRef = useMemo(() => {
     if (!firestore || !user) return null;
@@ -1179,10 +1193,15 @@ export default function TerminePage() {
         return event.targetTeamIds.some(id => selectedTeamIds.includes(id));
     });
 
+    const filteredByTitle = filteredByTeam.filter(event => {
+        if (selectedTitleIds.length === 0) return true;
+        return selectedTitleIds.includes(event.titleId);
+    });
+
     const weeklyEventsMap = new Map<string, DisplayEvent[]>();
     const interval = { start: startOfDay(currentWeekStart), end: startOfDay(currentWeekEnd) };
 
-    for (const event of filteredByTeam) {
+    for (const event of filteredByTitle) {
       const originalStartDate = event.date.toDate();
       const recurrenceEndDate = event.recurrenceEndDate?.toDate();
 
@@ -1244,7 +1263,7 @@ export default function TerminePage() {
     });
 
     return weeklyEventsMap;
-  }, [eventsData, currentWeekStart, currentWeekEnd, selectedTeamIds]);
+  }, [eventsData, currentWeekStart, currentWeekEnd, selectedTeamIds, selectedTitleIds]);
 
 
   const handleOpenForm = (event?: Event) => {
@@ -1359,32 +1378,58 @@ export default function TerminePage() {
              <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-8">
                  <Card>
                     <CardHeader>
-                        <CardTitle>Nach Mannschaften filtern</CardTitle>
+                        <CardTitle>Filter</CardTitle>
                     </CardHeader>
                     <CardContent>
                        {isLoading ? <Loader2 className="animate-spin" /> : (
-                         <Accordion type="multiple" className="w-full" defaultValue={groupedTeams.map(g => g.id)}>
-                            {groupedTeams.map(category => (
-                                <AccordionItem value={category.id} key={category.id}>
-                                    <AccordionTrigger>{category.name}</AccordionTrigger>
-                                    <AccordionContent>
-                                    {category.teams.map(team => (
-                                        <div key={team.id} className="flex items-center space-x-2 p-1">
+                         <Accordion type="multiple" className="w-full" defaultValue={['teams', 'titles']}>
+                            <AccordionItem value="teams">
+                                <AccordionTrigger>Nach Mannschaften filtern</AccordionTrigger>
+                                <AccordionContent>
+                                    {groupedTeams.map(category => (
+                                        <Accordion key={category.id} type="multiple" className="w-full">
+                                            <AccordionItem value={`cat-${category.id}`} key={category.id}>
+                                                <AccordionTrigger className="pl-2">{category.name}</AccordionTrigger>
+                                                <AccordionContent className="pl-4">
+                                                {category.teams.map(team => (
+                                                    <div key={team.id} className="flex items-center space-x-2 p-1">
+                                                        <Checkbox
+                                                            id={team.id}
+                                                            checked={selectedTeamIds.includes(team.id)}
+                                                            onCheckedChange={(checked) => {
+                                                                return checked
+                                                                ? setSelectedTeamIds([...selectedTeamIds, team.id])
+                                                                : setSelectedTeamIds(selectedTeamIds.filter((id) => id !== team.id))
+                                                            }}
+                                                        />
+                                                        <Label htmlFor={team.id} className="font-normal cursor-pointer">{team.name}</Label>
+                                                    </div>
+                                                ))}
+                                                </AccordionContent>
+                                            </AccordionItem>
+                                        </Accordion>
+                                    ))}
+                                </AccordionContent>
+                            </AccordionItem>
+                            <AccordionItem value="titles">
+                                <AccordionTrigger>Nach Terminart filtern</AccordionTrigger>
+                                <AccordionContent>
+                                    {(eventTitles || []).map(title => (
+                                        <div key={title.id} className="flex items-center space-x-2 p-1">
                                             <Checkbox
-                                                id={team.id}
-                                                checked={selectedTeamIds.includes(team.id)}
+                                                id={title.id}
+                                                checked={selectedTitleIds.includes(title.id)}
                                                 onCheckedChange={(checked) => {
                                                     return checked
-                                                    ? setSelectedTeamIds([...selectedTeamIds, team.id])
-                                                    : setSelectedTeamIds(selectedTeamIds.filter((id) => id !== team.id))
+                                                    ? setSelectedTitleIds([...selectedTitleIds, title.id])
+                                                    : setSelectedTitleIds(selectedTitleIds.filter((id) => id !== title.id))
                                                 }}
                                             />
-                                            <Label htmlFor={team.id} className="font-normal cursor-pointer">{team.name}</Label>
+                                            <Label htmlFor={title.id} className="font-normal cursor-pointer">{title.name}</Label>
                                         </div>
                                     ))}
-                                    </AccordionContent>
-                                </AccordionItem>
-                            ))}
+                                </AccordionContent>
+                            </AccordionItem>
                         </Accordion>
                        )}
                     </CardContent>
@@ -1427,3 +1472,4 @@ export default function TerminePage() {
     </div>
   );
 }
+
