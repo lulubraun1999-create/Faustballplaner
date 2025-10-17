@@ -325,8 +325,10 @@ function EventForm({ onDone, event, categories, teams, isAdmin, eventTitles, loc
 
     const startDate = combineDateAndTime(values.date, values.isAllDay ? undefined : values.startTime);
     let endDate : Date | undefined = undefined;
-    if (values.endDate) {
+    if (values.endDate && values.endTime) {
         endDate = combineDateAndTime(values.endDate, values.isAllDay ? undefined : values.endTime);
+    } else if (values.endDate) {
+        endDate = combineDateAndTime(values.endDate, undefined);
     }
     
     let rsvpDeadline: Timestamp | undefined = undefined;
