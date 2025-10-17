@@ -60,6 +60,10 @@ interface NewsArticle {
   imageUrls?: string[];
 }
 
+interface UserData {
+    adminRechte?: boolean;
+}
+
 function NewsForm({ article, onDone }: { article?: NewsArticle, onDone: () => void }) {
   const firestore = useFirestore();
   const { toast } = useToast();
@@ -204,11 +208,13 @@ export default function AdminNewsPage() {
     setIsClient(true);
   }, []);
   
-  const adminDocRef = useMemo(() => {
+  const userDocRef = useMemo(() => {
     if (!firestore || !user) return null;
-    return doc(firestore, 'admins', user.uid);
+    return doc(firestore, 'users', user.uid);
   }, [firestore, user]);
-  const { data: adminDoc, isLoading: isAdminLoading } = useDoc(adminDocRef);
+  const { data: userData, isLoading: isUserLoading } = useDoc<UserData>(userDocRef);
+
+  const canManageNews = userData?.adminRechte;
 
   const newsQuery = useMemo(() => {
     if (!firestore) return null;
@@ -242,7 +248,7 @@ export default function AdminNewsPage() {
 
 
   const renderContent = () => {
-    if (isLoading || isAdminLoading) {
+    if (isLoading || isUserLoading) {
       return (
         <div className="flex justify-center items-center py-10">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -310,7 +316,7 @@ export default function AdminNewsPage() {
     );
   }
   
-  if (isClient && !isAdminLoading && !adminDoc) {
+  if (isClient && !isUserLoading && !canManageNews) {
        return (
         <div className="flex min-h-screen w-full flex-col bg-background">
             <Header />
@@ -333,7 +339,7 @@ export default function AdminNewsPage() {
         <div className="mx-auto max-w-7xl">
           <div className="flex items-center justify-between mb-8">
             <h1 className="text-3xl font-bold">News verwalten</h1>
-            {isClient && adminDoc && (
+            {isClient && canManageNews && (
                 <Button variant="outline" onClick={() => handleOpenForm()}>
                     <PlusCircle className="mr-2 h-4 w-4" />
                     Neuen Artikel erstellen

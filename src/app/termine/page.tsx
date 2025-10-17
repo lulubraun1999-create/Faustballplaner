@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -1116,12 +1115,13 @@ export default function TerminePage() {
     localStorage.setItem('termineFilter', JSON.stringify(selectedTeamIds));
   }, [selectedTeamIds]);
 
-  const adminDocRef = useMemo(() => {
+  const userDocRef = useMemo(() => {
     if (!firestore || !user) return null;
-    return doc(firestore, 'admins', user.uid);
+    return doc(firestore, 'users', user.uid);
   }, [firestore, user]);
+  const { data: userData, isLoading: isUserLoading } = useDoc<UserData>(userDocRef);
 
-  const { data: adminDoc, isLoading: isAdminLoading } = useDoc(adminDocRef);
+  const canEditEvents = userData?.adminRechte;
   
   const eventsQuery = useMemo(() => {
     if (!firestore) return null;
@@ -1162,9 +1162,8 @@ export default function TerminePage() {
   const { data: eventTitles, isLoading: eventTitlesLoading } = useCollection<EventTitle>(eventTitlesQuery);
 
   
-  const isLoading = isAdminLoading || eventsLoading || categoriesLoading || teamsLoading || usersLoading || locationsLoading || eventTitlesLoading;
+  const isLoading = isUserLoading || eventsLoading || categoriesLoading || teamsLoading || usersLoading || locationsLoading || eventTitlesLoading;
 
-  const canEditEvents = !!adminDoc;
   
   const groupedTeams = useMemo(() => {
     if (!categories || !teams) return [];
@@ -1323,7 +1322,7 @@ export default function TerminePage() {
                                         onDelete={setEventToDelete}
                                         eventTitles={eventTitles || []}
                                         locations={locations || []}
-                                        canEdit={canEditEvents}
+                                        canEdit={!!canEditEvents}
                                     />
                                 ))}
                             </div>
@@ -1407,7 +1406,7 @@ export default function TerminePage() {
           {isLoading ? (
              <div className="flex items-center justify-center p-8"><Loader2 className="h-8 w-8 animate-spin text-primary"/></div>
           ) : (
-             <EventForm onDone={handleFormDone} event={selectedEvent} categories={categories || []} teams={teams || []} canEdit={canEditEvents} eventTitles={eventTitles || []} locations={locations || []} />
+             <EventForm onDone={handleFormDone} event={selectedEvent} categories={categories || []} teams={teams || []} canEdit={!!canEditEvents} eventTitles={eventTitles || []} locations={locations || []} />
           )}
         </DialogContent>
       </Dialog>

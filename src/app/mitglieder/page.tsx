@@ -156,12 +156,12 @@ export default function MitgliederPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedFilterTeamId, setSelectedFilterTeamId] = useState('all');
 
-  const currentUserIsAdminQuery = useMemo(() => {
+  const currentUserDocRef = useMemo(() => {
     if (!firestore || !authUser) return null;
-    return doc(firestore, 'admins', authUser.uid);
+    return doc(firestore, 'users', authUser.uid);
   }, [firestore, authUser]);
-  const { data: adminDoc, isLoading: isAdminDocLoading } = useDoc(currentUserIsAdminQuery);
-  const isAdmin = !!adminDoc;
+  const { data: currentUserData, isLoading: isCurrentUserLoading } = useDoc<User>(currentUserDocRef);
+  const isAdmin = currentUserData?.adminRechte;
 
   const usersCollectionRef = useMemo(() => {
     if (!firestore || !isAdmin) return null;
@@ -182,7 +182,7 @@ export default function MitgliederPage() {
   const { data: categories, isLoading: categoriesLoading, error: categoriesError } = useCollection<TeamCategory>(categoriesQuery);
 
   
-  const isLoading = isAuthLoading || isAdminDocLoading || usersLoading || teamsLoading || categoriesLoading;
+  const isLoading = isAuthLoading || isCurrentUserLoading || usersLoading || teamsLoading || categoriesLoading;
   const error = usersError || teamsError || categoriesError;
 
   
@@ -206,11 +206,9 @@ export default function MitgliederPage() {
     setIsDeleteAlertOpen(true);
   };
   
-  const openRoleDialog = async (user: User) => {
-    if(!firestore) return;
+  const openRoleDialog = (user: User) => {
     setActionUser(user);
-    const adminDocSnap = await getDoc(doc(firestore, 'admins', user.id));
-    setSelectedRole(adminDocSnap.exists());
+    setSelectedRole(user.adminRechte || false);
     setIsRoleDialogOpen(true);
   };
   
@@ -228,12 +226,6 @@ export default function MitgliederPage() {
         await deleteDoc(doc(firestore, 'members', actionUser.id));
         await deleteDoc(doc(firestore, 'group_members', actionUser.id));
         
-        const adminDocRef = doc(firestore, 'admins', actionUser.id);
-        const adminDocSnap = await getDoc(adminDocRef);
-        if(adminDocSnap.exists()) {
-            await deleteDoc(adminDocRef);
-        }
-
         toast({ title: 'Benutzer gelöscht', description: 'Das Benutzerkonto wurde erfolgreich entfernt.' });
         setIsDeleteAlertOpen(false);
         setActionUser(null);
@@ -248,12 +240,8 @@ export default function MitgliederPage() {
     if (actionUser === null || selectedRole === undefined || !firestore) return;
     setIsSubmitting(true);
     try {
-        const adminDocRef = doc(firestore, 'admins', actionUser.id);
-        if (selectedRole) {
-            await setDoc(adminDocRef, { uid: actionUser.id });
-        } else {
-            await deleteDoc(adminDocRef);
-        }
+        const userDocRef = doc(firestore, 'users', actionUser.id);
+        await updateDoc(userDocRef, { adminRechte: selectedRole });
 
         toast({ title: 'Rolle aktualisiert', description: 'Die Rolle des Benutzers wurde erfolgreich geändert.' });
         setIsRoleDialogOpen(false);
