@@ -181,9 +181,10 @@ function AddLocationForm({ onDone }: { onDone: () => void }) {
     };
 
     return (
-        <Form {...form}>
+        <>
             <div className="space-y-4">
-                <FormField control={form.control} name="name" render={({ field }) => (
+                <Form {...form}>
+                 <FormField control={form.control} name="name" render={({ field }) => (
                     <FormItem>
                         <FormLabel>Name des Ortes</FormLabel>
                         <FormControl><Input placeholder="z.B. Fritz-Jacobi-Anlage" {...field} /></FormControl>
@@ -204,9 +205,10 @@ function AddLocationForm({ onDone }: { onDone: () => void }) {
                         <FormMessage />
                     </FormItem>
                 )} />
+                </Form>
                 <Button type="button" onClick={handleLocalSubmit} className="w-full">Hinzufügen</Button>
             </div>
-        </Form>
+        </>
     );
 }
 
@@ -244,18 +246,20 @@ function AddEventTitleForm({ onDone }: { onDone: () => void }) {
     };
 
     return (
-        <Form {...form}>
+        <>
              <div className="space-y-4">
-                 <FormField control={form.control} name="name" render={({ field }) => (
-                    <FormItem>
-                        <FormLabel>Name des Titels</FormLabel>
-                        <FormControl><Input placeholder="z.B. Training" {...field} /></FormControl>
-                        <FormMessage />
-                    </FormItem>
-                )} />
+                <Form {...form}>
+                    <FormField control={form.control} name="name" render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Name des Titels</FormLabel>
+                            <FormControl><Input placeholder="z.B. Training" {...field} /></FormControl>
+                            <FormMessage />
+                        </FormItem>
+                    )} />
+                </Form>
                 <Button type="button" onClick={handleLocalSubmit} className="w-full">Hinzufügen</Button>
             </div>
-        </Form>
+        </>
     );
 }
 
@@ -1425,3 +1429,4 @@ export default function TerminePage() {
     </div>
   );
 }
+
