@@ -131,8 +131,6 @@ type EventFormValues = z.infer<typeof eventSchema>;
 
 const itemSchema = z.object({
     name: z.string().min(1, "Name ist erforderlich"),
-    address: z.string().optional(),
-    city: z.string().optional(),
 });
 
 
@@ -140,7 +138,7 @@ function AddLocationForm({ onDone }: { onDone: () => void }) {
     const firestore = useFirestore();
     const { toast } = useToast();
     const form = useForm({ 
-        resolver: zodResolver(itemSchema.omit({ address: true, city: true })), 
+        resolver: zodResolver(itemSchema), 
         defaultValues: { name: '' } 
     });
 
@@ -181,7 +179,7 @@ function AddEventTitleForm({ onDone }: { onDone: () => void }) {
     const firestore = useFirestore();
     const { toast } = useToast();
     const form = useForm({ 
-        resolver: zodResolver(itemSchema.omit({ address: true, city: true })), 
+        resolver: zodResolver(itemSchema), 
         defaultValues: { name: '' } 
     });
 
@@ -1206,6 +1204,7 @@ export default function TerminePage() {
     </div>
   );
 }
+
 
 
 
