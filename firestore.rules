@@ -253,7 +253,7 @@ service cloud.firestore {
       match /users/{userId}/chat_status/{roomId} {
           allow get: if isOwner(userId);
           allow list: if false;
-          allow create, update: if isOwner(userId);
+          allow create, update: if isSignedIn() && request.auth.uid == userId;
           allow delete: if isOwner(userId);
       }
 
@@ -332,11 +332,11 @@ service cloud.firestore {
     }
 
     function isPollResponseOwner(responseId, pollId) {
-         return isSignedIn() && request.auth.uid == resource.data.userId;
+         return isSignedIn() && request.auth.uid == get(/databases/$(database)/documents/polls/$(pollId)/responses/$(responseId)).data.userId;
     }
 
     function isEventResponseOwner(responseId, eventId) {
-        return isSignedIn() && request.auth.uid == resource.data.userId;
+        return isSignedIn() && request.auth.uid == get(/databases/$(database)/documents/events/$(eventId)/responses/$(responseId)).data.userId;
     }
   }
 }
