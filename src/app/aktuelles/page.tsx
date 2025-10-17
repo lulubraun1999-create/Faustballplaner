@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { collection, query, orderBy, Timestamp } from 'firebase/firestore';
 import { useFirestore, useCollection } from '@/firebase';
 import { Header } from '@/components/header';
@@ -55,7 +55,10 @@ const ArticleCard = ({ article }: { article: NewsArticle }) => {
 export default function AktuellesPage() {
   const firestore = useFirestore();
 
-  const newsQuery = query(collection(firestore, 'news_articles'), orderBy('publicationDate', 'desc'));
+  const newsQuery = useMemo(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'news_articles'), orderBy('publicationDate', 'desc'));
+  }, [firestore]);
 
   const { data: articles, isLoading, error } = useCollection<NewsArticle>(newsQuery);
 

@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -208,12 +208,18 @@ export default function AdminNewsPage() {
     setIsClient(true);
   }, []);
   
-  const currentUserDocRef = user ? doc(firestore, 'users', user.uid) : null;
+  const currentUserDocRef = useMemo(() => {
+    if (!firestore || !user) return null;
+    return doc(firestore, 'users', user.uid);
+  }, [firestore, user]);
   const { data: currentUserData, isLoading: isUserLoading } = useDoc<UserData>(currentUserDocRef);
   
   const isAdmin = currentUserData?.adminRechte === true;
 
-  const newsQuery = query(collection(firestore, 'news_articles'), orderBy('publicationDate', 'desc'));
+  const newsQuery = useMemo(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'news_articles'), orderBy('publicationDate', 'desc'));
+  }, [firestore]);
   const { data: articles, isLoading, error } = useCollection<NewsArticle>(newsQuery);
 
   const handleOpenForm = (article?: NewsArticle) => {

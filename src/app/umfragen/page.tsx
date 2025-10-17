@@ -342,7 +342,10 @@ function PollCard({ poll, allUsers }: { poll: Poll; allUsers: GroupMember[] }) {
     const [viewMode, setViewMode] = useState<'vote' | 'results'>('vote');
     const [showVoters, setShowVoters] = useState(false);
 
-    const responsesQuery = poll.id ? collection(firestore, 'polls', poll.id, 'responses') : null;
+    const responsesQuery = useMemo(() => {
+      if (!firestore || !poll.id) return null;
+      return collection(firestore, 'polls', poll.id, 'responses');
+    }, [firestore, poll.id]);
 
     const { data: responses, isLoading: responsesLoading } = useCollection<PollResponse>(responsesQuery);
     
@@ -615,10 +618,22 @@ export default function UmfragenPage() {
   const firestore = useFirestore();
   const { user } = useUser();
 
-  const categoriesQuery = query(collection(firestore, 'team_categories'), orderBy('order'));
-  const teamsQuery = query(collection(firestore, 'teams'), orderBy('name'));
-  const groupMembersQuery = collection(firestore, 'group_members');
-  const pollsQuery = query(collection(firestore, 'polls'), orderBy('createdAt', 'desc'));
+  const categoriesQuery = useMemo(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'team_categories'), orderBy('order'));
+  }, [firestore]);
+  const teamsQuery = useMemo(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'teams'), orderBy('name'));
+  }, [firestore]);
+  const groupMembersQuery = useMemo(() => {
+    if (!firestore) return null;
+    return collection(firestore, 'group_members');
+  }, [firestore]);
+  const pollsQuery = useMemo(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'polls'), orderBy('createdAt', 'desc'));
+  }, [firestore]);
 
   const { data: categories, isLoading: categoriesLoading } = useCollection<TeamCategory>(categoriesQuery);
   const { data: teams, isLoading: teamsLoading } = useCollection<Team>(teamsQuery);

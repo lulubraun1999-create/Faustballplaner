@@ -7,7 +7,7 @@ import { Header } from '@/components/header';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Calendar } from '@/components/ui/calendar';
 import { de } from 'date-fns/locale';
-import { useFirestore, useCollection, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
+import { useFirestore, useCollection, useUser, errorEmitter, FirestorePermissionError, useDoc } from '@/firebase';
 import { collection, query, where, Timestamp, orderBy, doc, setDoc, serverTimestamp, onSnapshot, addDoc } from 'firebase/firestore';
 import { Loader2, CalendarIcon, Clock, MapPin, Repeat, Check, XIcon, Users, HelpCircle } from 'lucide-react';
 import {
@@ -548,10 +548,11 @@ export default function KalenderPage() {
                         onMonthChange={setCurrentMonth}
                         className="rounded-md"
                         locale={de}
-                        modifiers={{ event: eventDates }}
+                        modifiers={{ event: eventDates, today: new Date() }}
                         modifiersClassNames={{
                             event: 'bg-primary/20 text-primary-foreground rounded-full',
                             selected: 'bg-primary text-primary-foreground hover:bg-primary/90 focus:bg-primary/90',
+                            today: 'bg-primary text-primary-foreground',
                         }}
                         components={{
                             DayContent: ({ date, activeModifiers }) => (
@@ -594,4 +595,5 @@ export default function KalenderPage() {
     </div>
   );
 }
+
 

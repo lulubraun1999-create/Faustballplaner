@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { doc, Timestamp } from 'firebase/firestore';
 import { useFirestore, useDoc, WithId } from '@/firebase';
 import { Header } from '@/components/header';
@@ -25,7 +25,10 @@ export default function ArticleDetailPage({ params }: { params: { articleId: str
   const firestore = useFirestore();
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
-  const articleRef = doc(firestore, 'news_articles', params.articleId);
+  const articleRef = useMemo(() => {
+    if (!firestore) return null;
+    return doc(firestore, 'news_articles', params.articleId);
+  }, [firestore, params.articleId]);
 
   const { data: article, isLoading, error } = useDoc<NewsArticle>(articleRef);
   

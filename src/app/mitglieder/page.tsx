@@ -156,13 +156,25 @@ export default function MitgliederPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedFilterTeamId, setSelectedFilterTeamId] = useState('all');
 
-  const currentUserDocRef = authUser ? doc(firestore, 'users', authUser.uid) : null;
+  const currentUserDocRef = useMemo(() => {
+    if (!firestore || !authUser) return null;
+    return doc(firestore, 'users', authUser.uid);
+  }, [firestore, authUser]);
   const { data: currentUserData, isLoading: isUserDocLoading } = useDoc<User>(currentUserDocRef);
   const isAdmin = currentUserData?.adminRechte === true;
 
-  const usersCollectionRef = isAdmin ? collection(firestore, 'users') : null;
-  const teamsCollectionRef = collection(firestore, 'teams');
-  const categoriesQuery = query(collection(firestore, 'team_categories'), orderBy('order'));
+  const usersCollectionRef = useMemo(() => {
+    if (!firestore || !isAdmin) return null;
+    return collection(firestore, 'users');
+  }, [firestore, isAdmin]);
+  const teamsCollectionRef = useMemo(() => {
+    if (!firestore) return null;
+    return collection(firestore, 'teams');
+  }, [firestore]);
+  const categoriesQuery = useMemo(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'team_categories'), orderBy('order'));
+  }, [firestore]);
 
   const { data: users, isLoading: usersLoading, error: usersError } = useCollection<User>(usersCollectionRef);
   const { data: teams, isLoading: teamsLoading, error: teamsError } = useCollection<Team>(teamsCollectionRef);

@@ -85,10 +85,16 @@ export default function ChatPage() {
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
 
 
-  const currentUserDocRef = user ? doc(firestore, 'users', user.uid) : null;
+  const currentUserDocRef = useMemo(() => {
+    if (!firestore || !user) return null;
+    return doc(firestore, 'users', user.uid);
+  }, [firestore, user]);
   const { data: currentUserData, isLoading: isUserLoading } = useDoc<UserData>(currentUserDocRef);
   
-  const teamsQuery = collection(firestore, 'teams');
+  const teamsQuery = useMemo(() => {
+    if (!firestore) return null;
+    return collection(firestore, 'teams');
+  }, [firestore]);
   const { data: teams, isLoading: areTeamsLoading } = useCollection<Team>(teamsQuery);
   
   const chatRooms = useMemo(() => {
@@ -164,7 +170,10 @@ export default function ChatPage() {
   }, [firestore, user, activeRoom]);
 
   
-  const messagesQuery = activeRoom ? query(collection(firestore, 'chat_rooms', activeRoom.id, 'messages'), orderBy('timestamp', 'asc')) : null;
+  const messagesQuery = useMemo(() => {
+    if (!firestore || !activeRoom) return null;
+    return query(collection(firestore, 'chat_rooms', activeRoom.id, 'messages'), orderBy('timestamp', 'asc'));
+  }, [firestore, activeRoom]);
 
   const { data: messages, isLoading: areMessagesLoading } = useCollection<ChatMessage>(messagesQuery);
   
