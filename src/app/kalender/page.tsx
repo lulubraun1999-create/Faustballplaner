@@ -334,10 +334,18 @@ const EventCard = ({ event, allUsers, locations, eventTitles }: { event: Display
 export default function KalenderPage() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+  
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>(() => {
-    // Initialize from localStorage on client
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('kalenderFilter');
+      const saved = localStorage.getItem('kalenderTeamFilter');
+      return saved ? JSON.parse(saved) : [];
+    }
+    return [];
+  });
+  
+  const [selectedTitleIds, setSelectedTitleIds] = useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('kalenderTitleFilter');
       return saved ? JSON.parse(saved) : [];
     }
     return [];
@@ -348,15 +356,17 @@ export default function KalenderPage() {
   const start = startOfMonth(currentMonth);
   const end = endOfMonth(currentMonth);
   
-  // Set selectedDate to today only on client-side
   useEffect(() => {
     setSelectedDate(new Date());
   }, []);
 
-  // Save filter to localStorage whenever it changes
   useEffect(() => {
-    localStorage.setItem('kalenderFilter', JSON.stringify(selectedTeamIds));
+    localStorage.setItem('kalenderTeamFilter', JSON.stringify(selectedTeamIds));
   }, [selectedTeamIds]);
+
+  useEffect(() => {
+    localStorage.setItem('kalenderTitleFilter', JSON.stringify(selectedTitleIds));
+  }, [selectedTitleIds]);
 
   const categoriesQuery = useMemo(() => {
     if (!firestore) return null;
@@ -412,15 +422,20 @@ export default function KalenderPage() {
     if (!eventsData) return [];
 
     const filteredByTeam = eventsData.filter(event => {
-        if (selectedTeamIds.length === 0) return true; // Show all if no filter
+        if (selectedTeamIds.length === 0) return true; // Show all if no team filter
         if (!event.targetTeamIds || event.targetTeamIds.length === 0) return true; // Show events for all teams
         return event.targetTeamIds.some(id => selectedTeamIds.includes(id));
+    });
+
+    const filteredByTitle = filteredByTeam.filter(event => {
+      if (selectedTitleIds.length === 0) return true; // show all if no title filter
+      return selectedTitleIds.includes(event.titleId);
     });
 
     const visibleEvents: DisplayEvent[] = [];
     const interval = { start: startOfMonth(currentMonth), end: endOfMonth(currentMonth) };
 
-    for (const event of filteredByTeam) {
+    for (const event of filteredByTitle) {
       const originalStartDate = event.date.toDate();
       const recurrenceEndDate = event.recurrenceEndDate?.toDate();
 
@@ -481,7 +496,7 @@ export default function KalenderPage() {
       }
     }
     return visibleEvents;
-  }, [eventsData, currentMonth, selectedTeamIds]);
+  }, [eventsData, currentMonth, selectedTeamIds, selectedTitleIds]);
 
   const eventDates = useMemo(() => {
     return allVisibleEvents.map(event => event.displayDate);
@@ -506,32 +521,58 @@ export default function KalenderPage() {
             <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] lg:grid-cols-[320px_1fr] gap-8">
                 <Card>
                     <CardHeader>
-                        <CardTitle>Nach Mannschaften filtern</CardTitle>
+                        <CardTitle>Filter</CardTitle>
                     </CardHeader>
                     <CardContent>
                        {isLoading ? <Loader2 className="animate-spin" /> : (
-                         <Accordion type="multiple" className="w-full">
-                            {groupedTeams.map(category => (
-                                <AccordionItem value={category.id} key={category.id}>
-                                    <AccordionTrigger>{category.name}</AccordionTrigger>
-                                    <AccordionContent>
-                                    {category.teams.map(team => (
-                                        <div key={team.id} className="flex items-center space-x-2 p-1">
+                         <Accordion type="multiple" className="w-full" defaultValue={['teams', 'titles']}>
+                            <AccordionItem value="teams">
+                                <AccordionTrigger>Mannschaften</AccordionTrigger>
+                                <AccordionContent>
+                                    {groupedTeams.map(category => (
+                                      <Accordion key={category.id} type="multiple" className="w-full">
+                                        <AccordionItem value={`cat-${category.id}`} className="border-b-0">
+                                            <AccordionTrigger className="pl-2 hover:no-underline">{category.name}</AccordionTrigger>
+                                            <AccordionContent className="pl-4">
+                                            {category.teams.map(team => (
+                                                <div key={team.id} className="flex items-center space-x-2 p-1">
+                                                    <Checkbox
+                                                        id={`kalender-team-${team.id}`}
+                                                        checked={selectedTeamIds.includes(team.id)}
+                                                        onCheckedChange={(checked) => {
+                                                            return checked
+                                                            ? setSelectedTeamIds([...selectedTeamIds, team.id])
+                                                            : setSelectedTeamIds(selectedTeamIds.filter((id) => id !== team.id))
+                                                        }}
+                                                    />
+                                                    <Label htmlFor={`kalender-team-${team.id}`} className="font-normal cursor-pointer">{team.name}</Label>
+                                                </div>
+                                            ))}
+                                            </AccordionContent>
+                                        </AccordionItem>
+                                       </Accordion>
+                                    ))}
+                                </AccordionContent>
+                            </AccordionItem>
+                            <AccordionItem value="titles">
+                                <AccordionTrigger>Terminart</AccordionTrigger>
+                                <AccordionContent>
+                                    {(eventTitles || []).map(title => (
+                                        <div key={title.id} className="flex items-center space-x-2 p-1">
                                             <Checkbox
-                                                id={team.id}
-                                                checked={selectedTeamIds.includes(team.id)}
+                                                id={`kalender-title-${title.id}`}
+                                                checked={selectedTitleIds.includes(title.id)}
                                                 onCheckedChange={(checked) => {
                                                     return checked
-                                                    ? setSelectedTeamIds([...selectedTeamIds, team.id])
-                                                    : setSelectedTeamIds(selectedTeamIds.filter((id) => id !== team.id))
+                                                    ? setSelectedTitleIds([...selectedTitleIds, title.id])
+                                                    : setSelectedTitleIds(selectedTitleIds.filter((id) => id !== title.id))
                                                 }}
                                             />
-                                            <Label htmlFor={team.id} className="font-normal cursor-pointer">{team.name}</Label>
+                                            <Label htmlFor={`kalender-title-${title.id}`} className="font-normal cursor-pointer">{title.name}</Label>
                                         </div>
                                     ))}
-                                    </AccordionContent>
-                                </AccordionItem>
-                            ))}
+                                </AccordionContent>
+                            </AccordionItem>
                         </Accordion>
                        )}
                     </CardContent>
@@ -552,12 +593,12 @@ export default function KalenderPage() {
                         modifiersClassNames={{
                             event: 'bg-primary/20 text-primary-foreground rounded-full',
                             selected: 'bg-primary text-primary-foreground hover:bg-primary/90 focus:bg-primary/90',
-                            today: 'bg-primary text-primary-foreground',
+                            today: 'bg-destructive text-destructive-foreground',
                         }}
                         components={{
                             DayContent: ({ date, activeModifiers }) => (
                                 <div className="relative h-full w-full flex items-center justify-center">
-                                <span className={cn(activeModifiers.today && "font-bold")}>{format(date, 'd')}</span>
+                                <span className={cn(activeModifiers.today && "font-bold text-destructive-foreground")}>{format(date, 'd')}</span>
                                 {activeModifiers.event && <div className="absolute bottom-1 h-1.5 w-1.5 rounded-full bg-primary" />}
                                 </div>
                             )
@@ -595,5 +636,6 @@ export default function KalenderPage() {
     </div>
   );
 }
+
 
 

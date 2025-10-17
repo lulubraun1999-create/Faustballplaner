@@ -1384,7 +1384,7 @@ export default function TerminePage() {
                        {isLoading ? <Loader2 className="animate-spin" /> : (
                          <Accordion type="multiple" className="w-full" defaultValue={['teams', 'titles']}>
                             <AccordionItem value="teams">
-                                <AccordionTrigger>Nach Mannschaften filtern</AccordionTrigger>
+                                <AccordionTrigger>Mannschaften</AccordionTrigger>
                                 <AccordionContent>
                                     {groupedTeams.map(category => (
                                         <Accordion key={category.id} type="multiple" className="w-full">
@@ -1412,7 +1412,7 @@ export default function TerminePage() {
                                 </AccordionContent>
                             </AccordionItem>
                             <AccordionItem value="titles">
-                                <AccordionTrigger>Nach Terminart filtern</AccordionTrigger>
+                                <AccordionTrigger>Terminart</AccordionTrigger>
                                 <AccordionContent>
                                     {(eventTitles || []).map(title => (
                                         <div key={title.id} className="flex items-center space-x-2 p-1">
