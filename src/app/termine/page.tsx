@@ -496,38 +496,35 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
     }
 
     const startDate = combineDateAndTime(values.date, values.isAllDay ? undefined : values.startTime);
-    let endDate : Timestamp | undefined = undefined;
-    if (values.endDate && values.endTime) {
-        endDate = Timestamp.fromDate(combineDateAndTime(values.endDate, values.isAllDay ? undefined : values.endTime));
-    } else if (values.endDate) {
-        endDate = Timestamp.fromDate(combineDateAndTime(values.endDate, undefined));
-    }
     
-    let rsvpDeadline: Timestamp | undefined = undefined;
-    if(values.rsvpDeadlineDate && values.rsvpDeadlineTime) {
-        const rsvpDate = combineDateAndTime(values.rsvpDeadlineDate, values.rsvpDeadlineTime);
-        rsvpDeadline = Timestamp.fromDate(rsvpDate);
-    }
-
-    const dataToSave: Omit<Event, 'id' | 'createdAt' | 'createdBy' | 'endTime'> & { endTime?: Timestamp | undefined, createdAt: any, createdBy: string } = {
+    const dataToSave: { [key: string]: any } = {
       titleId: values.titleId,
       date: Timestamp.fromDate(startDate),
-      endTime: endDate,
       isAllDay: values.isAllDay,
       recurrence: values.recurrence,
-      recurrenceEndDate: values.recurrenceEndDate ? Timestamp.fromDate(values.recurrenceEndDate) : undefined,
       targetTeamIds: values.targetTeamIds || [],
-      rsvpDeadline: rsvpDeadline,
       locationId: values.locationId || '',
       meetingPoint: values.meetingPoint || '',
       description: values.description || '',
       createdBy: user.uid,
       createdAt: event ? event.createdAt : serverTimestamp(),
     };
+
+    if (values.endDate) {
+        dataToSave.endTime = Timestamp.fromDate(combineDateAndTime(values.endDate, values.isAllDay ? undefined : values.endTime));
+    }
+    
+    if (values.recurrenceEndDate) {
+        dataToSave.recurrenceEndDate = Timestamp.fromDate(values.recurrenceEndDate);
+    }
+    
+    if (values.rsvpDeadlineDate && values.rsvpDeadlineTime) {
+        dataToSave.rsvpDeadline = Timestamp.fromDate(combineDateAndTime(values.rsvpDeadlineDate, values.rsvpDeadlineTime));
+    }
     
     let promise;
     if (event) {
-        promise = updateDoc(doc(firestore, 'events', event.id), dataToSave as { [x: string]: any; });
+        promise = updateDoc(doc(firestore, 'events', event.id), dataToSave);
     } else {
         promise = addDoc(collection(firestore, 'events'), dataToSave);
     }
