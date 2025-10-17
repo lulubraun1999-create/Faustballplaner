@@ -247,6 +247,19 @@
         "registrationDate"
       ]
     },
+    "Admin": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Admin",
+      "type": "object",
+      "description": "Represents an administrator. The existence of a document in the 'admins' collection with a user's UID as the ID grants them admin privileges.",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "The UID of the user who is an administrator."
+        }
+      },
+      "required": ["uid"]
+    },
     "TeamCategory": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "TeamCategory",
@@ -599,6 +612,22 @@
             {
               "name": "userId",
               "description": "Unique identifier for the user."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/admins/{userId}",
+        "definition": {
+          "entityName": "Admin",
+          "schema": {
+            "$ref": "#/backend/entities/Admin"
+          },
+          "description": "Collection of administrator documents. The existence of a document here grants admin rights.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "Unique identifier for the user who is an admin."
             }
           ]
         }

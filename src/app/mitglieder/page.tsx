@@ -227,6 +227,9 @@ export default function MitgliederPage() {
         await deleteDoc(doc(firestore, 'users', actionUser.id));
         await deleteDoc(doc(firestore, 'members', actionUser.id));
         await deleteDoc(doc(firestore, 'group_members', actionUser.id));
+        if(actionUser.adminRechte) {
+            await deleteDoc(doc(firestore, 'admins', actionUser.id));
+        }
         toast({ title: 'Benutzer gelöscht', description: 'Das Benutzerkonto wurde erfolgreich entfernt.' });
         setIsDeleteAlertOpen(false);
         setActionUser(null);
@@ -243,6 +246,14 @@ export default function MitgliederPage() {
     try {
         const userDocRef = doc(firestore, 'users', actionUser.id);
         await updateDoc(userDocRef, { adminRechte: selectedRole });
+
+        const adminDocRef = doc(firestore, 'admins', actionUser.id);
+        if (selectedRole) {
+            await setDoc(adminDocRef, { uid: actionUser.id });
+        } else {
+            await deleteDoc(adminDocRef);
+        }
+
         toast({ title: 'Rolle aktualisiert', description: 'Die Rolle des Benutzers wurde erfolgreich geändert.' });
         setIsRoleDialogOpen(false);
         setActionUser(null);
