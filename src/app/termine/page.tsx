@@ -190,7 +190,7 @@ function AddLocationForm({ onDone }: { onDone: () => void }) {
                         <FormMessage />
                     </FormItem>
                 )} />
-                <Button type="submit" className="w-full" variant="destructive">Hinzufügen</Button>
+                <Button type="submit" className="w-full">Hinzufügen</Button>
             </form>
         </Form>
     );
@@ -233,7 +233,7 @@ function AddEventTitleForm({ onDone }: { onDone: () => void }) {
                         <FormMessage />
                     </FormItem>
                 )} />
-                <Button type="submit" className="w-full" variant="destructive">Hinzufügen</Button>
+                <Button type="submit" className="w-full">Hinzufügen</Button>
             </form>
         </Form>
     );
@@ -633,7 +633,7 @@ function EventForm({ onDone, event, categories, teams, isAdmin, eventTitles, loc
 
         <DialogFooter>
           <DialogClose asChild><Button type="button" variant="outline" disabled={isSubmitting}>Abbrechen</Button></DialogClose>
-          <Button type="submit" disabled={isSubmitting} variant="destructive">
+          <Button type="submit" disabled={isSubmitting}>
             {isSubmitting ? <Loader2 className="animate-spin" /> : 'Speichern'}
           </Button>
         </DialogFooter>
@@ -648,7 +648,12 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, eventTitles, loca
     const firestore = useFirestore();
     const {toast} = useToast();
     const location = locations.find(l => l.id === event.locationId);
-    const {data: currentUserData} = useDoc<UserData>(user ? doc(firestore, 'users', user.uid) : null);
+    
+    const currentUserDocRef = useMemo(() => {
+        if (!firestore || !user) return null;
+        return doc(firestore, 'users', user.uid);
+    }, [firestore, user]);
+    const {data: currentUserData} = useDoc<UserData>(currentUserDocRef);
     const isAdmin = currentUserData?.adminRechte === true;
 
     const responsesQuery = useMemo(() => {
@@ -1114,7 +1119,7 @@ export default function TerminePage() {
                 
                 return (
                     <div key={dayKey}>
-                        <h2 className={cn("font-bold text-lg mb-2 sticky top-16 bg-background py-2 border-b", isToday && "text-destructive")}>
+                        <h2 className={cn("font-bold text-lg mb-2 sticky top-16 bg-background py-2 border-b", isToday && "text-primary")}>
                             {format(day, 'eeee, dd. MMMM', {locale: de})}
                         </h2>
                         {dayEvents.length > 0 ? (
@@ -1241,3 +1246,4 @@ export default function TerminePage() {
 
 
     
+
