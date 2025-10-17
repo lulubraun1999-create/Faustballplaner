@@ -129,14 +129,22 @@ const eventSchema = z.object({
 
 type EventFormValues = z.infer<typeof eventSchema>;
 
-const itemSchema = z.object({ name: z.string().min(1, "Name ist erforderlich") });
+const itemSchema = z.object({
+    name: z.string().min(1, "Name ist erforderlich"),
+    address: z.string().optional(),
+    city: z.string().optional(),
+});
+
 
 function AddLocationForm({ onDone }: { onDone: () => void }) {
     const firestore = useFirestore();
     const { toast } = useToast();
-    const form = useForm({ resolver: zodResolver(itemSchema), defaultValues: { name: '' } });
+    const form = useForm({ 
+        resolver: zodResolver(itemSchema.omit({ address: true, city: true })), 
+        defaultValues: { name: '' } 
+    });
 
-    const onSubmit = (values: z.infer<typeof itemSchema>) => {
+    const onSubmit = (values: { name: string }) => {
         if (!firestore) return;
         const locationsCollection = collection(firestore, 'locations');
         addDoc(locationsCollection, values)
@@ -172,9 +180,13 @@ function AddLocationForm({ onDone }: { onDone: () => void }) {
 function AddEventTitleForm({ onDone }: { onDone: () => void }) {
     const firestore = useFirestore();
     const { toast } = useToast();
-    const form = useForm({ resolver: zodResolver(itemSchema), defaultValues: { name: '' } });
+    const form = useForm({ 
+        resolver: zodResolver(itemSchema.omit({ address: true, city: true })), 
+        defaultValues: { name: '' } 
+    });
 
-    const onSubmit = (values: z.infer<typeof itemSchema>) => {
+
+    const onSubmit = (values: { name: string }) => {
         if (!firestore) return;
         const eventTitlesCollection = collection(firestore, 'event_titles');
         addDoc(eventTitlesCollection, values)
@@ -1194,5 +1206,6 @@ export default function TerminePage() {
     </div>
   );
 }
+
 
 
