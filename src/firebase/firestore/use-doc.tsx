@@ -8,7 +8,6 @@ import {
   DocumentData,
   FirestoreError,
   DocumentSnapshot,
-  isEqual,
 } from 'firebase/firestore';
 
 /** Utility type to add an 'id' field to a given type T. */
@@ -43,22 +42,8 @@ export function useDoc<T = any>(
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<FirestoreError | null>(null);
 
-  // Use a ref to store the stable reference. This prevents re-subscribing on every render
-  // just because the parent component created a new docRef object.
-  const stableDocRef = useRef(docRef);
-
-  // Effect to update the stable ref only when it has actually changed.
   useEffect(() => {
-     if (!docRef) {
-      stableDocRef.current = null;
-    } else if (!stableDocRef.current || !isEqual(stableDocRef.current, docRef)) {
-      stableDocRef.current = docRef;
-    }
-  }, [docRef]);
-
-  useEffect(() => {
-    const currentDocRef = stableDocRef.current;
-    if (!currentDocRef) {
+    if (!docRef) {
       setData(null);
       setIsLoading(false);
       setError(null);
@@ -69,7 +54,7 @@ export function useDoc<T = any>(
     setError(null);
 
     const unsubscribe = onSnapshot(
-      currentDocRef,
+      docRef,
       (snapshot: DocumentSnapshot<DocumentData>) => {
         if (snapshot.exists()) {
           setData({ ...(snapshot.data() as T), id: snapshot.id });
@@ -89,7 +74,7 @@ export function useDoc<T = any>(
     );
 
     return () => unsubscribe();
-  }, [stableDocRef.current]);
+  }, [docRef]);
 
   return { data, isLoading, error };
 }

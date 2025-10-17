@@ -9,7 +9,6 @@ import {
   FirestoreError,
   QuerySnapshot,
   CollectionReference,
-  isEqual,
 } from 'firebase/firestore';
 
 /** Utility type to add an 'id' field to a given type T. */
@@ -45,22 +44,8 @@ export function useCollection<T = any>(
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<FirestoreError | null>(null);
 
-  // Use a ref to store the stable query. This prevents re-subscribing on every render
-  // just because the parent component created a new query object.
-  const stableQueryRef = useRef(queryOrRef);
-
-  // Effect to update the stable query only when it has actually changed.
   useEffect(() => {
     if (!queryOrRef) {
-      stableQueryRef.current = null;
-    } else if (!stableQueryRef.current || !isEqual(stableQueryRef.current, queryOrRef)) {
-      stableQueryRef.current = queryOrRef;
-    }
-  }, [queryOrRef]);
-  
-  useEffect(() => {
-    const currentQuery = stableQueryRef.current;
-    if (!currentQuery) {
       setData(null);
       setIsLoading(false);
       setError(null);
@@ -72,7 +57,7 @@ export function useCollection<T = any>(
     setError(null);
 
     const unsubscribe = onSnapshot(
-      currentQuery,
+      queryOrRef,
       (snapshot: QuerySnapshot<DocumentData>) => {
         const results: ResultItemType[] = [];
         for (const doc of snapshot.docs) {
@@ -91,7 +76,7 @@ export function useCollection<T = any>(
     );
 
     return () => unsubscribe();
-  }, [stableQueryRef.current]); // Re-run only when the stable query reference changes.
+  }, [queryOrRef]); // Re-run only when the stable query reference changes.
 
   return { data, isLoading, error };
 }
