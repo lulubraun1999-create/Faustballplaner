@@ -7,7 +7,7 @@ import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useFirestore, useUser, useCollection, useDoc, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { addDoc, collection, serverTimestamp, orderBy, query, Timestamp, doc, updateDoc, deleteDoc, setDoc, where } from 'firebase/firestore';
+import { addDoc, collection, serverTimestamp, orderBy, query, Timestamp, doc, updateDoc, deleteDoc, setDoc, where, getDocs } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
@@ -542,7 +542,7 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
         if (values.endTime && !values.isAllDay) {
             const endDate = values.endDate || values.date;
             dataToSave.endTime = Timestamp.fromDate(combineDateAndTime(endDate, values.endTime));
-        } else {
+        } else if (!values.endTime) {
             dataToSave.endTime = null;
         }
         
@@ -554,7 +554,7 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
 
         if (values.rsvpDeadlineDate) {
             dataToSave.rsvpDeadline = Timestamp.fromDate(combineDateAndTime(values.rsvpDeadlineDate, values.rsvpDeadlineTime));
-        } else {
+        } else if (!values.rsvpDeadlineDate) {
             dataToSave.rsvpDeadline = null;
         }
 
@@ -942,8 +942,10 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, eventTitles, loca
     
     const responsesQuery = useMemo(() => {
         if (!firestore) return null;
-        // Query for all responses for the event
-        return query(collection(firestore, 'event_responses'), where('eventId', '==', event.id));
+        return query(
+          collection(firestore, 'event_responses'), 
+          where('eventId', '==', event.id)
+        );
     }, [firestore, event.id]);
     
     const { data: allResponses, isLoading: responsesLoading, error } = useCollection<EventResponse>(responsesQuery);
@@ -1287,6 +1289,8 @@ export default function TerminePage() {
     if (!firestore || !eventsData) return null;
     const allEventIds = eventsData.map(e => e.id).filter(id => id);
     if(allEventIds.length === 0) return null;
+    // Firestore 'in' query is limited to 30 elements.
+    // For more, we'd need multiple queries.
     return query(collection(firestore, 'event_overrides'), where('eventId', 'in', allEventIds.slice(0,30)));
   }, [firestore, eventsData]);
   
@@ -1412,29 +1416,28 @@ export default function TerminePage() {
                     date: override?.date || event.date,
                 };
                 
-                 if (event.endTime) {
-                    const originalEndDate = event.endTime.toDate();
-                    const daysDiff = differenceInDays(originalEndDate, event.date.toDate());
-                    const adjustedEndDateTime = add(displayDate, {
-                      hours: originalEndDate.getHours(),
-                      minutes: originalEndDate.getMinutes(),
-                      seconds: originalEndDate.getSeconds(),
-                      days: daysDiff,
-                    });
-                    finalEvent.endTime = Timestamp.fromDate(adjustedEndDateTime);
-                  }
-                  
-                  if (event.rsvpDeadline) {
-                    const originalRsvpDate = event.rsvpDeadline.toDate();
-                    const daysDiff = differenceInDays(event.date.toDate(), originalRsvpDate);
-                    const adjustedRsvpDateTime = add(displayDate, {
-                      hours: originalRsvpDate.getHours(),
-                      minutes: originalRsvpDate.getMinutes(),
-                      seconds: originalRsvpDate.getSeconds(),
-                      days: -daysDiff,
-                    });
-                     finalEvent.rsvpDeadline = Timestamp.fromDate(adjustedRsvpDateTime);
-                  }
+                if (finalEvent.endTime) {
+                    const originalEndDate = finalEvent.endTime.toDate();
+                    let adjustedEndDate = new Date(displayDate);
+                    adjustedEndDate.setHours(originalEndDate.getHours(), originalEndDate.getMinutes(), originalEndDate.getSeconds());
+                     if (adjustedEndDate < displayDate) {
+                        adjustedEndDate = add(adjustedEndDate, { days: 1 });
+                    }
+                    const daysDiff = differenceInDays(originalEndDate, finalEvent.date.toDate());
+                     if(daysDiff > 0) {
+                       adjustedEndDate = add(adjustedEndDate, {days: daysDiff});
+                    }
+                    finalEvent.endTime = Timestamp.fromDate(adjustedEndDate);
+                }
+
+                if (finalEvent.rsvpDeadline) {
+                    const originalRsvpDate = finalEvent.rsvpDeadline.toDate();
+                    const daysDiff = differenceInDays(finalEvent.date.toDate(), originalRsvpDate);
+                    let adjustedRsvpDate = new Date(displayDate);
+                    adjustedRsvpDate.setHours(originalRsvpDate.getHours(), originalRsvpDate.getMinutes(), originalRsvpDate.getSeconds());
+                    adjustedRsvpDate = add(adjustedRsvpDate, {days: -daysDiff});
+                    finalEvent.rsvpDeadline = Timestamp.fromDate(adjustedRsvpDate);
+                }
                 
                 weeklyEventsMap.get(dayKey)?.push(finalEvent);
              }
@@ -1468,26 +1471,45 @@ export default function TerminePage() {
     setSelectedEvent(undefined);
   };
 
-  const handleDelete = (event: DisplayEvent) => {
-     if (!firestore || !canEditEvents) return;
+  const handleDelete = async () => {
+    if (!firestore || !canEditEvents || !eventToDelete) return;
+
     setIsDeleting(true);
-    const eventDocRef = doc(firestore, 'events', event.id);
-    deleteDoc(eventDocRef)
-      .then(() => {
-        toast({ title: 'Termin gelöscht' });
-        setEventToDelete(null);
-      })
-      .catch((serverError) => {
+
+    try {
+        const eventDocRef = doc(firestore, 'events', eventToDelete.id);
+        
+        // Find and delete all associated responses
+        const responsesQuery = query(collection(firestore, 'event_responses'), where('eventId', '==', eventToDelete.id));
+        const responsesSnapshot = await getDocs(responsesQuery);
+        const batch = []; // No batch in client-sdk v9, do it one by one
+        for (const doc of responsesSnapshot.docs) {
+           await deleteDoc(doc.ref);
+        }
+        
+        // Find and delete all associated overrides
+        const overridesQuery = query(collection(firestore, 'event_overrides'), where('eventId', '==', eventToDelete.id));
+        const overridesSnapshot = await getDocs(overridesQuery);
+         for (const doc of overridesSnapshot.docs) {
+           await deleteDoc(doc.ref);
+        }
+
+        // Finally, delete the event itself
+        await deleteDoc(eventDocRef);
+
+        toast({ title: 'Termin und alle zugehörigen Daten gelöscht' });
+    } catch (serverError: any) {
         toast({
           variant: "destructive",
           title: "Fehler beim Löschen",
           description: serverError.message,
         });
-      })
-      .finally(() => {
+    } finally {
         setIsDeleting(false);
-      });
+        setEventToDelete(null);
+    }
   };
+
 
   const goToPreviousWeek = () => setCurrentDate(add(currentDate, { weeks: -1 }));
   const goToNextWeek = () => setCurrentDate(add(currentDate, { weeks: 1 }));
@@ -1650,12 +1672,12 @@ export default function TerminePage() {
             <AlertDialogHeader>
                 <AlertDialogTitle>Sind Sie absolut sicher?</AlertDialogTitle>
                 <AlertDialogDescription>
-                    Diese Aktion kann nicht rückgängig gemacht werden. Dadurch wird der Termin "{eventTitles?.find(t => t.id === eventToDelete?.titleId)?.name || 'Unbenannt'}" dauerhaft gelöscht.
+                    Diese Aktion kann nicht rückgängig gemacht werden. Dadurch wird der Termin "{eventTitles?.find(t => t.id === eventToDelete?.titleId)?.name || 'Unbenannt'}" und alle zugehörigen Daten dauerhaft gelöscht.
                 </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
                 <AlertDialogCancel disabled={isDeleting}>Abbrechen</AlertDialogCancel>
-                <AlertDialogAction onClick={() => eventToDelete && handleDelete(eventToDelete)} disabled={isDeleting} className="bg-destructive hover:bg-destructive/90">
+                <AlertDialogAction onClick={handleDelete} disabled={isDeleting} className="bg-destructive hover:bg-destructive/90">
                     {isDeleting ? <Loader2 className="animate-spin" /> : 'Ja, löschen'}
                 </AlertDialogAction>
             </AlertDialogFooter>
@@ -1666,5 +1688,7 @@ export default function TerminePage() {
 }
 
 
+
+    
 
     
