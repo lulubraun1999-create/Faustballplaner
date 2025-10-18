@@ -21,7 +21,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { PlusCircle, Trash2, Loader2, CalendarIcon, Edit, Clock, MapPin, Users, Repeat, ChevronLeft, ChevronRight, Check, XIcon, HelpCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { format, add, startOfWeek, eachDayOfInterval, isSameDay, startOfDay, addWeeks, isWithinInterval } from 'date-fns';
+import { format, add, startOfWeek, eachDayOfInterval, isSameDay, startOfDay, addWeeks, isWithinInterval, getDay, differenceInDays } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -541,14 +541,22 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
         
         if (values.endDate && values.endTime && !values.isAllDay) {
             dataToSave.endTime = Timestamp.fromDate(combineDateAndTime(values.endDate, values.endTime));
+        } else if (values.endTime) {
+            dataToSave.endTime = Timestamp.fromDate(combineDateAndTime(values.date, values.endTime));
         }
+
         
         if (values.recurrence !== 'none' && values.recurrenceEndDate) {
             dataToSave.recurrenceEndDate = Timestamp.fromDate(values.recurrenceEndDate);
+        } else {
+            dataToSave.recurrenceEndDate = null;
         }
+
         
         if (values.rsvpDeadlineDate) {
             dataToSave.rsvpDeadline = Timestamp.fromDate(combineDateAndTime(values.rsvpDeadlineDate, values.rsvpDeadlineTime));
+        } else {
+            dataToSave.rsvpDeadline = null;
         }
 
 
@@ -904,7 +912,6 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
           </DialogFooter>
         </form>
       </Form>
-
       <AlertDialog open={isEditModeDialog} onOpenChange={setIsEditModeDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -936,11 +943,18 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, eventTitles, loca
     
     const responsesQuery = useMemo(() => {
         if (!firestore) return null;
-        // Query for responses for the specific event instance date
-        return query(collection(firestore, 'events', event.id, 'responses'), where('eventDate', '==', Timestamp.fromDate(startOfDay(event.displayDate))));
-    }, [firestore, event.id, event.displayDate]);
-
-    const { data: responsesForThisInstance, isLoading: responsesLoading, error } = useCollection<EventResponse>(responsesQuery);
+        // Query for all responses for the event
+        return query(collection(firestore, 'events', event.id, 'responses'));
+    }, [firestore, event.id]);
+    
+    const { data: allResponses, isLoading: responsesLoading, error } = useCollection<EventResponse>(responsesQuery);
+    
+    const responsesForThisInstance = useMemo(() => {
+        if (!allResponses) return [];
+        return allResponses.filter(r => 
+            r.eventDate && isSameDay(r.eventDate.toDate(), event.displayDate)
+        );
+    }, [allResponses, event.displayDate]);
     
     if (error) {
         console.error("Error fetching responses:", error);
@@ -967,20 +981,33 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, eventTitles, loca
     };
     
     const recurrenceText = getRecurrenceText(event);
+    
+    const getAdjustedDate = (baseDate: Date, timeSourceDate: Date): Date => {
+      const newDate = new Date(baseDate);
+      newDate.setHours(timeSourceDate.getHours(), timeSourceDate.getMinutes(), timeSourceDate.getSeconds(), timeSourceDate.getMilliseconds());
+      return newDate;
+    }
+    
     const startDate = event.displayDate;
-    const endDate = event.endTime?.toDate();
+    
+    const endDate = useMemo(() => {
+        if (!event.endTime) return undefined;
+        const originalEndDate = event.endTime.toDate();
+        const adjustedEndDate = getAdjustedDate(startDate, originalEndDate);
+
+        // Handle overnight events
+        if (adjustedEndDate < startDate) {
+            return add(adjustedEndDate, { days: 1 });
+        }
+        return adjustedEndDate;
+    }, [event.endTime, startDate]);
+
 
     let timeString;
     if (event.isAllDay) {
         timeString = "Ganztägig";
     } else if (endDate) {
-        // Adjust end date to match start date's day for correct time display
-        const adjustedEndDate = new Date(startDate);
-        adjustedEndDate.setHours(endDate.getHours(), endDate.getMinutes());
-        if (adjustedEndDate < startDate) {
-             adjustedEndDate.setDate(adjustedEndDate.getDate() + 1);
-        }
-        timeString = `${format(startDate, 'HH:mm')} - ${format(adjustedEndDate, 'HH:mm')} Uhr`;
+        timeString = `${format(startDate, 'HH:mm')} - ${format(endDate, 'HH:mm')} Uhr`;
     } else {
         timeString = `${format(startDate, 'HH:mm')} Uhr`;
     }
@@ -1034,11 +1061,11 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, eventTitles, loca
             const responseRef = doc(responseCollectionRef, userResponse.id);
             deleteDoc(responseRef)
                 .catch(serverError => {
-                    toast({
-                        variant: "destructive",
-                        title: "Fehler",
-                        description: serverError.message,
+                    const permissionError = new FirestorePermissionError({
+                        path: responseRef.path,
+                        operation: 'delete',
                     });
+                    errorEmitter.emit('permission-error', permissionError);
                 });
             return;
         }
@@ -1059,11 +1086,12 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, eventTitles, loca
 
         setDoc(responseRef, data, { merge: true })
             .catch(serverError => {
-                toast({
-                    variant: "destructive",
-                    title: "Fehler",
-                    description: serverError.message,
+                const permissionError = new FirestorePermissionError({
+                    path: responseRef.path,
+                    operation: 'write',
+                    requestResourceData: data,
                 });
+                errorEmitter.emit('permission-error', permissionError);
             });
     };
 
@@ -1317,6 +1345,12 @@ export default function TerminePage() {
         if (selectedTitleIds.length === 0) return true;
         return selectedTitleIds.includes(event.titleId);
     });
+    
+    const adjustDate = (newDate: Date, timeSource: Date) => {
+        const result = new Date(newDate);
+        result.setHours(timeSource.getHours(), timeSource.getMinutes(), timeSource.getSeconds(), timeSource.getMilliseconds());
+        return result;
+    }
 
     const weeklyEventsMap = new Map<string, DisplayEvent[]>();
     const interval = { start: startOfDay(currentWeekStart), end: startOfDay(currentWeekEnd) };
@@ -1371,7 +1405,19 @@ export default function TerminePage() {
              if(override && override.isCancelled) {
                 // don't add this instance
              } else {
-                const finalEvent = override ? { ...event, ...override, id: event.id, displayDate: override.date?.toDate() || currentDate } : { ...event, displayDate: currentDate };
+                 const displayDate = override?.date ? override.date.toDate() : currentDate;
+                 
+                 const finalEvent: DisplayEvent = {
+                    ...event,
+                    id: event.id, // Ensure original event ID is kept
+                    displayDate: displayDate,
+                    ...(override || {}),
+                    // Make sure timestamps from override are used if they exist
+                    date: override?.date || event.date,
+                    endTime: override?.endTime || event.endTime,
+                    rsvpDeadline: override?.rsvpDeadline || event.rsvpDeadline
+                };
+                
                 weeklyEventsMap.get(dayKey)?.push(finalEvent);
              }
         }
@@ -1601,3 +1647,6 @@ export default function TerminePage() {
   );
 }
 
+
+
+    
