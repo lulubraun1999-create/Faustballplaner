@@ -939,12 +939,10 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, eventTitles, loca
     const firestore = useFirestore();
     const {toast} = useToast();
     const location = locations.find(l => l.id === event.locationId);
-    const [eventToDelete, setEventToDelete] = useState<DisplayEvent | null>(null);
-
     
     const responsesQuery = useMemo(() => {
         if (!firestore) return null;
-         return query(collection(firestore, 'event_responses'), where('eventId', '==', event.id));
+        return query(collection(firestore, 'event_responses'), where('eventId', '==', event.id));
     }, [firestore, event.id]);
     
     const { data: allResponses, isLoading: responsesLoading, error } = useCollection<EventResponse>(responsesQuery);
@@ -1102,6 +1100,12 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, eventTitles, loca
             });
     };
 
+    const isRecurring = event.recurrence && event.recurrence !== 'none';
+    const deleteMessage = isRecurring
+        ? `Diese Aktion kann nicht rückgängig gemacht werden. Dadurch wird die gesamte Terminserie "${eventTitles?.find(t => t.id === event?.titleId)?.name || 'Unbenannt'}" und alle zugehörigen Daten dauerhaft gelöscht.`
+        : `Diese Aktion kann nicht rückgängig gemacht werden. Dadurch wird der Termin "${eventTitles?.find(t => t.id === event?.titleId)?.name || 'Unbenannt'}" und alle zugehörigen Daten dauerhaft gelöscht.`;
+
+
     return (
         <Card key={event.id}>
             <CardHeader>
@@ -1117,9 +1121,7 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, eventTitles, loca
                                 <AlertDialogContent>
                                     <AlertDialogHeader>
                                         <AlertDialogTitle>Sind Sie absolut sicher?</AlertDialogTitle>
-                                        <AlertDialogDescription>
-                                            Diese Aktion kann nicht rückgängig gemacht werden. Dadurch wird der Termin "{eventTitles?.find(t => t.id === event?.titleId)?.name || 'Unbenannt'}" und alle zugehörigen Daten dauerhaft gelöscht.
-                                        </AlertDialogDescription>
+                                        <AlertDialogDescription>{deleteMessage}</AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
                                         <AlertDialogCancel>Abbrechen</AlertDialogCancel>
@@ -1308,13 +1310,10 @@ export default function TerminePage() {
   }, [eventsData]);
 
   const eventOverridesQuery = useMemo(() => {
-    if (!firestore || !localEvents) return null;
-    const allEventIds = localEvents.map(e => e.id).filter(id => id);
-    if(allEventIds.length === 0) return null;
-    // Firestore 'in' query is limited to 30 elements.
-    // For more, we'd need multiple queries.
-    return query(collection(firestore, 'event_overrides'), where('eventId', 'in', allEventIds.slice(0,30)));
-  }, [firestore, localEvents]);
+    if (!firestore) return null;
+    // This could be improved by filtering for overrides in the current view
+    return query(collection(firestore, 'event_overrides'));
+  }, [firestore]);
   
   const categoriesQuery = useMemo(() => {
     if (!firestore) return null;
@@ -1495,25 +1494,18 @@ export default function TerminePage() {
 
   const handleDelete = (eventToDelete: DisplayEvent) => {
     if (!firestore || !canEditEvents) {
-        toast({ variant: 'destructive', title: 'Keine Berechtigung' });
-        return;
+      toast({ variant: 'destructive', title: 'Keine Berechtigung' });
+      return;
     }
     const eventDocRef = doc(firestore, 'events', eventToDelete.id);
-    
-    // Optimistic UI update
-    setLocalEvents(prevEvents => prevEvents ? prevEvents.filter(e => e.id !== eventToDelete.id) : null);
-    toast({ title: 'Termin gelöscht' });
 
-    deleteDoc(eventDocRef)
-        .catch(serverError => {
-            // Revert optimistic update if server fails
-            setLocalEvents(eventsData);
-            const permissionError = new FirestorePermissionError({
-                path: eventDocRef.path,
-                operation: 'delete',
-            });
-            errorEmitter.emit('permission-error', permissionError);
-        });
+    setLocalEvents((prevEvents) =>
+      prevEvents ? prevEvents.filter((e) => e.id !== eventToDelete.id) : null
+    );
+
+    deleteDoc(eventDocRef);
+
+    toast({ title: 'Termin gelöscht' });
   };
 
 
@@ -1675,7 +1667,3 @@ export default function TerminePage() {
     </div>
   );
 }
-
-    
-
-
