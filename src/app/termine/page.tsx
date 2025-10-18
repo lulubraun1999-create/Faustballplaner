@@ -569,7 +569,6 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
         dataToSave.date = Timestamp.fromDate(startDate);
         
         if (values.endTime && !values.isAllDay) {
-            // Use values.endDate if provided, otherwise use values.date
             const endDate = values.endDate || values.date;
             dataToSave.endTime = Timestamp.fromDate(combineDateAndTime(endDate, values.endTime));
         } else {
@@ -583,7 +582,8 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
         }
 
         if (values.rsvpDeadlineDate && values.rsvpDeadlineTime) {
-            dataToSave.rsvpDeadline = Timestamp.fromDate(combineDateAndTime(values.rsvpDeadlineDate, values.rsvpDeadlineTime));
+            const rsvpDate = values.rsvpDeadlineDate || values.date;
+            dataToSave.rsvpDeadline = Timestamp.fromDate(combineDateAndTime(rsvpDate, values.rsvpDeadlineTime));
         } else {
             dataToSave.rsvpDeadline = null;
         }
@@ -1030,16 +1030,10 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, onReact
         const originalStartDate = event.date.toDate();
         const originalEndDate = event.endTime.toDate();
 
-        // Calculate the difference in days between original start and end
-        const daysDiff = differenceInDays(originalEndDate, originalStartDate);
+        const diff = originalEndDate.getTime() - originalStartDate.getTime();
+        
+        return new Date(startDate.getTime() + diff);
 
-        // Create the new end date by adding the difference to the current display date
-        let adjustedEndDate = add(startDate, { days: daysDiff });
-        
-        // Set the time from the original end date
-        adjustedEndDate.setHours(originalEndDate.getHours(), originalEndDate.getMinutes(), originalEndDate.getSeconds(), originalEndDate.getMilliseconds());
-        
-        return adjustedEndDate;
     }, [event.date, event.endTime, startDate]);
 
     let timeString;
@@ -1493,27 +1487,17 @@ export default function TerminePage() {
           }
           
            if (finalEvent.endTime) {
-              const originalEndDate = finalEvent.endTime.toDate();
-              const daysDiff = differenceInDays(originalEndDate, event.date.toDate());
-              const adjustedEndDateTime = add(finalEvent.displayDate, {
-                hours: originalEndDate.getHours(),
-                minutes: originalEndDate.getMinutes(),
-                seconds: originalEndDate.getSeconds(),
-                days: daysDiff,
-              });
-              finalEvent.endTime = Timestamp.fromDate(adjustedEndDateTime);
+                const originalStartDate = event.date.toDate();
+                const originalEndDate = event.endTime.toDate();
+                const diff = originalEndDate.getTime() - originalStartDate.getTime();
+                finalEvent.endTime = Timestamp.fromDate(new Date(finalEvent.displayDate.getTime() + diff));
             }
             
             if (finalEvent.rsvpDeadline) {
-              const originalRsvpDate = finalEvent.rsvpDeadline.toDate();
-              const daysDiff = differenceInDays(event.date.toDate(), originalRsvpDate);
-              const adjustedRsvpDateTime = add(finalEvent.displayDate, {
-                hours: originalRsvpDate.getHours(),
-                minutes: originalRsvpDate.getMinutes(),
-                seconds: originalRsvpDate.getSeconds(),
-                days: -daysDiff,
-              });
-               finalEvent.rsvpDeadline = Timestamp.fromDate(adjustedRsvpDateTime);
+                const originalStartDate = event.date.toDate();
+                const originalRsvpDate = event.rsvpDeadline.toDate();
+                const diff = originalStartDate.getTime() - originalRsvpDate.getTime();
+                finalEvent.rsvpDeadline = Timestamp.fromDate(new Date(finalEvent.displayDate.getTime() - diff));
             }
 
           weeklyEventsMap.get(dayKey)?.push(finalEvent);
@@ -1549,10 +1533,9 @@ export default function TerminePage() {
 
   const handleDelete = (eventToDelete: DisplayEvent) => {
     if (!firestore) return;
-    if (!canEditEvents) return; // UI Guard
+    if (!canEditEvents) return;
     const eventDocRef = doc(firestore, 'events', eventToDelete.id);
     
-    // Optimistic UI Update
     setLocalEvents(prev => prev ? prev.filter(e => e.id !== eventToDelete.id) : []);
 
     deleteDoc(eventDocRef)
@@ -1560,13 +1543,12 @@ export default function TerminePage() {
         toast({ title: 'Terminserie gelöscht' });
       })
       .catch((err) => {
-        // Revert UI on error
         setLocalEvents(eventsData); 
-        toast({
-          variant: "destructive",
-          title: "Fehler beim Löschen",
-          description: "Die Terminserie konnte nicht gelöscht werden.",
+        const permissionError = new FirestorePermissionError({
+            path: eventDocRef.path,
+            operation: 'delete',
         });
+        errorEmitter.emit('permission-error', permissionError);
       });
 };
 

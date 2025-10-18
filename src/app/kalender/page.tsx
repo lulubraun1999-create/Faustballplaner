@@ -147,32 +147,18 @@ const EventCard = ({ event, allUsers, locations, eventTitles }: { event: Display
 
     const recurrenceText = getRecurrenceText(event.recurrence);
     
-    const getAdjustedDate = (baseDate: Date, timeSourceDate: Date): Date => {
-      const newDate = new Date(baseDate);
-      newDate.setHours(timeSourceDate.getHours(), timeSourceDate.getMinutes(), timeSourceDate.getSeconds(), timeSourceDate.getMilliseconds());
-      return newDate;
-    }
-    
     const startDate = event.displayDate;
     
     const endDate = useMemo(() => {
         if (!event.endTime) return undefined;
-        const originalEndDate = event.endTime.toDate();
-        let adjustedEndDate = getAdjustedDate(startDate, originalEndDate);
-
-        // Handle overnight events
-        if (adjustedEndDate < startDate) {
-            adjustedEndDate = add(adjustedEndDate, { days: 1 });
-        }
         
-        // Handle multi-day events by checking the date part of original start and end
         const originalStartDate = event.date.toDate();
-        const dateDiff = differenceInDays(originalEndDate, originalStartDate);
-        if (dateDiff > 0) {
-            adjustedEndDate = add(adjustedEndDate, { days: dateDiff });
-        }
+        const originalEndDate = event.endTime.toDate();
+
+        const diff = originalEndDate.getTime() - originalStartDate.getTime();
         
-        return adjustedEndDate;
+        return new Date(startDate.getTime() + diff);
+
     }, [event.date, event.endTime, startDate]);
 
 
@@ -551,27 +537,17 @@ export default function KalenderPage() {
             }
 
             if (finalEvent.endTime) {
-              const originalEndDate = finalEvent.endTime.toDate();
-              const daysDiff = differenceInDays(originalEndDate, event.date.toDate());
-              const adjustedEndDateTime = add(finalEvent.displayDate, {
-                hours: originalEndDate.getHours(),
-                minutes: originalEndDate.getMinutes(),
-                seconds: originalEndDate.getSeconds(),
-                days: daysDiff,
-              });
-              finalEvent.endTime = Timestamp.fromDate(adjustedEndDateTime);
+                const originalStartDate = event.date.toDate();
+                const originalEndDate = event.endTime.toDate();
+                const diff = originalEndDate.getTime() - originalStartDate.getTime();
+                finalEvent.endTime = Timestamp.fromDate(new Date(finalEvent.displayDate.getTime() + diff));
             }
             
             if (finalEvent.rsvpDeadline) {
-              const originalRsvpDate = finalEvent.rsvpDeadline.toDate();
-              const daysDiff = differenceInDays(event.date.toDate(), originalRsvpDate);
-              const adjustedRsvpDateTime = add(finalEvent.displayDate, {
-                hours: originalRsvpDate.getHours(),
-                minutes: originalRsvpDate.getMinutes(),
-                seconds: originalRsvpDate.getSeconds(),
-                days: -daysDiff,
-              });
-               finalEvent.rsvpDeadline = Timestamp.fromDate(adjustedRsvpDateTime);
+                const originalStartDate = event.date.toDate();
+                const originalRsvpDate = event.rsvpDeadline.toDate();
+                const diff = originalStartDate.getTime() - originalRsvpDate.getTime();
+                finalEvent.rsvpDeadline = Timestamp.fromDate(new Date(finalEvent.displayDate.getTime() - diff));
             }
             visibleEvents.push(finalEvent);
         }
@@ -748,3 +724,4 @@ export default function KalenderPage() {
     </div>
   );
 }
+
