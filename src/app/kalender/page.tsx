@@ -54,8 +54,17 @@ interface Event {
   createdAt: Timestamp;
 }
 
+interface EventOverride {
+  id: string;
+  eventId: string;
+  originalDate: Timestamp;
+  isCancelled?: boolean;
+  // ... other fields from Event might be here
+}
+
 interface DisplayEvent extends Event {
   displayDate: Date;
+  isCancelled?: boolean;
 }
 
 interface EventResponse {
@@ -254,9 +263,11 @@ const EventCard = ({ event, allUsers, locations, eventTitles }: { event: Display
     const location = locations.find(l => l.id === event.locationId);
 
     return (
-        <Card key={`${event.id}-${event.displayDate.toISOString()}`}>
+        <Card key={`${event.id}-${event.displayDate.toISOString()}`} className={cn(event.isCancelled && "bg-destructive/10 border-destructive/30")}>
             <CardHeader>
-                <CardTitle>{eventTitles.find(t => t.id === event.titleId)?.name || 'Unbenannter Termin'}</CardTitle>
+                <CardTitle className={cn(event.isCancelled && "text-destructive")}>
+                    {event.isCancelled ? 'ABGESAGT: ' : ''}{eventTitles.find(t => t.id === event.titleId)?.name || 'Unbenannter Termin'}
+                </CardTitle>
                  <div className="text-sm text-muted-foreground flex items-center gap-x-4 gap-y-1 pt-1">
                     <div className="flex items-center gap-1.5">
                         <Clock className="h-4 w-4 flex-shrink-0" />
@@ -288,13 +299,14 @@ const EventCard = ({ event, allUsers, locations, eventTitles }: { event: Display
                     )}
                 </div>
             </CardHeader>
-            {(event.description || event.meetingPoint) && (
+            {(!event.isCancelled && (event.description || event.meetingPoint)) && (
                 <CardContent className="space-y-2">
                     {event.meetingPoint && <p className="text-sm"><span className="font-semibold">Treffpunkt:</span> {event.meetingPoint}</p>}
                     {event.description && <p className="text-sm whitespace-pre-wrap">{event.description}</p>}
                 </CardContent>
             )}
-             <CardFooter className="flex-col sm:flex-row items-start sm:items-center sm:justify-between gap-4">
+             {!event.isCancelled && (
+                <CardFooter className="flex-col sm:flex-row items-start sm:items-center sm:justify-between gap-4">
                  <Popover>
                     <PopoverTrigger asChild>
                          <Button variant="link" className="p-0 h-auto text-muted-foreground" disabled={responsesLoading || (attendingCount === 0 && declinedCount === 0 && uncertainCount === 0)}>
@@ -364,7 +376,8 @@ const EventCard = ({ event, allUsers, locations, eventTitles }: { event: Display
                         Absagen
                     </Button>
                 </div>
-            </CardFooter>
+                </CardFooter>
+             )}
         </Card>
     );
 };
@@ -431,6 +444,11 @@ export default function KalenderPage() {
     if (!firestore) return null;
     return collection(firestore, 'events');
   }, [firestore]);
+  
+  const overridesQuery = useMemo(() => {
+    if (!firestore) return null;
+    return collection(firestore, 'event_overrides');
+  }, [firestore]);
 
   const groupMembersQuery = useMemo(() => {
     if (!firestore) return null;
@@ -441,12 +459,13 @@ export default function KalenderPage() {
   const { data: categories, isLoading: categoriesLoading } = useCollection<TeamCategory>(categoriesQuery);
   const { data: teams, isLoading: teamsLoading } = useCollection<Team>(teamsQuery);
   const { data: eventsData, isLoading: eventsLoading, error } = useCollection<Event>(eventsQuery);
+  const { data: overridesData, isLoading: overridesLoading } = useCollection<EventOverride>(overridesQuery);
   const { data: allUsers, isLoading: usersLoading } = useCollection<GroupMember>(groupMembersQuery);
   const { data: locations, isLoading: locationsLoading } = useCollection<Location>(locationsQuery);
   const { data: eventTitles, isLoading: eventTitlesLoading } = useCollection<EventTitle>(eventTitlesQuery);
   
 
-  const isLoading = categoriesLoading || teamsLoading || eventsLoading || usersLoading || locationsLoading || eventTitlesLoading;
+  const isLoading = categoriesLoading || teamsLoading || eventsLoading || usersLoading || locationsLoading || eventTitlesLoading || overridesLoading;
 
  const groupedTeams = useMemo(() => {
     if (!categories || !teams) return [];
@@ -458,7 +477,7 @@ export default function KalenderPage() {
 
 
  const allVisibleEvents = useMemo(() => {
-    if (!eventsData) return [];
+    if (!eventsData || !overridesData) return [];
 
     const filteredByTeam = eventsData.filter(event => {
         if (selectedTeamIds.length === 0) return true; // Show all if no team filter
@@ -480,7 +499,9 @@ export default function KalenderPage() {
 
       if (event.recurrence === 'none' || !event.recurrence) {
         if (isWithinInterval(originalStartDate, interval)) {
-          visibleEvents.push({ ...event, displayDate: originalStartDate });
+          const override = overridesData.find(o => o.eventId === event.id && isSameDay(o.originalDate.toDate(), originalStartDate));
+          const finalEvent = override ? { ...event, ...override, displayDate: override.date?.toDate() || originalStartDate, isCancelled: override.isCancelled } : { ...event, displayDate: originalStartDate };
+          visibleEvents.push(finalEvent);
         }
         continue;
       }
@@ -514,33 +535,45 @@ export default function KalenderPage() {
         }
 
         if (isWithinInterval(currentDate, interval)) {
-             const displayDate = new Date(currentDate);
-             const finalEvent = { ...event, displayDate };
+            const override = overridesData.find(o => o.eventId === event.id && isSameDay(o.originalDate.toDate(), currentDate));
+            let finalEvent: DisplayEvent;
+            
+            if (override) {
+                 finalEvent = {
+                    ...event,
+                    ...override,
+                    id: event.id, // Keep original event ID
+                    displayDate: override.date?.toDate() || currentDate,
+                    isCancelled: override.isCancelled,
+                 };
+            } else {
+                finalEvent = { ...event, displayDate: currentDate };
+            }
 
-              if (event.endTime) {
-                const originalEndDate = event.endTime.toDate();
-                const daysDiff = differenceInDays(originalEndDate, event.date.toDate());
-                const adjustedEndDateTime = add(displayDate, {
-                  hours: originalEndDate.getHours(),
-                  minutes: originalEndDate.getMinutes(),
-                  seconds: originalEndDate.getSeconds(),
-                  days: daysDiff,
-                });
-                finalEvent.endTime = Timestamp.fromDate(adjustedEndDateTime);
-              }
-              
-              if (event.rsvpDeadline) {
-                const originalRsvpDate = event.rsvpDeadline.toDate();
-                const daysDiff = differenceInDays(event.date.toDate(), originalRsvpDate);
-                const adjustedRsvpDateTime = add(displayDate, {
-                  hours: originalRsvpDate.getHours(),
-                  minutes: originalRsvpDate.getMinutes(),
-                  seconds: originalRsvpDate.getSeconds(),
-                  days: -daysDiff,
-                });
-                 finalEvent.rsvpDeadline = Timestamp.fromDate(adjustedRsvpDateTime);
-              }
-             visibleEvents.push(finalEvent);
+            if (finalEvent.endTime) {
+              const originalEndDate = finalEvent.endTime.toDate();
+              const daysDiff = differenceInDays(originalEndDate, event.date.toDate());
+              const adjustedEndDateTime = add(finalEvent.displayDate, {
+                hours: originalEndDate.getHours(),
+                minutes: originalEndDate.getMinutes(),
+                seconds: originalEndDate.getSeconds(),
+                days: daysDiff,
+              });
+              finalEvent.endTime = Timestamp.fromDate(adjustedEndDateTime);
+            }
+            
+            if (finalEvent.rsvpDeadline) {
+              const originalRsvpDate = finalEvent.rsvpDeadline.toDate();
+              const daysDiff = differenceInDays(event.date.toDate(), originalRsvpDate);
+              const adjustedRsvpDateTime = add(finalEvent.displayDate, {
+                hours: originalRsvpDate.getHours(),
+                minutes: originalRsvpDate.getMinutes(),
+                seconds: originalRsvpDate.getSeconds(),
+                days: -daysDiff,
+              });
+               finalEvent.rsvpDeadline = Timestamp.fromDate(adjustedRsvpDateTime);
+            }
+            visibleEvents.push(finalEvent);
         }
 
         switch (event.recurrence) {
@@ -561,10 +594,14 @@ export default function KalenderPage() {
       }
     }
     return visibleEvents;
-  }, [eventsData, currentMonth, selectedTeamIds, selectedTitleIds]);
-
+  }, [eventsData, overridesData, currentMonth, selectedTeamIds, selectedTitleIds]);
+  
   const eventDates = useMemo(() => {
-    return allVisibleEvents.map(event => event.displayDate);
+    return allVisibleEvents.filter(e => !e.isCancelled).map(event => event.displayDate);
+  }, [allVisibleEvents]);
+  
+  const cancelledEventDates = useMemo(() => {
+     return allVisibleEvents.filter(e => e.isCancelled).map(event => event.displayDate);
   }, [allVisibleEvents]);
   
   const selectedEvents = useMemo(() => {
@@ -654,20 +691,30 @@ export default function KalenderPage() {
                         onMonthChange={setCurrentMonth}
                         className="rounded-md"
                         locale={de}
-                        modifiers={{ event: eventDates, today: new Date() }}
+                        modifiers={{ event: eventDates, cancelledEvent: cancelledEventDates, today: new Date() }}
                         modifiersClassNames={{
                             event: 'bg-primary/20 text-primary-foreground rounded-full',
+                            cancelledEvent: 'bg-destructive/20 text-destructive-foreground rounded-full',
                             selected: 'bg-primary text-primary-foreground hover:bg-primary/90 focus:bg-primary/90',
                             today: 'bg-destructive text-destructive-foreground',
                         }}
                         components={{
-                            DayContent: ({ date, activeModifiers }) => (
-                                <div className="relative h-full w-full flex items-center justify-center">
-                                <span className={cn(activeModifiers.today && "font-bold text-destructive-foreground")}>{format(date, 'd')}</span>
-                                {activeModifiers.event && <div className="absolute bottom-1 h-1.5 w-1.5 rounded-full bg-primary" />}
-                                </div>
-                            )
-                            }}
+                            DayContent: ({ date, activeModifiers }) => {
+                                const hasActiveEvent = activeModifiers.event;
+                                const hasCancelledEvent = activeModifiers.cancelledEvent;
+                                
+                                // Show red dot only if there are ONLY cancelled events on that day
+                                const showRedDot = hasCancelledEvent && !hasActiveEvent;
+
+                                return (
+                                    <div className="relative h-full w-full flex items-center justify-center">
+                                        <span className={cn(activeModifiers.today && "font-bold text-destructive-foreground")}>{format(date, 'd')}</span>
+                                        {hasActiveEvent && <div className="absolute bottom-1 h-1.5 w-1.5 rounded-full bg-primary" />}
+                                        {showRedDot && <div className="absolute bottom-1 h-1.5 w-1.5 rounded-full bg-destructive" />}
+                                    </div>
+                                )
+                            }
+                        }}
                         />
                     </CardContent>
                     </Card>
@@ -701,8 +748,3 @@ export default function KalenderPage() {
     </div>
   );
 }
-
-
-
-
-
