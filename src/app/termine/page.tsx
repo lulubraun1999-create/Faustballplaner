@@ -532,19 +532,19 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
             locationId: values.locationId || '',
             meetingPoint: values.meetingPoint || '',
             description: values.description || '',
-            createdBy: user.uid,
+            createdBy: event?.createdBy || user.uid,
             createdAt: event ? event.createdAt : serverTimestamp(),
         };
 
         const startDate = combineDateAndTime(values.date, values.isAllDay ? undefined : values.startTime);
         dataToSave.date = Timestamp.fromDate(startDate);
         
-        if (values.endDate && values.endTime && !values.isAllDay) {
-            dataToSave.endTime = Timestamp.fromDate(combineDateAndTime(values.endDate, values.endTime));
-        } else if (values.endTime) {
-            dataToSave.endTime = Timestamp.fromDate(combineDateAndTime(values.date, values.endTime));
+        if (values.endTime) {
+            const endDate = values.endDate || values.date;
+            dataToSave.endTime = Timestamp.fromDate(combineDateAndTime(endDate, values.endTime));
+        } else {
+            dataToSave.endTime = null;
         }
-
         
         if (values.recurrence !== 'none' && values.recurrenceEndDate) {
             dataToSave.recurrenceEndDate = Timestamp.fromDate(values.recurrenceEndDate);
@@ -552,7 +552,6 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
             dataToSave.recurrenceEndDate = null;
         }
 
-        
         if (values.rsvpDeadlineDate) {
             dataToSave.rsvpDeadline = Timestamp.fromDate(combineDateAndTime(values.rsvpDeadlineDate, values.rsvpDeadlineTime));
         } else {
@@ -935,7 +934,7 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
   );
 }
 
-const EventCard = ({ event, allUsers, teams, onEdit, onDelete, eventTitles, locations, canEdit }: { event: DisplayEvent; allUsers: GroupMember[]; teams: Team[], onEdit: (event: DisplayEvent) => void; onDelete: (event: Event) => void, eventTitles: EventTitle[], locations: Location[], canEdit: boolean }) => {
+const EventCard = ({ event, allUsers, teams, onEdit, onDelete, eventTitles, locations, canEdit }: { event: DisplayEvent; allUsers: GroupMember[]; teams: Team[], onEdit: (event: DisplayEvent) => void; onDelete: (event: DisplayEvent) => void, eventTitles: EventTitle[], locations: Location[], canEdit: boolean }) => {
     const { user } = useUser();
     const firestore = useFirestore();
     const {toast} = useToast();
@@ -993,15 +992,22 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, eventTitles, loca
     const endDate = useMemo(() => {
         if (!event.endTime) return undefined;
         const originalEndDate = event.endTime.toDate();
-        const adjustedEndDate = getAdjustedDate(startDate, originalEndDate);
+        let adjustedEndDate = getAdjustedDate(startDate, originalEndDate);
 
         // Handle overnight events
         if (adjustedEndDate < startDate) {
-            return add(adjustedEndDate, { days: 1 });
+            adjustedEndDate = add(adjustedEndDate, { days: 1 });
         }
+        
+        // Handle multi-day events by checking the date part of original start and end
+        const originalStartDate = event.date.toDate();
+        const dateDiff = differenceInDays(originalEndDate, originalStartDate);
+        if (dateDiff > 0) {
+            adjustedEndDate = add(adjustedEndDate, { days: dateDiff });
+        }
+        
         return adjustedEndDate;
-    }, [event.endTime, startDate]);
-
+    }, [event.date, event.endTime, startDate]);
 
     let timeString;
     if (event.isAllDay) {
@@ -1225,7 +1231,7 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, eventTitles, loca
 export default function TerminePage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<DisplayEvent | undefined>(undefined);
-  const [eventToDelete, setEventToDelete] = useState<Event | null>(null);
+  const [eventToDelete, setEventToDelete] = useState<DisplayEvent | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
   
@@ -1450,7 +1456,7 @@ export default function TerminePage() {
     setSelectedEvent(undefined);
   };
 
-  const handleDelete = (event: Event) => {
+  const handleDelete = (event: DisplayEvent) => {
      if (!firestore) return;
     setIsDeleting(true);
     const eventDocRef = doc(firestore, 'events', event.id);
