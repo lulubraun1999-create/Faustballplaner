@@ -19,7 +19,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { PlusCircle, Trash2, Loader2, CalendarIcon, Edit, Clock, MapPin, Users, Repeat, ChevronLeft, ChevronRight, Check, XIcon, HelpCircle, Ban } from 'lucide-react';
+import { PlusCircle, Trash2, Loader2, CalendarIcon, Edit, Clock, MapPin, Users, Repeat, ChevronLeft, ChevronRight, Check, XIcon, HelpCircle, Ban, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, add, startOfWeek, eachDayOfInterval, isSameDay, startOfDay, addWeeks, isWithinInterval, getDay, differenceInDays } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -560,14 +560,16 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
 
         if (event && mode === 'single') {
              // Create an override for a single instance of a recurring event
+             // This includes ALL fields to ensure the instance is a complete snapshot
             const overrideData = {
                 eventId: event.id,
-                originalDate: Timestamp.fromDate(event.displayDate),
+                originalDate: Timestamp.fromDate(startOfDay(event.displayDate)),
                 updatedAt: serverTimestamp(),
                 titleId: values.titleId,
                 date: dataToSave.date,
                 endTime: dataToSave.endTime,
                 isAllDay: values.isAllDay,
+                recurrence: 'none', // Overrides are always single instances
                 targetTeamIds: values.targetTeamIds,
                 rsvpDeadline: dataToSave.rsvpDeadline,
                 locationId: values.locationId,
@@ -575,9 +577,22 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
                 description: values.description,
             };
             
-            const overrideRef = doc(collection(firestore, 'event_overrides'));
-            await setDoc(overrideRef, overrideData);
+            const overridesRef = collection(firestore, 'event_overrides');
+            const q = query(overridesRef, where("eventId", "==", event.id));
+            const querySnapshot = await getDocs(q);
+            let existingOverrideId: string | undefined = undefined;
+            querySnapshot.forEach(doc => {
+              const data = doc.data() as EventOverride;
+              if (isSameDay(data.originalDate.toDate(), event.displayDate)) {
+                existingOverrideId = doc.id;
+              }
+            });
 
+            if (existingOverrideId) {
+                await updateDoc(doc(firestore, 'event_overrides', existingOverrideId), overrideData);
+            } else {
+                await addDoc(overridesRef, overrideData);
+            }
         } else {
             const finalData = {
                 ...dataToSave,
@@ -588,20 +603,16 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
             let promise;
             if (event) {
                 if(mode === 'future') {
-                    // When editing future events, we essentially create a NEW event series
-                    // starting from the display date of the edited instance.
-                    // The old event series should have its recurrenceEndDate set to before this instance.
                     const oldEventRef = doc(firestore, 'events', event.id);
                     const newRecurrenceEndDate = add(event.displayDate, { days: -1 });
                     await updateDoc(oldEventRef, { recurrenceEndDate: Timestamp.fromDate(newRecurrenceEndDate) });
-
-                    // The new series starts on the day of the edited instance
-                    const newSeriesStartDate = combineDateAndTime(event.displayDate, values.startTime);
+                    
+                    const newSeriesStartDate = combineDateAndTime(event.displayDate, values.isAllDay ? undefined : values.startTime);
                     finalData.date = Timestamp.fromDate(newSeriesStartDate);
 
                     promise = addDoc(collection(firestore, 'events'), finalData);
                 } else {
-                     promise = updateDoc(doc(firestore, 'events', event.id), dataToSave);
+                     promise = updateDoc(doc(firestore, 'events', event.id), finalData);
                 }
             } else {
                 promise = addDoc(collection(firestore, 'events'), finalData);
@@ -934,7 +945,7 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
   );
 }
 
-const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, eventTitles, locations, canEdit }: { event: DisplayEvent; allUsers: GroupMember[]; teams: Team[], onEdit: (event: DisplayEvent) => void; onDelete: (event: DisplayEvent) => void; onCancel: (event: DisplayEvent) => void; eventTitles: EventTitle[], locations: Location[], canEdit: boolean }) => {
+const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, onReactivate, eventTitles, locations, canEdit }: { event: DisplayEvent; allUsers: GroupMember[]; teams: Team[], onEdit: (event: DisplayEvent) => void; onDelete: (event: DisplayEvent) => void; onCancel: (event: DisplayEvent) => void; onReactivate: (event: DisplayEvent) => void; eventTitles: EventTitle[], locations: Location[], canEdit: boolean }) => {
     const { user } = useUser();
     const firestore = useFirestore();
     const {toast} = useToast();
@@ -993,12 +1004,10 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, eventTi
         const originalEndDate = event.endTime.toDate();
         let adjustedEndDate = getAdjustedDate(startDate, originalEndDate);
 
-        // Handle overnight events
         if (adjustedEndDate < startDate) {
             adjustedEndDate = add(adjustedEndDate, { days: 1 });
         }
         
-        // Handle multi-day events by checking the date part of original start and end
         const originalStartDate = event.date.toDate();
         const dateDiff = differenceInDays(originalEndDate, originalStartDate);
         if (dateDiff > 0) {
@@ -1063,7 +1072,6 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, eventTi
         const responseCollectionRef = collection(firestore, 'event_responses');
         
         if (userResponse && userResponse.status === status) {
-            // User is toggling off their current status, so delete the response
             const responseRef = doc(responseCollectionRef, userResponse.id);
             deleteDoc(responseRef)
                 .catch(serverError => {
@@ -1076,7 +1084,6 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, eventTi
             return;
         }
 
-        // Set or update the response
         const eventDateAsTimestamp = Timestamp.fromDate(startOfDay(event.displayDate));
         const responseDocId = userResponse?.id || doc(responseCollectionRef).id;
         
@@ -1114,25 +1121,32 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, eventTi
                     <CardTitle className={cn(event.isCancelled && "text-destructive")}>{getEventTitle()}</CardTitle>
                     {canEdit && (
                         <div className="flex items-center">
-                            {!event.isCancelled && <Button variant="ghost" size="icon" onClick={() => onEdit(event)}><Edit className="h-4 w-4"/></Button>}
-                            {isRecurring && !event.isCancelled && (
-                                <AlertDialog>
-                                    <AlertDialogTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="hover:bg-amber-500/10 hover:text-amber-600"><Ban className="h-4 w-4" /></Button>
-                                    </AlertDialogTrigger>
-                                    <AlertDialogContent>
-                                        <AlertDialogHeader>
-                                            <AlertDialogTitle>Nur diesen Termin absagen?</AlertDialogTitle>
-                                            <AlertDialogDescription>
-                                                Diese Aktion kann nicht rückgängig gemacht werden. Dadurch wird nur dieser eine Termin am {format(event.displayDate, "dd.MM.yyyy")} abgesagt. Die Serie bleibt bestehen.
-                                            </AlertDialogDescription>
-                                        </AlertDialogHeader>
-                                        <AlertDialogFooter>
-                                            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-                                            <AlertDialogAction onClick={() => onCancel(event)} className="bg-amber-500 hover:bg-amber-600">Ja, nur diesen Termin absagen</AlertDialogAction>
-                                        </AlertDialogFooter>
-                                    </AlertDialogContent>
-                                </AlertDialog>
+                             {!event.isCancelled && <Button variant="ghost" size="icon" onClick={() => onEdit(event)}><Edit className="h-4 w-4"/></Button>}
+                            
+                            {isRecurring && (
+                                event.isCancelled ? (
+                                    <Button variant="ghost" size="icon" className="hover:bg-green-500/10 hover:text-green-600" onClick={() => onReactivate(event)}>
+                                        <CheckCircle2 className="h-4 w-4" />
+                                    </Button>
+                                ) : (
+                                    <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                            <Button variant="ghost" size="icon" className="hover:bg-amber-500/10 hover:text-amber-600"><Ban className="h-4 w-4" /></Button>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                            <AlertDialogHeader>
+                                                <AlertDialogTitle>Nur diesen Termin absagen?</AlertDialogTitle>
+                                                <AlertDialogDescription>
+                                                    Diese Aktion kann nicht rückgängig gemacht werden. Dadurch wird nur dieser eine Termin am {format(event.displayDate, "dd.MM.yyyy")} abgesagt. Die Serie bleibt bestehen.
+                                                </AlertDialogDescription>
+                                            </AlertDialogHeader>
+                                            <AlertDialogFooter>
+                                                <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                                                <AlertDialogAction onClick={() => onCancel(event)} className="bg-amber-500 hover:bg-amber-600">Ja, nur diesen Termin absagen</AlertDialogAction>
+                                            </AlertDialogFooter>
+                                        </AlertDialogContent>
+                                    </AlertDialog>
+                                )
                             )}
                             <AlertDialog>
                                 <AlertDialogTrigger asChild>
@@ -1484,29 +1498,18 @@ export default function TerminePage() {
     setSelectedEvent(undefined);
   };
 
- const handleDelete = (eventToDelete: DisplayEvent) => {
+  const handleDelete = async (eventToDelete: DisplayEvent) => {
     if (!firestore || !canEditEvents) return;
-    
-    const eventDocRef = doc(firestore, 'events', eventToDelete.id);
-    
-    // Optimistic UI update
-    setLocalEvents(prev => prev ? prev.filter(e => e.id !== eventToDelete.id) : null);
-    
-    toast({ title: 'Termin wird gelöscht...' });
-    
-    deleteDoc(eventDocRef)
-      .then(() => {
-        toast({ title: 'Termin erfolgreich gelöscht' });
-      })
-      .catch((err) => {
-        // Revert optimistic update on error
-        setLocalEvents(eventsData); 
+    try {
+        await deleteDoc(doc(firestore, 'events', eventToDelete.id));
+        toast({ title: 'Termin gelöscht' });
+    } catch (serverError: any) {
         toast({
-          variant: 'destructive',
-          title: 'Fehler beim Löschen',
-          description: err.message,
+          variant: "destructive",
+          title: "Fehler beim Löschen",
+          description: serverError.message,
         });
-      });
+    }
   };
 
   const handleCancelSingleEvent = async (eventToCancel: DisplayEvent) => {
@@ -1514,15 +1517,30 @@ export default function TerminePage() {
 
     const overrideData = {
         eventId: eventToCancel.id,
-        originalDate: Timestamp.fromDate(eventToCancel.displayDate),
+        originalDate: Timestamp.fromDate(startOfDay(eventToCancel.displayDate)),
         isCancelled: true,
         updatedAt: serverTimestamp(),
     };
-
-    const overrideRef = doc(collection(firestore, 'event_overrides'));
     
+    const overridesRef = collection(firestore, 'event_overrides');
+    const q = query(overridesRef, where("eventId", "==", eventToCancel.id));
+    const querySnapshot = await getDocs(q);
+    
+    let existingOverrideId: string | undefined = undefined;
+    querySnapshot.forEach(doc => {
+      const data = doc.data() as EventOverride;
+      if (isSameDay(data.originalDate.toDate(), eventToCancel.displayDate)) {
+        existingOverrideId = doc.id;
+      }
+    });
+
     try {
-        await setDoc(overrideRef, overrideData);
+        if(existingOverrideId) {
+            await updateDoc(doc(firestore, 'event_overrides', existingOverrideId), { isCancelled: true, updatedAt: serverTimestamp() });
+        } else {
+            await addDoc(overridesRef, overrideData);
+        }
+        
         toast({ title: 'Termin abgesagt' });
     } catch (serverError: any) {
         toast({
@@ -1530,6 +1548,35 @@ export default function TerminePage() {
             title: "Fehler beim Absagen",
             description: serverError.message
         });
+    }
+  };
+  
+  const handleReactivateSingleEvent = async (eventToReactivate: DisplayEvent) => {
+    if (!firestore || !canEditEvents) return;
+
+    const overridesRef = collection(firestore, 'event_overrides');
+    const q = query(overridesRef, where("eventId", "==", eventToReactivate.id));
+    const querySnapshot = await getDocs(q);
+    
+    let existingOverrideId: string | undefined = undefined;
+    querySnapshot.forEach(doc => {
+      const data = doc.data() as EventOverride;
+      if (isSameDay(data.originalDate.toDate(), eventToReactivate.displayDate)) {
+        existingOverrideId = doc.id;
+      }
+    });
+
+    if (existingOverrideId) {
+      try {
+        await updateDoc(doc(firestore, 'event_overrides', existingOverrideId), { isCancelled: false, updatedAt: serverTimestamp() });
+        toast({ title: 'Termin reaktiviert' });
+      } catch (serverError: any) {
+        toast({
+          variant: "destructive",
+          title: "Fehler beim Reaktivieren",
+          description: serverError.message
+        });
+      }
     }
   };
 
@@ -1574,6 +1621,7 @@ export default function TerminePage() {
                                         onEdit={handleOpenForm}
                                         onDelete={handleDelete}
                                         onCancel={handleCancelSingleEvent}
+                                        onReactivate={handleReactivateSingleEvent}
                                         eventTitles={eventTitles || []}
                                         locations={locations || []}
                                         canEdit={!!canEditEvents}
@@ -1693,4 +1741,5 @@ export default function TerminePage() {
     </div>
   );
 }
+
 
