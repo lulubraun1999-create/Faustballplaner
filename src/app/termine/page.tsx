@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -137,7 +136,7 @@ const eventSchema = z.object({
   meetingPoint: z.string().optional(),
   description: z.string().optional(),
 }).refine(data => {
-    if(data.endDate && data.date > data.endDate) {
+    if(data.endDate && data.date && data.endDate < data.date) {
         return false;
     }
     return true;
@@ -1522,19 +1521,27 @@ export default function TerminePage() {
     setSelectedEvent(undefined);
   };
 
-  const handleDelete = (eventToDelete: DisplayEvent) => {
+const handleDelete = (eventToDelete: DisplayEvent) => {
     if (!firestore || !canEditEvents) return;
     const eventDocRef = doc(firestore, 'events', eventToDelete.id);
     
+    // Optimistically update the UI
+    if (localEvents) {
+        setLocalEvents(localEvents.filter(e => e.id !== eventToDelete.id));
+    }
+    toast({ title: 'Termin gelöscht' });
+
+    // Try to delete from the server in the background
     deleteDoc(eventDocRef)
-      .then(() => {
-        toast({ title: 'Termin gelöscht' });
-      })
       .catch((serverError: any) => {
+        // If server delete fails, revert UI and show error
+        if (localEvents) {
+            setLocalEvents(localEvents); 
+        }
         toast({
           variant: "destructive",
           title: "Fehler beim Löschen",
-          description: serverError.message,
+          description: "Der Termin konnte nicht vom Server gelöscht werden: " + serverError.message,
         });
       });
   };
@@ -1768,6 +1775,3 @@ export default function TerminePage() {
     </div>
   );
 }
-
-
-
