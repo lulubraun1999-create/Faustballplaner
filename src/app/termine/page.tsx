@@ -540,10 +540,9 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
 
 
  const handleFormSubmit = async (values: EventFormValues) => {
-    const isNewRecurrence = event ? (event.recurrence === 'none' && values.recurrence !== 'none') : false;
-    const isBecomingSingle = event ? (event.recurrence !== 'none' && values.recurrence === 'none') : false;
+    const isBecomingRecurring = !event?.recurrence || (event.recurrence === 'none' && values.recurrence !== 'none');
     
-    if (event && event.recurrence && event.recurrence !== 'none' && !isNewRecurrence && !isBecomingSingle) {
+    if (event && event.recurrence && event.recurrence !== 'none' && !isBecomingRecurring) {
       setIsEditModeDialog(true);
     } else {
       await saveEvent(values, 'all'); 
@@ -575,7 +574,7 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
             const endDateValue = values.endDate || values.date;
             dataToSave.endTime = Timestamp.fromDate(combineDateAndTime(endDateValue, values.endTime));
         } else {
-            dataToSave.endTime = null;
+             dataToSave.endTime = null;
         }
         
         if (values.recurrence !== 'none' && values.recurrenceEndDate) {
@@ -588,7 +587,7 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
            const rsvpDateValue = values.rsvpDeadlineDate;
            dataToSave.rsvpDeadline = Timestamp.fromDate(combineDateAndTime(rsvpDateValue, values.rsvpDeadlineTime));
         } else {
-            dataToSave.rsvpDeadline = null;
+             dataToSave.rsvpDeadline = null;
         }
 
 
@@ -1032,15 +1031,25 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, onReact
     const endDate = useMemo(() => {
         if (!event.endTime) return undefined;
 
-        const originalStartDate = event.date.toDate();
         const originalEndDate = event.endTime.toDate();
-        const diff = originalEndDate.getTime() - originalStartDate.getTime();
-        
-        // Create a new Date object based on the display date to avoid modifying it
-        const newEndDate = new Date(startDate.getTime() + diff);
+        const displayStartDate = event.displayDate;
+
+        // Clone the start date to avoid modifying it
+        const newEndDate = new Date(displayStartDate.getTime());
+
+        // Set the time from the original end date
+        newEndDate.setHours(originalEndDate.getHours());
+        newEndDate.setMinutes(originalEndDate.getMinutes());
+        newEndDate.setSeconds(originalEndDate.getSeconds());
+
+        // Handle day overflow if end time is on the next day
+        const daysDifference = differenceInDays(originalEndDate, event.date.toDate());
+        if (daysDifference > 0) {
+          newEndDate.setDate(newEndDate.getDate() + daysDifference);
+        }
 
         return newEndDate;
-    }, [event.date, event.endTime, startDate]);
+    }, [event.date, event.endTime, event.displayDate]);
 
     let timeString;
     if (event.isAllDay) {
@@ -1492,21 +1501,27 @@ export default function TerminePage() {
             finalEvent = { ...event, displayDate: currentDate };
           }
           
-           if (finalEvent.endTime) {
-                const originalEventStartDate = event.date.toDate();
-                const originalEventEndDate = event.endTime.toDate();
-                const diff = originalEventEndDate.getTime() - originalEventStartDate.getTime();
-                
-                const newEndDate = new Date(finalEvent.displayDate.getTime() + diff);
+           if (event.endTime) {
+                const originalEndDate = event.endTime.toDate();
+                const displayStartDate = finalEvent.displayDate;
+                let newEndDate = new Date(displayStartDate.getTime());
+                newEndDate.setHours(originalEndDate.getHours(), originalEndDate.getMinutes(), originalEndDate.getSeconds());
+                const daysDifference = differenceInDays(originalEndDate, event.date.toDate());
+                if(daysDifference > 0) {
+                    newEndDate.setDate(newEndDate.getDate() + daysDifference);
+                }
                 finalEvent.endTime = Timestamp.fromDate(newEndDate);
             }
             
-            if (finalEvent.rsvpDeadline) {
-                const originalEventStartDate = event.date.toDate();
+            if (event.rsvpDeadline) {
                 const originalRsvpDate = event.rsvpDeadline.toDate();
-                const diff = originalRsvpDate.getTime() - originalEventStartDate.getTime();
-
-                const newRsvpDate = new Date(finalEvent.displayDate.getTime() + diff);
+                const displayStartDate = finalEvent.displayDate;
+                let newRsvpDate = new Date(displayStartDate.getTime());
+                newRsvpDate.setHours(originalRsvpDate.getHours(), originalRsvpDate.getMinutes(), originalRsvpDate.getSeconds());
+                 const daysDifference = differenceInDays(originalRsvpDate, event.date.toDate());
+                if(daysDifference !== 0) {
+                   newRsvpDate.setDate(newRsvpDate.getDate() + daysDifference);
+                }
                 finalEvent.rsvpDeadline = Timestamp.fromDate(newRsvpDate);
             }
 

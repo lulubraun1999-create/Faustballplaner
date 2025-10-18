@@ -168,16 +168,25 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
     const endDate = useMemo(() => {
         if (!event.endTime) return undefined;
 
-        const originalStartDate = event.date.toDate();
         const originalEndDate = event.endTime.toDate();
-        const diff = originalEndDate.getTime() - originalStartDate.getTime();
-        
-        // Create a new Date object based on the display date to avoid modifying it
-        const newEndDate = new Date(startDate.getTime());
-        newEndDate.setTime(newEndDate.getTime() + diff);
+        const displayStartDate = event.displayDate;
+
+        // Clone the start date to avoid modifying it
+        const newEndDate = new Date(displayStartDate.getTime());
+
+        // Set the time from the original end date
+        newEndDate.setHours(originalEndDate.getHours());
+        newEndDate.setMinutes(originalEndDate.getMinutes());
+        newEndDate.setSeconds(originalEndDate.getSeconds());
+
+        // Handle day overflow if end time is on the next day
+        const daysDifference = differenceInDays(originalEndDate, event.date.toDate());
+        if (daysDifference > 0) {
+          newEndDate.setDate(newEndDate.getDate() + daysDifference);
+        }
 
         return newEndDate;
-    }, [event.date, event.endTime, startDate]);
+    }, [event.date, event.endTime, event.displayDate]);
 
 
     let timeString;
@@ -602,23 +611,27 @@ export default function KalenderPage() {
                 finalEvent = { ...event, displayDate: currentDate };
             }
 
-            if (finalEvent.endTime) {
-                const originalEventStartDate = event.date.toDate();
-                const originalEventEndDate = event.endTime.toDate();
-                const diff = originalEventEndDate.getTime() - originalEventStartDate.getTime();
-                
-                const newEndDate = new Date(finalEvent.displayDate.getTime());
-                newEndDate.setTime(newEndDate.getTime() + diff);
+            if (event.endTime) {
+                const originalEndDate = event.endTime.toDate();
+                const displayStartDate = finalEvent.displayDate;
+                let newEndDate = new Date(displayStartDate.getTime());
+                newEndDate.setHours(originalEndDate.getHours(), originalEndDate.getMinutes(), originalEndDate.getSeconds());
+                const daysDifference = differenceInDays(originalEndDate, event.date.toDate());
+                if(daysDifference > 0) {
+                    newEndDate.setDate(newEndDate.getDate() + daysDifference);
+                }
                 finalEvent.endTime = Timestamp.fromDate(newEndDate);
             }
             
-            if (finalEvent.rsvpDeadline) {
-                const originalEventStartDate = event.date.toDate();
+            if (event.rsvpDeadline) {
                 const originalRsvpDate = event.rsvpDeadline.toDate();
-                const diff = originalRsvpDate.getTime() - originalEventStartDate.getTime();
-                
-                const newRsvpDate = new Date(finalEvent.displayDate.getTime());
-                newRsvpDate.setTime(newRsvpDate.getTime() + diff);
+                const displayStartDate = finalEvent.displayDate;
+                let newRsvpDate = new Date(displayStartDate.getTime());
+                newRsvpDate.setHours(originalRsvpDate.getHours(), originalRsvpDate.getMinutes(), originalRsvpDate.getSeconds());
+                 const daysDifference = differenceInDays(originalRsvpDate, event.date.toDate());
+                if(daysDifference !== 0) {
+                   newRsvpDate.setDate(newRsvpDate.getDate() + daysDifference);
+                }
                 finalEvent.rsvpDeadline = Timestamp.fromDate(newRsvpDate);
             }
             visibleEvents.push(finalEvent);
