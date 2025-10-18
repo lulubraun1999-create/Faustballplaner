@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -529,6 +528,7 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
   
   const isAllDay = form.watch('isAllDay');
   const recurrence = form.watch('recurrence');
+  const formValues = form.watch();
 
   const groupedTeams = useMemo(() => {
     if (!categories || !teams) return [];
@@ -539,15 +539,19 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
   }, [categories, teams]);
 
 
-  const handleFormSubmit = async (values: EventFormValues) => {
-     if (event && event.recurrence !== 'none' && event.recurrence) {
+ const handleFormSubmit = async (values: EventFormValues) => {
+    // If the original event was recurring, and the user is editing it now
+    if (event && (event.recurrence && event.recurrence !== 'none')) {
       setIsEditModeDialog(true);
     } else {
-      await saveEvent(values, 'single');
+      // This handles:
+      // 1. Creating a brand new event (recurring or not).
+      // 2. Editing a non-recurring event (and potentially making it recurring).
+      await saveEvent(values, 'all'); 
     }
-  }
+  };
 
-  const saveEvent = async (values: EventFormValues, mode: 'single' | 'future') => {
+  const saveEvent = async (values: EventFormValues, mode: 'single' | 'future' | 'all') => {
     if (!user || !firestore) {
       toast({ variant: 'destructive', title: 'Nicht authentifiziert' });
       return;
@@ -581,9 +585,9 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
             dataToSave.recurrenceEndDate = null;
         }
 
-        if (values.rsvpDeadlineDate && values.rsvpDeadlineTime) {
-            const rsvpDate = values.rsvpDeadlineDate || values.date;
-            dataToSave.rsvpDeadline = Timestamp.fromDate(combineDateAndTime(rsvpDate, values.rsvpDeadlineTime));
+        if (values.rsvpDeadlineDate) {
+           const rsvpDate = values.rsvpDeadlineDate;
+           dataToSave.rsvpDeadline = Timestamp.fromDate(combineDateAndTime(rsvpDate, values.rsvpDeadlineTime));
         } else {
             dataToSave.rsvpDeadline = null;
         }
@@ -632,8 +636,9 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
             };
             
             let promise;
-            if (event) {
-                if(mode === 'future') {
+            // mode is 'future' or 'all'
+            if (event) { 
+                if(mode === 'future') { // Editing this and future events
                     const oldEventRef = doc(firestore, 'events', event.id);
                     const newRecurrenceEndDate = add(event.displayDate, { days: -1 });
                     await updateDoc(oldEventRef, { recurrenceEndDate: Timestamp.fromDate(newRecurrenceEndDate) });
@@ -642,10 +647,10 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
                     finalData.date = Timestamp.fromDate(newSeriesStartDate);
 
                     promise = addDoc(collection(firestore, 'events'), finalData);
-                } else {
+                } else { // mode === 'all' -> Editing the whole series or a single event
                      promise = updateDoc(doc(firestore, 'events', event.id), finalData);
                 }
-            } else {
+            } else { // Creating a new event
                 promise = addDoc(collection(firestore, 'events'), finalData);
             }
             await promise;
@@ -958,17 +963,19 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
           <AlertDialogHeader>
             <AlertDialogTitle>Serientermin bearbeiten</AlertDialogTitle>
             <AlertDialogDescription>
-              Sie bearbeiten einen Termin, der Teil einer Serie ist. Möchten Sie nur diesen einzelnen Termin ändern oder diesen und alle zukünftigen Termine in der Serie?
+              Sie bearbeiten einen Termin, der Teil einer Serie ist. Möchten Sie nur diesen einzelnen Termin ändern, die gesamte Serie oder diesen und alle zukünftigen Termine?
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-            <AlertDialogAction onClick={() => saveEvent(form.getValues(), 'single')}>
+          <AlertDialogFooter className='sm:justify-around'>
+            <Button variant="outline" onClick={() => saveEvent(formValues, 'single')}>
               Nur diesen Termin
-            </AlertDialogAction>
-            <AlertDialogAction onClick={() => saveEvent(form.getValues(), 'future')}>
+            </Button>
+            <Button variant="outline" onClick={() => saveEvent(formValues, 'future')}>
               Diesen und zukünftige
-            </AlertDialogAction>
+            </Button>
+            <Button variant="outline" onClick={() => saveEvent(formValues, 'all')}>
+              Alle Termine der Serie
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -1536,7 +1543,7 @@ export default function TerminePage() {
     if (!canEditEvents) return;
     const eventDocRef = doc(firestore, 'events', eventToDelete.id);
     
-    setLocalEvents(prev => prev ? prev.filter(e => e.id !== eventToDelete.id) : []);
+    setLocalEvents(prev => prev ? prev.filter(e => e.id !== eventToDelete.id) : null);
 
     deleteDoc(eventDocRef)
       .then(() => {
