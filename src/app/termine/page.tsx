@@ -942,7 +942,7 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, eventTitles, loca
     
     const responsesQuery = useMemo(() => {
         if (!firestore) return null;
-        return query(collection(firestore, 'event_responses'), where('eventId', '==', event.id));
+         return query(collection(firestore, 'event_responses'), where('eventId', '==', event.id));
     }, [firestore, event.id]);
     
     const { data: allResponses, isLoading: responsesLoading, error } = useCollection<EventResponse>(responsesQuery);
@@ -1486,16 +1486,19 @@ export default function TerminePage() {
 
   const handleDelete = async (eventToDelete: DisplayEvent) => {
     if (!firestore || !canEditEvents) return;
-    try {
-      await deleteDoc(doc(firestore, 'events', eventToDelete.id));
-      toast({ title: 'Termin gelöscht' });
-    } catch (serverError: any) {
-      toast({
-        variant: 'destructive',
-        title: 'Fehler beim Löschen',
-        description: serverError.message,
-      });
-    }
+    const eventDocRef = doc(firestore, 'events', eventToDelete.id);
+    
+    deleteDoc(eventDocRef)
+        .then(() => {
+            toast({ title: 'Termin gelöscht' });
+        })
+        .catch(serverError => {
+            const permissionError = new FirestorePermissionError({
+                path: eventDocRef.path,
+                operation: 'delete',
+            });
+            errorEmitter.emit('permission-error', permissionError);
+        });
   };
 
 
