@@ -939,6 +939,8 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, eventTitles, loca
     const firestore = useFirestore();
     const {toast} = useToast();
     const location = locations.find(l => l.id === event.locationId);
+    const [eventToDelete, setEventToDelete] = useState<DisplayEvent | null>(null);
+
     
     const responsesQuery = useMemo(() => {
         if (!firestore) return null;
@@ -1297,15 +1299,22 @@ export default function TerminePage() {
   }, [firestore]);
   
   const { data: eventsData, isLoading: eventsLoading, error } = useCollection<Event>(eventsQuery);
+  const [localEvents, setLocalEvents] = useState<Event[] | null>(null);
+
+  useEffect(() => {
+    if (eventsData) {
+      setLocalEvents(eventsData);
+    }
+  }, [eventsData]);
 
   const eventOverridesQuery = useMemo(() => {
-    if (!firestore || !eventsData) return null;
-    const allEventIds = eventsData.map(e => e.id).filter(id => id);
+    if (!firestore || !localEvents) return null;
+    const allEventIds = localEvents.map(e => e.id).filter(id => id);
     if(allEventIds.length === 0) return null;
     // Firestore 'in' query is limited to 30 elements.
     // For more, we'd need multiple queries.
     return query(collection(firestore, 'event_overrides'), where('eventId', 'in', allEventIds.slice(0,30)));
-  }, [firestore, eventsData]);
+  }, [firestore, localEvents]);
   
   const categoriesQuery = useMemo(() => {
     if (!firestore) return null;
@@ -1352,9 +1361,9 @@ export default function TerminePage() {
   }, [categories, teams]);
   
   const eventsForWeek = useMemo(() => {
-    if (!eventsData) return new Map();
+    if (!localEvents) return new Map();
 
-    const filteredByTeam = eventsData.filter(event => {
+    const filteredByTeam = localEvents.filter(event => {
         if (selectedTeamIds.length === 0) return true;
         if (!event.targetTeamIds || event.targetTeamIds.length === 0) return true;
         return event.targetTeamIds.some(id => selectedTeamIds.includes(id));
@@ -1471,7 +1480,7 @@ export default function TerminePage() {
     });
 
     return weeklyEventsMap;
-  }, [eventsData, overridesData, currentWeekStart, currentWeekEnd, selectedTeamIds, selectedTitleIds]);
+  }, [localEvents, overridesData, currentWeekStart, currentWeekEnd, selectedTeamIds, selectedTitleIds]);
 
 
   const handleOpenForm = (event?: DisplayEvent) => {
@@ -1484,7 +1493,7 @@ export default function TerminePage() {
     setSelectedEvent(undefined);
   };
 
-  const handleDelete = async (eventToDelete: DisplayEvent) => {
+  const handleDelete = (eventToDelete: DisplayEvent) => {
     if (!firestore || !canEditEvents) {
         toast({ variant: 'destructive', title: 'Keine Berechtigung' });
         return;
@@ -1492,14 +1501,18 @@ export default function TerminePage() {
     const eventDocRef = doc(firestore, 'events', eventToDelete.id);
     
     // Optimistic UI update
+    setLocalEvents(prevEvents => prevEvents ? prevEvents.filter(e => e.id !== eventToDelete.id) : null);
     toast({ title: 'Termin gelöscht' });
 
     deleteDoc(eventDocRef)
         .catch(serverError => {
-            // We've removed the error display to the user to avoid the permission error loop.
-            // The optimistic update will have already removed the item from the UI.
-            // In a real app, you might want to log this error to a monitoring service.
-            console.error("Fehler beim Löschen:", serverError);
+            // Revert optimistic update if server fails
+            setLocalEvents(eventsData);
+            const permissionError = new FirestorePermissionError({
+                path: eventDocRef.path,
+                operation: 'delete',
+            });
+            errorEmitter.emit('permission-error', permissionError);
         });
   };
 
@@ -1664,4 +1677,5 @@ export default function TerminePage() {
 }
 
     
+
 
