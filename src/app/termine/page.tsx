@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -120,6 +121,17 @@ interface EventTitle {
   name: string;
 }
 
+const combineDateAndTime = (date: Date, time?: string): Date => {
+    const newDate = new Date(date);
+    if(time) {
+        const [hours, minutes] = time.split(':').map(Number);
+        newDate.setHours(hours, minutes, 0, 0);
+    } else {
+        newDate.setHours(0,0,0,0);
+    }
+    return newDate;
+}
+
 const eventSchema = z.object({
   titleId: z.string().min(1, 'Titel ist erforderlich.'),
   date: z.date({ required_error: 'Startdatum ist erforderlich.' }),
@@ -135,14 +147,50 @@ const eventSchema = z.object({
   locationId: z.string().optional(),
   meetingPoint: z.string().optional(),
   description: z.string().optional(),
-}).refine(data => {
-    if(data.endDate && data.date && data.endDate < data.date) {
-        return false;
+}).superRefine((data, ctx) => {
+    // 1. Endzeitpunkt muss nach Startzeitpunkt liegen
+    if (data.date && data.endDate && (data.startTime || data.endTime)) {
+        const startDate = combineDateAndTime(data.date, data.startTime);
+        const endDate = combineDateAndTime(data.endDate, data.endTime);
+        
+        if (endDate < startDate) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: 'Der Endzeitpunkt muss nach dem Startzeitpunkt liegen.',
+                path: ['endDate'], 
+            });
+             ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: 'Der Endzeitpunkt muss nach dem Startzeitpunkt liegen.',
+                path: ['endTime'],
+            });
+        }
+    } else if(data.date && data.endDate && data.endDate < data.date) {
+         ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'Das End-Datum darf nicht vor dem Start-Datum liegen.',
+            path: ['endDate'],
+        });
     }
-    return true;
-}, {
-    message: "Das End-Datum darf nicht vor dem Start-Datum liegen.",
-    path: ["endDate"],
+
+    // 2. Rückmeldefrist muss vor dem Startzeitpunkt liegen
+    if (data.rsvpDeadlineDate && data.date) {
+        const rsvpDate = combineDateAndTime(data.rsvpDeadlineDate, data.rsvpDeadlineTime);
+        const startDate = combineDateAndTime(data.date, data.startTime);
+        
+        if (rsvpDate >= startDate) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: 'Die Rückmeldefrist muss vor dem Start des Termins liegen.',
+                path: ['rsvpDeadlineDate'],
+            });
+             ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: 'Die Rückmeldefrist muss vor dem Start des Termins liegen.',
+                path: ['rsvpDeadlineTime'],
+            });
+        }
+    }
 });
 
 
@@ -511,17 +559,6 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
       return;
     }
     setIsSubmitting(true);
-    
-    const combineDateAndTime = (date: Date, time?: string): Date => {
-        const newDate = new Date(date);
-        if(time) {
-            const [hours, minutes] = time.split(':').map(Number);
-            newDate.setHours(hours, minutes, 0, 0);
-        } else {
-            newDate.setHours(0,0,0,0);
-        }
-        return newDate;
-    }
 
     try {
         const dataToSave: { [key: string]: any } = {
@@ -1523,27 +1560,26 @@ export default function TerminePage() {
 
 const handleDelete = (eventToDelete: DisplayEvent) => {
     if (!firestore || !canEditEvents) return;
-    const eventDocRef = doc(firestore, 'events', eventToDelete.id);
     
-    // Optimistically update the UI
+    const originalEventId = eventToDelete.id;
+
     if (localEvents) {
-        setLocalEvents(localEvents.filter(e => e.id !== eventToDelete.id));
+        setLocalEvents(prevEvents => (prevEvents || []).filter(e => e.id !== originalEventId));
     }
+    
     toast({ title: 'Termin gelöscht' });
 
-    // Try to delete from the server in the background
-    deleteDoc(eventDocRef)
-      .catch((serverError: any) => {
-        // If server delete fails, revert UI and show error
-        if (localEvents) {
-            setLocalEvents(localEvents); 
-        }
-        toast({
-          variant: "destructive",
-          title: "Fehler beim Löschen",
-          description: "Der Termin konnte nicht vom Server gelöscht werden: " + serverError.message,
+    deleteDoc(doc(firestore, 'events', originalEventId))
+        .catch(serverError => {
+            if (localEvents) {
+               setLocalEvents(localEvents); 
+            }
+             const permissionError = new FirestorePermissionError({
+                path: `events/${originalEventId}`,
+                operation: 'delete',
+            });
+            errorEmitter.emit('permission-error', permissionError);
         });
-      });
   };
 
   const handleCancelSingleEvent = async (eventToCancel: DisplayEvent) => {
@@ -1775,3 +1811,4 @@ const handleDelete = (eventToDelete: DisplayEvent) => {
     </div>
   );
 }
+
