@@ -542,7 +542,7 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
         if (values.endTime && !values.isAllDay) {
             const endDate = values.endDate || values.date;
             dataToSave.endTime = Timestamp.fromDate(combineDateAndTime(endDate, values.endTime));
-        } else if (!values.endTime) {
+        } else {
             dataToSave.endTime = null;
         }
         
@@ -554,7 +554,7 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
 
         if (values.rsvpDeadlineDate) {
             dataToSave.rsvpDeadline = Timestamp.fromDate(combineDateAndTime(values.rsvpDeadlineDate, values.rsvpDeadlineTime));
-        } else if (!values.rsvpDeadlineDate) {
+        } else {
             dataToSave.rsvpDeadline = null;
         }
 
@@ -1111,7 +1111,25 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, eventTitles, loca
                     {canEdit && (
                         <div className="flex items-center">
                             <Button variant="ghost" size="icon" onClick={() => onEdit(event)}><Edit className="h-4 w-4"/></Button>
-                            <Button variant="ghost" size="icon" className="hover:bg-destructive/10 hover:text-destructive" onClick={() => onDelete(event)}><Trash2 className="h-4 w-4" /></Button>
+                            <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="hover:bg-destructive/10 hover:text-destructive"><Trash2 className="h-4 w-4" /></Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle>Sind Sie absolut sicher?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                            Diese Aktion kann nicht rückgängig gemacht werden. Dadurch wird der Termin "{eventTitles?.find(t => t.id === event?.titleId)?.name || 'Unbenannt'}" und alle zugehörigen Daten dauerhaft gelöscht.
+                                        </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                                        <AlertDialogAction onClick={() => onDelete(event)} className="bg-destructive hover:bg-destructive/90">
+                                            Ja, löschen
+                                        </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
                         </div>
                     )}
                 </div>
@@ -1233,8 +1251,6 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, eventTitles, loca
 export default function TerminePage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<DisplayEvent | undefined>(undefined);
-  const [eventToDelete, setEventToDelete] = useState<DisplayEvent | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
   
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>(() => {
@@ -1471,42 +1487,19 @@ export default function TerminePage() {
     setSelectedEvent(undefined);
   };
 
-  const handleDelete = async () => {
+  const handleDelete = async (eventToDelete: DisplayEvent) => {
     if (!firestore || !canEditEvents || !eventToDelete) return;
-
-    setIsDeleting(true);
 
     try {
         const eventDocRef = doc(firestore, 'events', eventToDelete.id);
-        
-        // Find and delete all associated responses
-        const responsesQuery = query(collection(firestore, 'event_responses'), where('eventId', '==', eventToDelete.id));
-        const responsesSnapshot = await getDocs(responsesQuery);
-        const batch = []; // No batch in client-sdk v9, do it one by one
-        for (const doc of responsesSnapshot.docs) {
-           await deleteDoc(doc.ref);
-        }
-        
-        // Find and delete all associated overrides
-        const overridesQuery = query(collection(firestore, 'event_overrides'), where('eventId', '==', eventToDelete.id));
-        const overridesSnapshot = await getDocs(overridesQuery);
-         for (const doc of overridesSnapshot.docs) {
-           await deleteDoc(doc.ref);
-        }
-
-        // Finally, delete the event itself
         await deleteDoc(eventDocRef);
-
-        toast({ title: 'Termin und alle zugehörigen Daten gelöscht' });
+        toast({ title: 'Termin gelöscht' });
     } catch (serverError: any) {
         toast({
           variant: "destructive",
           title: "Fehler beim Löschen",
           description: serverError.message,
         });
-    } finally {
-        setIsDeleting(false);
-        setEventToDelete(null);
     }
   };
 
@@ -1549,7 +1542,7 @@ export default function TerminePage() {
                                         allUsers={allUsers || []}
                                         teams={teams || []}
                                         onEdit={handleOpenForm}
-                                        onDelete={setEventToDelete}
+                                        onDelete={handleDelete}
                                         eventTitles={eventTitles || []}
                                         locations={locations || []}
                                         canEdit={!!canEditEvents}
@@ -1666,29 +1659,6 @@ export default function TerminePage() {
           )}
         </DialogContent>
       </Dialog>
-      
-      <AlertDialog open={!!eventToDelete} onOpenChange={(open) => !open && setEventToDelete(null)}>
-        <AlertDialogContent>
-            <AlertDialogHeader>
-                <AlertDialogTitle>Sind Sie absolut sicher?</AlertDialogTitle>
-                <AlertDialogDescription>
-                    Diese Aktion kann nicht rückgängig gemacht werden. Dadurch wird der Termin "{eventTitles?.find(t => t.id === eventToDelete?.titleId)?.name || 'Unbenannt'}" und alle zugehörigen Daten dauerhaft gelöscht.
-                </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-                <AlertDialogCancel disabled={isDeleting}>Abbrechen</AlertDialogCancel>
-                <AlertDialogAction onClick={handleDelete} disabled={isDeleting} className="bg-destructive hover:bg-destructive/90">
-                    {isDeleting ? <Loader2 className="animate-spin" /> : 'Ja, löschen'}
-                </AlertDialogAction>
-            </AlertDialogFooter>
-        </AlertDialogContent>
-    </AlertDialog>
     </div>
   );
 }
-
-
-
-    
-
-    
