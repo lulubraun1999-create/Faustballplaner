@@ -149,9 +149,9 @@ const eventSchema = z.object({
   description: z.string().optional(),
 }).superRefine((data, ctx) => {
     // 1. Endzeitpunkt muss nach Startzeitpunkt liegen
-    if (data.date && data.endDate && (data.startTime || data.endTime)) {
+    if (data.date && (data.endTime || data.endDate)) {
         const startDate = combineDateAndTime(data.date, data.startTime);
-        const endDate = combineDateAndTime(data.endDate, data.endTime);
+        const endDate = combineDateAndTime(data.endDate || data.date, data.endTime);
         
         if (endDate < startDate) {
             ctx.addIssue({
@@ -165,12 +165,6 @@ const eventSchema = z.object({
                 path: ['endTime'],
             });
         }
-    } else if(data.date && data.endDate && data.endDate < data.date) {
-         ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: 'Das End-Datum darf nicht vor dem Start-Datum liegen.',
-            path: ['endDate'],
-        });
     }
 
     // 2. Rückmeldefrist muss vor dem Startzeitpunkt liegen
@@ -575,6 +569,7 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
         dataToSave.date = Timestamp.fromDate(startDate);
         
         if (values.endTime && !values.isAllDay) {
+            // Use values.endDate if provided, otherwise use values.date
             const endDate = values.endDate || values.date;
             dataToSave.endTime = Timestamp.fromDate(combineDateAndTime(endDate, values.endTime));
         } else {
@@ -587,7 +582,7 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
             dataToSave.recurrenceEndDate = null;
         }
 
-        if (values.rsvpDeadlineDate) {
+        if (values.rsvpDeadlineDate && values.rsvpDeadlineTime) {
             dataToSave.rsvpDeadline = Timestamp.fromDate(combineDateAndTime(values.rsvpDeadlineDate, values.rsvpDeadlineTime));
         } else {
             dataToSave.rsvpDeadline = null;
@@ -1027,28 +1022,22 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, onReact
     
     const recurrenceText = getRecurrenceText(event);
     
-    const getAdjustedDate = (baseDate: Date, timeSourceDate: Date): Date => {
-      const newDate = new Date(baseDate);
-      newDate.setHours(timeSourceDate.getHours(), timeSourceDate.getMinutes(), timeSourceDate.getSeconds(), timeSourceDate.getMilliseconds());
-      return newDate;
-    }
-    
     const startDate = event.displayDate;
     
     const endDate = useMemo(() => {
         if (!event.endTime) return undefined;
-        const originalEndDate = event.endTime.toDate();
-        let adjustedEndDate = getAdjustedDate(startDate, originalEndDate);
-
-        if (adjustedEndDate < startDate) {
-            adjustedEndDate = add(adjustedEndDate, { days: 1 });
-        }
         
         const originalStartDate = event.date.toDate();
-        const dateDiff = differenceInDays(originalEndDate, originalStartDate);
-        if (dateDiff > 0) {
-            adjustedEndDate = add(adjustedEndDate, { days: dateDiff });
-        }
+        const originalEndDate = event.endTime.toDate();
+
+        // Calculate the difference in days between original start and end
+        const daysDiff = differenceInDays(originalEndDate, originalStartDate);
+
+        // Create the new end date by adding the difference to the current display date
+        let adjustedEndDate = add(startDate, { days: daysDiff });
+        
+        // Set the time from the original end date
+        adjustedEndDate.setHours(originalEndDate.getHours(), originalEndDate.getMinutes(), originalEndDate.getSeconds(), originalEndDate.getMilliseconds());
         
         return adjustedEndDate;
     }, [event.date, event.endTime, startDate]);
@@ -1559,16 +1548,28 @@ export default function TerminePage() {
   };
 
   const handleDelete = (eventToDelete: DisplayEvent) => {
-      if (!firestore) return;
-      const eventDocRef = doc(firestore, 'events', eventToDelete.id);
-      deleteDoc(eventDocRef)
-          .then(() => {
-              toast({ title: 'Termin gelöscht' });
-          })
-          .catch(serverError => {
-             // The error is intentionally not re-thrown to the UI
-          });
-  };
+    if (!firestore) return;
+    if (!canEditEvents) return; // UI Guard
+    const eventDocRef = doc(firestore, 'events', eventToDelete.id);
+    
+    // Optimistic UI Update
+    setLocalEvents(prev => prev ? prev.filter(e => e.id !== eventToDelete.id) : []);
+
+    deleteDoc(eventDocRef)
+      .then(() => {
+        toast({ title: 'Terminserie gelöscht' });
+      })
+      .catch((err) => {
+        // Revert UI on error
+        setLocalEvents(eventsData); 
+        toast({
+          variant: "destructive",
+          title: "Fehler beim Löschen",
+          description: "Die Terminserie konnte nicht gelöscht werden.",
+        });
+      });
+};
+
 
   const handleCancelSingleEvent = async (eventToCancel: DisplayEvent) => {
     if (!firestore || !canEditEvents) return;
@@ -1801,3 +1802,6 @@ export default function TerminePage() {
 }
 
 
+
+
+    
