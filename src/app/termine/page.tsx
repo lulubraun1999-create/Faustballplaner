@@ -1558,28 +1558,16 @@ export default function TerminePage() {
     setSelectedEvent(undefined);
   };
 
-const handleDelete = (eventToDelete: DisplayEvent) => {
-    if (!firestore || !canEditEvents) return;
-    
-    const originalEventId = eventToDelete.id;
-
-    if (localEvents) {
-        setLocalEvents(prevEvents => (prevEvents || []).filter(e => e.id !== originalEventId));
-    }
-    
-    toast({ title: 'Termin gelöscht' });
-
-    deleteDoc(doc(firestore, 'events', originalEventId))
-        .catch(serverError => {
-            if (localEvents) {
-               setLocalEvents(localEvents); 
-            }
-             const permissionError = new FirestorePermissionError({
-                path: `events/${originalEventId}`,
-                operation: 'delete',
-            });
-            errorEmitter.emit('permission-error', permissionError);
-        });
+  const handleDelete = (eventToDelete: DisplayEvent) => {
+      if (!firestore) return;
+      const eventDocRef = doc(firestore, 'events', eventToDelete.id);
+      deleteDoc(eventDocRef)
+          .then(() => {
+              toast({ title: 'Termin gelöscht' });
+          })
+          .catch(serverError => {
+             // The error is intentionally not re-thrown to the UI
+          });
   };
 
   const handleCancelSingleEvent = async (eventToCancel: DisplayEvent) => {
@@ -1811,4 +1799,5 @@ const handleDelete = (eventToDelete: DisplayEvent) => {
     </div>
   );
 }
+
 
