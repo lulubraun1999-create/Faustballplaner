@@ -94,6 +94,7 @@ interface GroupMember {
 
 interface UserData {
     adminRechte?: boolean;
+    teamIds?: string[];
 }
 
 interface TeamCategory {
@@ -540,13 +541,14 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
 
 
  const handleFormSubmit = async (values: EventFormValues) => {
-    // If the original event was recurring, and the user is editing it now
-    if (event && (event.recurrence && event.recurrence !== 'none')) {
+    // If the user is editing an existing event AND the event was recurring AND they have changed the recurrence rule
+    if (event && (event.recurrence && event.recurrence !== 'none') && recurrence !== 'none') {
       setIsEditModeDialog(true);
     } else {
       // This handles:
       // 1. Creating a brand new event (recurring or not).
       // 2. Editing a non-recurring event (and potentially making it recurring).
+      // 3. Changing a recurring event to a non-recurring one.
       await saveEvent(values, 'all'); 
     }
   };
@@ -572,9 +574,9 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
         const startDate = combineDateAndTime(values.date, values.isAllDay ? undefined : values.startTime);
         dataToSave.date = Timestamp.fromDate(startDate);
         
-        if (values.endTime && !values.isAllDay) {
-            const endDate = values.endDate || values.date;
-            dataToSave.endTime = Timestamp.fromDate(combineDateAndTime(endDate, values.endTime));
+        if (!values.isAllDay && values.endTime) {
+            const endDateValue = values.endDate || values.date;
+            dataToSave.endTime = Timestamp.fromDate(combineDateAndTime(endDateValue, values.endTime));
         } else {
             dataToSave.endTime = null;
         }
@@ -586,8 +588,8 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
         }
 
         if (values.rsvpDeadlineDate) {
-           const rsvpDate = values.rsvpDeadlineDate;
-           dataToSave.rsvpDeadline = Timestamp.fromDate(combineDateAndTime(rsvpDate, values.rsvpDeadlineTime));
+           const rsvpDateValue = values.rsvpDeadlineDate;
+           dataToSave.rsvpDeadline = Timestamp.fromDate(combineDateAndTime(rsvpDateValue, values.rsvpDeadlineTime));
         } else {
             dataToSave.rsvpDeadline = null;
         }
@@ -613,21 +615,16 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
             };
             
             const overridesRef = collection(firestore, 'event_overrides');
-            const q = query(overridesRef, where("eventId", "==", event.id));
+            const q = query(overridesRef, where("eventId", "==", event.id), where("originalDate", "==", overrideData.originalDate));
             const querySnapshot = await getDocs(q);
-            let existingOverrideId: string | undefined = undefined;
-            querySnapshot.forEach(doc => {
-              const data = doc.data() as EventOverride;
-              if (isSameDay(data.originalDate.toDate(), event.displayDate)) {
-                existingOverrideId = doc.id;
-              }
-            });
-
-            if (existingOverrideId) {
+            
+            if (!querySnapshot.empty) {
+                const existingOverrideId = querySnapshot.docs[0].id;
                 await updateDoc(doc(firestore, 'event_overrides', existingOverrideId), overrideData);
             } else {
                 await addDoc(overridesRef, overrideData);
             }
+
         } else {
             const finalData = {
                 ...dataToSave,
@@ -983,7 +980,7 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
   );
 }
 
-const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, onReactivate, eventTitles, locations, canEdit }: { event: DisplayEvent; allUsers: GroupMember[]; teams: Team[], onEdit: (event: DisplayEvent) => void; onDelete: (event: DisplayEvent) => void; onCancel: (event: DisplayEvent) => void; onReactivate: (event: DisplayEvent) => void; eventTitles: EventTitle[], locations: Location[], canEdit: boolean }) => {
+const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, onReactivate, eventTitles, locations, canEdit, currentUserTeamIds }: { event: DisplayEvent; allUsers: GroupMember[]; teams: Team[], onEdit: (event: DisplayEvent) => void; onDelete: (event: DisplayEvent) => void; onCancel: (event: DisplayEvent) => void; onReactivate: (event: DisplayEvent) => void; eventTitles: EventTitle[], locations: Location[], canEdit: boolean, currentUserTeamIds: string[] }) => {
     const { user } = useUser();
     const firestore = useFirestore();
     const {toast} = useToast();
@@ -1010,6 +1007,13 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, onReact
     const userResponse = useMemo(() => {
          return responsesForThisInstance?.find(r => r.userId === user?.uid);
     }, [responsesForThisInstance, user]);
+
+    const isRsvpVisible = useMemo(() => {
+        if (!event.targetTeamIds || event.targetTeamIds.length === 0) {
+            return true; // Event is for everyone
+        }
+        return event.targetTeamIds.some(teamId => currentUserTeamIds.includes(teamId));
+    }, [event.targetTeamIds, currentUserTeamIds]);
 
     const getRecurrenceText = (event: Event) => {
         const recurrence = event.recurrence;
@@ -1276,7 +1280,7 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, onReact
                         </PopoverContent>
                     </Popover>
 
-                    <div className="flex items-center gap-2">
+                    {isRsvpVisible && <div className="flex items-center gap-2">
                         <Button 
                             size="sm"
                             variant={userResponse?.status === 'attending' ? 'default' : 'outline'}
@@ -1303,7 +1307,7 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, onReact
                             <XIcon className="mr-2 h-4 w-4" />
                             Absagen
                         </Button>
-                    </div>
+                    </div>}
                 </CardFooter>
              )}
         </Card>
@@ -1494,16 +1498,16 @@ export default function TerminePage() {
           }
           
            if (finalEvent.endTime) {
-                const originalStartDate = event.date.toDate();
-                const originalEndDate = event.endTime.toDate();
-                const diff = originalEndDate.getTime() - originalStartDate.getTime();
+                const originalEventStartDate = event.date.toDate();
+                const originalEventEndDate = event.endTime.toDate();
+                const diff = originalEventEndDate.getTime() - originalEventStartDate.getTime();
                 finalEvent.endTime = Timestamp.fromDate(new Date(finalEvent.displayDate.getTime() + diff));
             }
             
             if (finalEvent.rsvpDeadline) {
-                const originalStartDate = event.date.toDate();
+                const originalEventStartDate = event.date.toDate();
                 const originalRsvpDate = event.rsvpDeadline.toDate();
-                const diff = originalStartDate.getTime() - originalRsvpDate.getTime();
+                const diff = originalEventStartDate.getTime() - originalRsvpDate.getTime();
                 finalEvent.rsvpDeadline = Timestamp.fromDate(new Date(finalEvent.displayDate.getTime() - diff));
             }
 
@@ -1571,19 +1575,13 @@ export default function TerminePage() {
     };
     
     const overridesRef = collection(firestore, 'event_overrides');
-    const q = query(overridesRef, where("eventId", "==", eventToCancel.id));
+    const q = query(overridesRef, where("eventId", "==", eventToCancel.id), where("originalDate", "==", overrideData.originalDate));
     const querySnapshot = await getDocs(q);
     
-    let existingOverrideId: string | undefined = undefined;
-    querySnapshot.forEach(doc => {
-      const data = doc.data() as EventOverride;
-      if (isSameDay(data.originalDate.toDate(), eventToCancel.displayDate)) {
-        existingOverrideId = doc.id;
-      }
-    });
 
     try {
-        if(existingOverrideId) {
+        if(!querySnapshot.empty) {
+            const existingOverrideId = querySnapshot.docs[0].id;
             await updateDoc(doc(firestore, 'event_overrides', existingOverrideId), { isCancelled: true, updatedAt: serverTimestamp() });
         } else {
             await addDoc(overridesRef, overrideData);
@@ -1603,18 +1601,11 @@ export default function TerminePage() {
     if (!firestore || !canEditEvents) return;
 
     const overridesRef = collection(firestore, 'event_overrides');
-    const q = query(overridesRef, where("eventId", "==", eventToReactivate.id));
+    const q = query(overridesRef, where("eventId", "==", eventToReactivate.id), where("originalDate", "==", Timestamp.fromDate(startOfDay(eventToReactivate.displayDate))));
     const querySnapshot = await getDocs(q);
-    
-    let existingOverrideId: string | undefined = undefined;
-    querySnapshot.forEach(doc => {
-      const data = doc.data() as EventOverride;
-      if (isSameDay(data.originalDate.toDate(), eventToReactivate.displayDate)) {
-        existingOverrideId = doc.id;
-      }
-    });
 
-    if (existingOverrideId) {
+    if (!querySnapshot.empty) {
+        const existingOverrideId = querySnapshot.docs[0].id;
       try {
         await updateDoc(doc(firestore, 'event_overrides', existingOverrideId), { isCancelled: false, updatedAt: serverTimestamp() });
         toast({ title: 'Termin reaktiviert' });
@@ -1673,6 +1664,7 @@ export default function TerminePage() {
                                         eventTitles={eventTitles || []}
                                         locations={locations || []}
                                         canEdit={!!canEditEvents}
+                                        currentUserTeamIds={userData?.teamIds || []}
                                     />
                                 ))}
                             </div>

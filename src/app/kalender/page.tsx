@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Calendar } from '@/components/ui/calendar';
 import { de } from 'date-fns/locale';
 import { useFirestore, useCollection, useUser, errorEmitter, FirestorePermissionError, useDoc } from '@/firebase';
-import { collection, query, where, Timestamp, orderBy, doc, setDoc, serverTimestamp, onSnapshot, addDoc, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, Timestamp, orderBy, doc, setDoc, serverTimestamp, onSnapshot, addDoc, deleteDoc, getDocs } from 'firebase/firestore';
 import { Loader2, CalendarIcon, Clock, MapPin, Repeat, Check, XIcon, Users, HelpCircle } from 'lucide-react';
 import {
   format,
@@ -93,6 +93,7 @@ interface GroupMember {
   id: string;
   vorname?: string;
   nachname?: string;
+  teamIds?: string[];
 }
 
 interface Location {
@@ -122,7 +123,7 @@ const getRecurrenceText = (recurrence?: string) => {
 };
 
 
-const EventCard = ({ event, allUsers, locations, eventTitles }: { event: DisplayEvent; allUsers: GroupMember[], locations: Location[], eventTitles: EventTitle[] }) => {
+const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds }: { event: DisplayEvent; allUsers: GroupMember[], locations: Location[], eventTitles: EventTitle[], currentUserTeamIds: string[] }) => {
     const { user } = useUser();
     const firestore = useFirestore();
 
@@ -144,13 +145,20 @@ const EventCard = ({ event, allUsers, locations, eventTitles }: { event: Display
          return responsesForThisInstance.find(r => r.userId === user?.uid);
     }, [responsesForThisInstance, user]);
 
+    const isRsvpVisible = useMemo(() => {
+        if (!event.targetTeamIds || event.targetTeamIds.length === 0) {
+            return true; // Event is for everyone
+        }
+        return event.targetTeamIds.some(teamId => currentUserTeamIds.includes(teamId));
+    }, [event.targetTeamIds, currentUserTeamIds]);
+
 
     const recurrenceText = getRecurrenceText(event.recurrence);
     
     const startDate = event.displayDate;
     
     const endDate = useMemo(() => {
-        if (!event.endTime) return undefined;
+       if (!event.endTime) return undefined;
         
         const originalStartDate = event.date.toDate();
         const originalEndDate = event.endTime.toDate();
@@ -334,7 +342,7 @@ const EventCard = ({ event, allUsers, locations, eventTitles }: { event: Display
                     </PopoverContent>
                 </Popover>
 
-                <div className="flex items-center gap-2">
+                {isRsvpVisible && <div className="flex items-center gap-2">
                     <Button 
                         size="sm"
                         variant={userResponse?.status === 'attending' ? 'default' : 'outline'}
@@ -361,7 +369,7 @@ const EventCard = ({ event, allUsers, locations, eventTitles }: { event: Display
                         <XIcon className="mr-2 h-4 w-4" />
                         Absagen
                     </Button>
-                </div>
+                </div>}
                 </CardFooter>
              )}
         </Card>
@@ -370,6 +378,7 @@ const EventCard = ({ event, allUsers, locations, eventTitles }: { event: Display
 
 
 export default function KalenderPage() {
+  const { user } = useUser();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   
@@ -450,6 +459,11 @@ export default function KalenderPage() {
   const { data: locations, isLoading: locationsLoading } = useCollection<Location>(locationsQuery);
   const { data: eventTitles, isLoading: eventTitlesLoading } = useCollection<EventTitle>(eventTitlesQuery);
   
+  const currentUserTeamIds = useMemo(() => {
+    if (!user || !allUsers) return [];
+    const currentUser = allUsers.find(u => u.id === user.uid);
+    return currentUser?.teamIds || [];
+  }, [user, allUsers]);
 
   const isLoading = categoriesLoading || teamsLoading || eventsLoading || usersLoading || locationsLoading || eventTitlesLoading || overridesLoading;
 
@@ -537,16 +551,16 @@ export default function KalenderPage() {
             }
 
             if (finalEvent.endTime) {
-                const originalStartDate = event.date.toDate();
-                const originalEndDate = event.endTime.toDate();
-                const diff = originalEndDate.getTime() - originalStartDate.getTime();
+                const originalEventStartDate = event.date.toDate();
+                const originalEventEndDate = event.endTime.toDate();
+                const diff = originalEventEndDate.getTime() - originalEventStartDate.getTime();
                 finalEvent.endTime = Timestamp.fromDate(new Date(finalEvent.displayDate.getTime() + diff));
             }
             
             if (finalEvent.rsvpDeadline) {
-                const originalStartDate = event.date.toDate();
+                const originalEventStartDate = event.date.toDate();
                 const originalRsvpDate = event.rsvpDeadline.toDate();
-                const diff = originalStartDate.getTime() - originalRsvpDate.getTime();
+                const diff = originalEventStartDate.getTime() - originalRsvpDate.getTime();
                 finalEvent.rsvpDeadline = Timestamp.fromDate(new Date(finalEvent.displayDate.getTime() - diff));
             }
             visibleEvents.push(finalEvent);
@@ -705,7 +719,7 @@ export default function KalenderPage() {
                         {error && <p className="text-destructive">Fehler: {error.message}</p>}
                         {!isLoading && selectedEvents.length > 0 ? (
                             selectedEvents.map(event => (
-                               <EventCard event={event} allUsers={allUsers || []} locations={locations || []} eventTitles={eventTitles || []} key={`${event.id}-${event.displayDate.toISOString()}`} />
+                               <EventCard event={event} allUsers={allUsers || []} locations={locations || []} eventTitles={eventTitles || []} key={`${event.id}-${event.displayDate.toISOString()}`} currentUserTeamIds={currentUserTeamIds} />
                             ))
                         ) : (
                         !isLoading && (
@@ -724,4 +738,5 @@ export default function KalenderPage() {
     </div>
   );
 }
+
 
