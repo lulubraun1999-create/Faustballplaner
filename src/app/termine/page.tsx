@@ -126,8 +126,6 @@ const combineDateAndTime = (date: Date, time?: string): Date => {
     if(time) {
         const [hours, minutes] = time.split(':').map(Number);
         newDate.setHours(hours, minutes, 0, 0);
-    } else {
-        newDate.setHours(0,0,0,0);
     }
     return newDate;
 }
@@ -541,14 +539,11 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
 
 
  const handleFormSubmit = async (values: EventFormValues) => {
-    // If the user is editing an existing event AND the event was recurring AND they have changed the recurrence rule
-    if (event && (event.recurrence && event.recurrence !== 'none') && recurrence !== 'none') {
+    const isNewRecurrence = event ? (event.recurrence === 'none' && values.recurrence !== 'none') : false;
+    
+    if (event && event.recurrence && event.recurrence !== 'none' && !isNewRecurrence) {
       setIsEditModeDialog(true);
     } else {
-      // This handles:
-      // 1. Creating a brand new event (recurring or not).
-      // 2. Editing a non-recurring event (and potentially making it recurring).
-      // 3. Changing a recurring event to a non-recurring one.
       await saveEvent(values, 'all'); 
     }
   };
@@ -596,8 +591,6 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
 
 
         if (event && mode === 'single') {
-             // Create an override for a single instance of a recurring event
-             // This includes ALL fields to ensure the instance is a complete snapshot
             const overrideData = {
                 eventId: event.id,
                 originalDate: Timestamp.fromDate(startOfDay(event.displayDate)),
@@ -606,7 +599,7 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
                 date: dataToSave.date,
                 endTime: dataToSave.endTime,
                 isAllDay: values.isAllDay,
-                recurrence: 'none', // Overrides are always single instances
+                recurrence: 'none', 
                 targetTeamIds: values.targetTeamIds,
                 rsvpDeadline: dataToSave.rsvpDeadline,
                 locationId: values.locationId,
@@ -633,9 +626,8 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
             };
             
             let promise;
-            // mode is 'future' or 'all'
             if (event) { 
-                if(mode === 'future') { // Editing this and future events
+                if(mode === 'future') { 
                     const oldEventRef = doc(firestore, 'events', event.id);
                     const newRecurrenceEndDate = add(event.displayDate, { days: -1 });
                     await updateDoc(oldEventRef, { recurrenceEndDate: Timestamp.fromDate(newRecurrenceEndDate) });
@@ -644,10 +636,10 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
                     finalData.date = Timestamp.fromDate(newSeriesStartDate);
 
                     promise = addDoc(collection(firestore, 'events'), finalData);
-                } else { // mode === 'all' -> Editing the whole series or a single event
+                } else { 
                      promise = updateDoc(doc(firestore, 'events', event.id), finalData);
                 }
-            } else { // Creating a new event
+            } else { 
                 promise = addDoc(collection(firestore, 'events'), finalData);
             }
             await promise;
@@ -1037,14 +1029,16 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, onReact
     
     const endDate = useMemo(() => {
         if (!event.endTime) return undefined;
-        
+
         const originalStartDate = event.date.toDate();
         const originalEndDate = event.endTime.toDate();
-
         const diff = originalEndDate.getTime() - originalStartDate.getTime();
         
-        return new Date(startDate.getTime() + diff);
+        // Create a new Date object based on the display date to avoid modifying it
+        const newEndDate = new Date(startDate.getTime());
+        newEndDate.setTime(newEndDate.getTime() + diff);
 
+        return newEndDate;
     }, [event.date, event.endTime, startDate]);
 
     let timeString;
@@ -1501,14 +1495,20 @@ export default function TerminePage() {
                 const originalEventStartDate = event.date.toDate();
                 const originalEventEndDate = event.endTime.toDate();
                 const diff = originalEventEndDate.getTime() - originalEventStartDate.getTime();
-                finalEvent.endTime = Timestamp.fromDate(new Date(finalEvent.displayDate.getTime() + diff));
+                
+                const newEndDate = new Date(finalEvent.displayDate.getTime());
+                newEndDate.setTime(newEndDate.getTime() + diff);
+                finalEvent.endTime = Timestamp.fromDate(newEndDate);
             }
             
             if (finalEvent.rsvpDeadline) {
                 const originalEventStartDate = event.date.toDate();
                 const originalRsvpDate = event.rsvpDeadline.toDate();
-                const diff = originalEventStartDate.getTime() - originalRsvpDate.getTime();
-                finalEvent.rsvpDeadline = Timestamp.fromDate(new Date(finalEvent.displayDate.getTime() - diff));
+                const diff = originalRsvpDate.getTime() - originalEventStartDate.getTime();
+
+                const newRsvpDate = new Date(finalEvent.displayDate.getTime());
+                newRsvpDate.setTime(newRsvpDate.getTime() + diff);
+                finalEvent.rsvpDeadline = Timestamp.fromDate(newRsvpDate);
             }
 
           weeklyEventsMap.get(dayKey)?.push(finalEvent);
@@ -1781,8 +1781,3 @@ export default function TerminePage() {
     </div>
   );
 }
-
-
-
-
-    

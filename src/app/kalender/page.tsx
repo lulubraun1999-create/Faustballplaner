@@ -167,14 +167,16 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
     
     const endDate = useMemo(() => {
         if (!event.endTime) return undefined;
-        
+
         const originalStartDate = event.date.toDate();
         const originalEndDate = event.endTime.toDate();
-
         const diff = originalEndDate.getTime() - originalStartDate.getTime();
         
-        return new Date(startDate.getTime() + diff);
+        // Create a new Date object based on the display date to avoid modifying it
+        const newEndDate = new Date(startDate.getTime());
+        newEndDate.setTime(newEndDate.getTime() + diff);
 
+        return newEndDate;
     }, [event.date, event.endTime, startDate]);
 
 
@@ -604,14 +606,20 @@ export default function KalenderPage() {
                 const originalEventStartDate = event.date.toDate();
                 const originalEventEndDate = event.endTime.toDate();
                 const diff = originalEventEndDate.getTime() - originalEventStartDate.getTime();
-                finalEvent.endTime = Timestamp.fromDate(new Date(finalEvent.displayDate.getTime() + diff));
+                
+                const newEndDate = new Date(finalEvent.displayDate.getTime());
+                newEndDate.setTime(newEndDate.getTime() + diff);
+                finalEvent.endTime = Timestamp.fromDate(newEndDate);
             }
             
             if (finalEvent.rsvpDeadline) {
                 const originalEventStartDate = event.date.toDate();
                 const originalRsvpDate = event.rsvpDeadline.toDate();
-                const diff = originalEventStartDate.getTime() - originalRsvpDate.getTime();
-                finalEvent.rsvpDeadline = Timestamp.fromDate(new Date(finalEvent.displayDate.getTime() - diff));
+                const diff = originalRsvpDate.getTime() - originalEventStartDate.getTime();
+                
+                const newRsvpDate = new Date(finalEvent.displayDate.getTime());
+                newRsvpDate.setTime(newRsvpDate.getTime() + diff);
+                finalEvent.rsvpDeadline = Timestamp.fromDate(newRsvpDate);
             }
             visibleEvents.push(finalEvent);
         }
@@ -853,8 +861,3 @@ export default function KalenderPage() {
     </div>
   );
 }
-
-
-
-
-    
