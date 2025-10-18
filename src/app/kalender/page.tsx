@@ -8,8 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Calendar } from '@/components/ui/calendar';
 import { de } from 'date-fns/locale';
 import { useFirestore, useCollection, useUser, errorEmitter, FirestorePermissionError, useDoc } from '@/firebase';
-import { collection, query, where, Timestamp, orderBy, doc, setDoc, serverTimestamp, onSnapshot, addDoc, deleteDoc, getDocs } from 'firebase/firestore';
-import { Loader2, CalendarIcon, Clock, MapPin, Repeat, Check, XIcon, Users, HelpCircle } from 'lucide-react';
+import { collection, query, where, Timestamp, orderBy, doc, setDoc, serverTimestamp, onSnapshot, addDoc, deleteDoc, getDocs, updateDoc } from 'firebase/firestore';
+import { Loader2, CalendarIcon, Clock, MapPin, Repeat, Check, XIcon, Users, HelpCircle, Ban, CheckCircle2, Edit, Trash2 } from 'lucide-react';
 import {
   format,
   isSameDay,
@@ -35,6 +35,8 @@ import {
 import { Checkbox } from "@/components/ui/checkbox"
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Label } from '@/components/ui/label';
+import { useToast } from '@/hooks/use-toast';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 
 interface Event {
@@ -89,6 +91,12 @@ interface Team {
   categoryId: string;
 }
 
+interface UserData {
+    adminRechte?: boolean;
+    teamIds?: string[];
+}
+
+
 interface GroupMember {
   id: string;
   vorname?: string;
@@ -123,7 +131,7 @@ const getRecurrenceText = (recurrence?: string) => {
 };
 
 
-const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds }: { event: DisplayEvent; allUsers: GroupMember[], locations: Location[], eventTitles: EventTitle[], currentUserTeamIds: string[] }) => {
+const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds, canEdit, onReactivate, onCancel }: { event: DisplayEvent; allUsers: GroupMember[], locations: Location[], eventTitles: EventTitle[], currentUserTeamIds: string[], canEdit: boolean, onCancel: (event: DisplayEvent) => void, onReactivate: (event: DisplayEvent) => void; }) => {
     const { user } = useUser();
     const firestore = useFirestore();
 
@@ -158,7 +166,7 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
     const startDate = event.displayDate;
     
     const endDate = useMemo(() => {
-       if (!event.endTime) return undefined;
+        if (!event.endTime) return undefined;
         
         const originalStartDate = event.date.toDate();
         const originalEndDate = event.endTime.toDate();
@@ -255,13 +263,45 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
     };
     
     const location = locations.find(l => l.id === event.locationId);
+    const isRecurring = event.recurrence && event.recurrence !== 'none';
 
     return (
         <Card key={`${event.id}-${event.displayDate.toISOString()}`} className={cn(event.isCancelled && "bg-destructive/10 border-destructive/30")}>
             <CardHeader>
-                <CardTitle className={cn(event.isCancelled && "text-destructive")}>
-                    {event.isCancelled ? 'ABGESAGT: ' : ''}{eventTitles.find(t => t.id === event.titleId)?.name || 'Unbenannter Termin'}
-                </CardTitle>
+               <div className="flex justify-between items-start">
+                    <CardTitle className={cn(event.isCancelled && "text-destructive")}>
+                        {event.isCancelled ? 'ABGESAGT: ' : ''}{eventTitles.find(t => t.id === event.titleId)?.name || 'Unbenannter Termin'}
+                    </CardTitle>
+                    {canEdit && (
+                        <div className="flex items-center">
+                            {isRecurring && (
+                                event.isCancelled ? (
+                                    <Button variant="ghost" size="icon" className="hover:bg-green-500/10 hover:text-green-600" onClick={() => onReactivate(event)}>
+                                        <CheckCircle2 className="h-4 w-4" />
+                                    </Button>
+                                ) : (
+                                    <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                            <Button variant="ghost" size="icon" className="hover:bg-amber-500/10 hover:text-amber-600"><Ban className="h-4 w-4" /></Button>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                            <AlertDialogHeader>
+                                                <AlertDialogTitle>Nur diesen Termin absagen?</AlertDialogTitle>
+                                                <AlertDialogDescription>
+                                                    Diese Aktion kann nicht rückgängig gemacht werden. Dadurch wird nur dieser eine Termin am {format(event.displayDate, "dd.MM.yyyy")} abgesagt. Die Serie bleibt bestehen.
+                                                </AlertDialogDescription>
+                                            </AlertDialogHeader>
+                                            <AlertDialogFooter>
+                                                <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                                                <AlertDialogAction onClick={() => onCancel(event)} className="bg-amber-500 hover:bg-amber-600">Ja, nur diesen Termin absagen</AlertDialogAction>
+                                            </AlertDialogFooter>
+                                        </AlertDialogContent>
+                                    </AlertDialog>
+                                )
+                            )}
+                        </div>
+                    )}
+                </div>
                  <div className="text-sm text-muted-foreground flex items-center gap-x-4 gap-y-1 pt-1">
                     <div className="flex items-center gap-1.5">
                         <Clock className="h-4 w-4 flex-shrink-0" />
@@ -399,6 +439,7 @@ export default function KalenderPage() {
   });
   
   const firestore = useFirestore();
+  const { toast } = useToast();
 
   const start = startOfMonth(currentMonth);
   const end = endOfMonth(currentMonth);
@@ -414,6 +455,15 @@ export default function KalenderPage() {
   useEffect(() => {
     localStorage.setItem('kalenderTitleFilter', JSON.stringify(selectedTitleIds));
   }, [selectedTitleIds]);
+
+  const userDocRef = useMemo(() => {
+    if (!firestore || !user) return null;
+    return doc(firestore, 'users', user.uid);
+  }, [firestore, user]);
+  const { data: userData, isLoading: isUserLoading } = useDoc<UserData>(userDocRef);
+
+  const canEditEvents = userData?.adminRechte;
+
 
   const categoriesQuery = useMemo(() => {
     if (!firestore) return null;
@@ -465,7 +515,7 @@ export default function KalenderPage() {
     return currentUser?.teamIds || [];
   }, [user, allUsers]);
 
-  const isLoading = categoriesLoading || teamsLoading || eventsLoading || usersLoading || locationsLoading || eventTitlesLoading || overridesLoading;
+  const isLoading = isUserLoading || categoriesLoading || teamsLoading || eventsLoading || usersLoading || locationsLoading || eventTitlesLoading || overridesLoading;
 
  const groupedTeams = useMemo(() => {
     if (!categories || !teams) return [];
@@ -601,6 +651,61 @@ export default function KalenderPage() {
       .sort((a, b) => a.displayDate.getTime() - b.displayDate.getTime());
   }, [selectedDate, allVisibleEvents]);
 
+  const handleCancelSingleEvent = async (eventToCancel: DisplayEvent) => {
+    if (!firestore || !canEditEvents) return;
+
+    const overrideData = {
+        eventId: eventToCancel.id,
+        originalDate: Timestamp.fromDate(startOfDay(eventToCancel.displayDate)),
+        isCancelled: true,
+        updatedAt: serverTimestamp(),
+    };
+    
+    const overridesRef = collection(firestore, 'event_overrides');
+    const q = query(overridesRef, where("eventId", "==", eventToCancel.id), where("originalDate", "==", overrideData.originalDate));
+    const querySnapshot = await getDocs(q);
+    
+
+    try {
+        if(!querySnapshot.empty) {
+            const existingOverrideId = querySnapshot.docs[0].id;
+            await updateDoc(doc(firestore, 'event_overrides', existingOverrideId), { isCancelled: true, updatedAt: serverTimestamp() });
+        } else {
+            await addDoc(overridesRef, overrideData);
+        }
+        
+        toast({ title: 'Termin abgesagt' });
+    } catch (serverError: any) {
+        toast({
+            variant: "destructive",
+            title: "Fehler beim Absagen",
+            description: serverError.message
+        });
+    }
+  };
+
+  const handleReactivateSingleEvent = async (eventToReactivate: DisplayEvent) => {
+    if (!firestore || !canEditEvents) return;
+
+    const overridesRef = collection(firestore, 'event_overrides');
+    const q = query(overridesRef, where("eventId", "==", eventToReactivate.id), where("originalDate", "==", Timestamp.fromDate(startOfDay(eventToReactivate.displayDate))));
+    const querySnapshot = await getDocs(q);
+
+    if (!querySnapshot.empty) {
+        const existingOverrideId = querySnapshot.docs[0].id;
+      try {
+        await updateDoc(doc(firestore, 'event_overrides', existingOverrideId), { isCancelled: false, updatedAt: serverTimestamp() });
+        toast({ title: 'Termin reaktiviert' });
+      } catch (serverError: any) {
+        toast({
+          variant: "destructive",
+          title: "Fehler beim Reaktivieren",
+          description: serverError.message
+        });
+      }
+    }
+  };
+
 
   return (
     <div className="flex min-h-screen w-full flex-col bg-background">
@@ -719,7 +824,17 @@ export default function KalenderPage() {
                         {error && <p className="text-destructive">Fehler: {error.message}</p>}
                         {!isLoading && selectedEvents.length > 0 ? (
                             selectedEvents.map(event => (
-                               <EventCard event={event} allUsers={allUsers || []} locations={locations || []} eventTitles={eventTitles || []} key={`${event.id}-${event.displayDate.toISOString()}`} currentUserTeamIds={currentUserTeamIds} />
+                               <EventCard 
+                                event={event} 
+                                allUsers={allUsers || []} 
+                                locations={locations || []} 
+                                eventTitles={eventTitles || []} 
+                                key={`${event.id}-${event.displayDate.toISOString()}`} 
+                                currentUserTeamIds={currentUserTeamIds} 
+                                canEdit={!!canEditEvents}
+                                onCancel={handleCancelSingleEvent}
+                                onReactivate={handleReactivateSingleEvent}
+                               />
                             ))
                         ) : (
                         !isLoading && (
@@ -740,3 +855,6 @@ export default function KalenderPage() {
 }
 
 
+
+
+    
