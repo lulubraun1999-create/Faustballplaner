@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -540,20 +541,14 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
         
         if (values.endDate && values.endTime && !values.isAllDay) {
             dataToSave.endTime = Timestamp.fromDate(combineDateAndTime(values.endDate, values.endTime));
-        } else {
-             dataToSave.endTime = null;
         }
         
         if (values.recurrence !== 'none' && values.recurrenceEndDate) {
             dataToSave.recurrenceEndDate = Timestamp.fromDate(values.recurrenceEndDate);
-        } else {
-            dataToSave.recurrenceEndDate = null;
         }
         
         if (values.rsvpDeadlineDate) {
             dataToSave.rsvpDeadline = Timestamp.fromDate(combineDateAndTime(values.rsvpDeadlineDate, values.rsvpDeadlineTime));
-        } else {
-             dataToSave.rsvpDeadline = null;
         }
 
 
@@ -1605,3 +1600,4 @@ export default function TerminePage() {
     </div>
   );
 }
+
