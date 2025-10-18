@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -540,8 +541,9 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
 
  const handleFormSubmit = async (values: EventFormValues) => {
     const isNewRecurrence = event ? (event.recurrence === 'none' && values.recurrence !== 'none') : false;
+    const isBecomingSingle = event ? (event.recurrence !== 'none' && values.recurrence === 'none') : false;
     
-    if (event && event.recurrence && event.recurrence !== 'none' && !isNewRecurrence) {
+    if (event && event.recurrence && event.recurrence !== 'none' && !isNewRecurrence && !isBecomingSingle) {
       setIsEditModeDialog(true);
     } else {
       await saveEvent(values, 'all'); 
@@ -1035,8 +1037,7 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, onReact
         const diff = originalEndDate.getTime() - originalStartDate.getTime();
         
         // Create a new Date object based on the display date to avoid modifying it
-        const newEndDate = new Date(startDate.getTime());
-        newEndDate.setTime(newEndDate.getTime() + diff);
+        const newEndDate = new Date(startDate.getTime() + diff);
 
         return newEndDate;
     }, [event.date, event.endTime, startDate]);
@@ -1496,8 +1497,7 @@ export default function TerminePage() {
                 const originalEventEndDate = event.endTime.toDate();
                 const diff = originalEventEndDate.getTime() - originalEventStartDate.getTime();
                 
-                const newEndDate = new Date(finalEvent.displayDate.getTime());
-                newEndDate.setTime(newEndDate.getTime() + diff);
+                const newEndDate = new Date(finalEvent.displayDate.getTime() + diff);
                 finalEvent.endTime = Timestamp.fromDate(newEndDate);
             }
             
@@ -1506,12 +1506,16 @@ export default function TerminePage() {
                 const originalRsvpDate = event.rsvpDeadline.toDate();
                 const diff = originalRsvpDate.getTime() - originalEventStartDate.getTime();
 
-                const newRsvpDate = new Date(finalEvent.displayDate.getTime());
-                newRsvpDate.setTime(newRsvpDate.getTime() + diff);
+                const newRsvpDate = new Date(finalEvent.displayDate.getTime() + diff);
                 finalEvent.rsvpDeadline = Timestamp.fromDate(newRsvpDate);
             }
 
           weeklyEventsMap.get(dayKey)?.push(finalEvent);
+        }
+
+        if (event.recurrence === 'none') {
+            limit = 0;
+            continue;
         }
 
         switch (event.recurrence) {
