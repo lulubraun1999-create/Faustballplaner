@@ -942,10 +942,7 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, eventTitles, loca
     
     const responsesQuery = useMemo(() => {
         if (!firestore) return null;
-        return query(
-          collection(firestore, 'event_responses'), 
-          where('eventId', '==', event.id)
-        );
+        return query(collection(firestore, 'event_responses'), where('eventId', '==', event.id));
     }, [firestore, event.id]);
     
     const { data: allResponses, isLoading: responsesLoading, error } = useCollection<EventResponse>(responsesQuery);
@@ -1488,18 +1485,16 @@ export default function TerminePage() {
   };
 
   const handleDelete = async (eventToDelete: DisplayEvent) => {
-    if (!firestore || !canEditEvents || !eventToDelete) return;
-
+    if (!firestore || !canEditEvents) return;
     try {
-        const eventDocRef = doc(firestore, 'events', eventToDelete.id);
-        await deleteDoc(eventDocRef);
-        toast({ title: 'Termin gelöscht' });
+      await deleteDoc(doc(firestore, 'events', eventToDelete.id));
+      toast({ title: 'Termin gelöscht' });
     } catch (serverError: any) {
-        toast({
-          variant: "destructive",
-          title: "Fehler beim Löschen",
-          description: serverError.message,
-        });
+      toast({
+        variant: 'destructive',
+        title: 'Fehler beim Löschen',
+        description: serverError.message,
+      });
     }
   };
 
@@ -1662,3 +1657,5 @@ export default function TerminePage() {
     </div>
   );
 }
+
+    
