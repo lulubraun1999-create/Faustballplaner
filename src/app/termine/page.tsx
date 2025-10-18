@@ -539,7 +539,7 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
         const startDate = combineDateAndTime(values.date, values.isAllDay ? undefined : values.startTime);
         dataToSave.date = Timestamp.fromDate(startDate);
         
-        if (values.endTime) {
+        if (values.endTime && !values.isAllDay) {
             const endDate = values.endDate || values.date;
             dataToSave.endTime = Timestamp.fromDate(combineDateAndTime(endDate, values.endTime));
         } else {
@@ -585,7 +585,7 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
             if (values.locationId !== event.locationId) changedValues.locationId = values.locationId;
             // etc for all fields
 
-            const overrideRef = doc(collection(firestore, 'events', event.id, 'overrides'));
+            const overrideRef = doc(collection(firestore, 'event_overrides'));
             await setDoc(overrideRef, { ...overrideData, ...changedValues });
 
         } else {
@@ -943,7 +943,7 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, eventTitles, loca
     const responsesQuery = useMemo(() => {
         if (!firestore) return null;
         // Query for all responses for the event
-        return query(collection(firestore, 'events', event.id, 'responses'));
+        return query(collection(firestore, 'event_responses'), where('eventId', '==', event.id));
     }, [firestore, event.id]);
     
     const { data: allResponses, isLoading: responsesLoading, error } = useCollection<EventResponse>(responsesQuery);
@@ -1060,7 +1060,7 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, eventTitles, loca
     const handleRsvp = (status: 'attending' | 'declined' | 'uncertain') => {
         if (!user || !firestore) return;
 
-        const responseCollectionRef = collection(firestore, 'events', event.id, 'responses');
+        const responseCollectionRef = collection(firestore, 'event_responses');
         
         if (userResponse && userResponse.status === status) {
             // User is toggling off their current status, so delete the response
@@ -1080,7 +1080,7 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, eventTitles, loca
         const eventDateAsTimestamp = Timestamp.fromDate(startOfDay(event.displayDate));
         const responseDocId = userResponse?.id || doc(responseCollectionRef).id;
         
-        const data: Omit<EventResponse, 'id'| 'respondedAt' | 'eventId'> & { respondedAt: any, eventId: string } = {
+        const data: Omit<EventResponse, 'id'| 'respondedAt' > & { respondedAt: any } = {
             userId: user.uid,
             status: status,
             respondedAt: serverTimestamp(),
@@ -1285,12 +1285,8 @@ export default function TerminePage() {
 
   const eventOverridesQuery = useMemo(() => {
     if (!firestore || !eventsData) return null;
-    // This is not efficient, but for now we fetch all overrides.
-    // A better approach would be to query overrides for events visible in the week.
-    const allEventIds = eventsData.map(e => e.id);
+    const allEventIds = eventsData.map(e => e.id).filter(id => id);
     if(allEventIds.length === 0) return null;
-    // Firestore 'in' query supports up to 30 items.
-    // For more, we'd need multiple queries.
     return query(collection(firestore, 'event_overrides'), where('eventId', 'in', allEventIds.slice(0,30)));
   }, [firestore, eventsData]);
   
@@ -1352,12 +1348,6 @@ export default function TerminePage() {
         return selectedTitleIds.includes(event.titleId);
     });
     
-    const adjustDate = (newDate: Date, timeSource: Date) => {
-        const result = new Date(newDate);
-        result.setHours(timeSource.getHours(), timeSource.getMinutes(), timeSource.getSeconds(), timeSource.getMilliseconds());
-        return result;
-    }
-
     const weeklyEventsMap = new Map<string, DisplayEvent[]>();
     const interval = { start: startOfDay(currentWeekStart), end: startOfDay(currentWeekEnd) };
 
@@ -1420,9 +1410,31 @@ export default function TerminePage() {
                     ...(override || {}),
                     // Make sure timestamps from override are used if they exist
                     date: override?.date || event.date,
-                    endTime: override?.endTime || event.endTime,
-                    rsvpDeadline: override?.rsvpDeadline || event.rsvpDeadline
                 };
+                
+                 if (event.endTime) {
+                    const originalEndDate = event.endTime.toDate();
+                    const daysDiff = differenceInDays(originalEndDate, event.date.toDate());
+                    const adjustedEndDateTime = add(displayDate, {
+                      hours: originalEndDate.getHours(),
+                      minutes: originalEndDate.getMinutes(),
+                      seconds: originalEndDate.getSeconds(),
+                      days: daysDiff,
+                    });
+                    finalEvent.endTime = Timestamp.fromDate(adjustedEndDateTime);
+                  }
+                  
+                  if (event.rsvpDeadline) {
+                    const originalRsvpDate = event.rsvpDeadline.toDate();
+                    const daysDiff = differenceInDays(event.date.toDate(), originalRsvpDate);
+                    const adjustedRsvpDateTime = add(displayDate, {
+                      hours: originalRsvpDate.getHours(),
+                      minutes: originalRsvpDate.getMinutes(),
+                      seconds: originalRsvpDate.getSeconds(),
+                      days: -daysDiff,
+                    });
+                     finalEvent.rsvpDeadline = Timestamp.fromDate(adjustedRsvpDateTime);
+                  }
                 
                 weeklyEventsMap.get(dayKey)?.push(finalEvent);
              }
@@ -1457,7 +1469,7 @@ export default function TerminePage() {
   };
 
   const handleDelete = (event: DisplayEvent) => {
-     if (!firestore) return;
+     if (!firestore || !canEditEvents) return;
     setIsDeleting(true);
     const eventDocRef = doc(firestore, 'events', event.id);
     deleteDoc(eventDocRef)

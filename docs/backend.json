@@ -695,19 +695,19 @@
         }
       },
       {
-        "path": "/events/{eventId}/overrides/{overrideId}",
+        "path": "/event_overrides/{overrideId}",
         "definition": {
           "entityName": "EventOverride",
           "schema": { "$ref": "#/backend/entities/EventOverride" },
-          "description": "Subcollection for overrides of specific instances of a recurring event."
+          "description": "Top-level collection for overrides of specific instances of a recurring event."
         }
       },
        {
-        "path": "/events/{eventId}/responses/{responseId}",
+        "path": "/event_responses/{responseId}",
         "definition": {
           "entityName": "EventResponse",
           "schema": { "$ref": "#/backend/entities/EventResponse" },
-          "description": "Subcollection for RSVP responses to a specific event."
+          "description": "Top-level collection for RSVP responses to a specific event."
         }
       },
        {

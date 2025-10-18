@@ -20,6 +20,8 @@ import {
   isWithinInterval,
   isSameMonth,
   startOfDay,
+  add,
+  differenceInDays,
 } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -117,7 +119,7 @@ const EventCard = ({ event, allUsers, locations, eventTitles }: { event: Display
 
     const responsesQuery = useMemo(() => {
         if (!event.id || !firestore) return null;
-        return query(collection(firestore, 'events', event.id, 'responses'))
+        return query(collection(firestore, 'event_responses'), where('eventId', '==', event.id))
     }, [firestore, event.id]);
 
     const { data: allResponses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
@@ -135,19 +137,41 @@ const EventCard = ({ event, allUsers, locations, eventTitles }: { event: Display
 
 
     const recurrenceText = getRecurrenceText(event.recurrence);
+    
+    const getAdjustedDate = (baseDate: Date, timeSourceDate: Date): Date => {
+      const newDate = new Date(baseDate);
+      newDate.setHours(timeSourceDate.getHours(), timeSourceDate.getMinutes(), timeSourceDate.getSeconds(), timeSourceDate.getMilliseconds());
+      return newDate;
+    }
+    
     const startDate = event.displayDate;
-    const endDate = event.endTime?.toDate();
+    
+    const endDate = useMemo(() => {
+        if (!event.endTime) return undefined;
+        const originalEndDate = event.endTime.toDate();
+        let adjustedEndDate = getAdjustedDate(startDate, originalEndDate);
+
+        // Handle overnight events
+        if (adjustedEndDate < startDate) {
+            adjustedEndDate = add(adjustedEndDate, { days: 1 });
+        }
+        
+        // Handle multi-day events by checking the date part of original start and end
+        const originalStartDate = event.date.toDate();
+        const dateDiff = differenceInDays(originalEndDate, originalStartDate);
+        if (dateDiff > 0) {
+            adjustedEndDate = add(adjustedEndDate, { days: dateDiff });
+        }
+        
+        return adjustedEndDate;
+    }, [event.date, event.endTime, startDate]);
+
 
     let timeString;
     if (event.isAllDay) {
         timeString = "Ganztägig";
     } else if (endDate) {
-        const adjustedEndDate = new Date(startDate);
-        adjustedEndDate.setHours(endDate.getHours(), endDate.getMinutes());
-         if (adjustedEndDate < startDate) {
-            adjustedEndDate.setDate(adjustedEndDate.getDate() + 1);
-        }
-        timeString = `${format(startDate, 'HH:mm')} - ${format(adjustedEndDate, 'HH:mm')} Uhr`;
+        timeString = `${format(startDate, 'HH:mm')} - ${format(endDate, 'HH:mm')} Uhr`;
     } else {
         timeString = `${format(startDate, 'HH:mm')} Uhr`;
     }
@@ -186,7 +210,7 @@ const EventCard = ({ event, allUsers, locations, eventTitles }: { event: Display
     const handleRsvp = (status: 'attending' | 'declined' | 'uncertain') => {
         if (!user || !firestore) return;
 
-        const responseCollectionRef = collection(firestore, 'events', event.id, 'responses');
+        const responseCollectionRef = collection(firestore, 'event_responses');
         
         if (userResponse && userResponse.status === status) {
             // User is toggling off their current status, so delete the response
@@ -206,7 +230,7 @@ const EventCard = ({ event, allUsers, locations, eventTitles }: { event: Display
         const eventDateAsTimestamp = Timestamp.fromDate(startOfDay(event.displayDate));
         const responseDocId = userResponse?.id || doc(responseCollectionRef).id;
         
-        const data: Omit<EventResponse, 'id'| 'respondedAt' | 'eventId'> & { respondedAt: any, eventId: string } = {
+        const data: Omit<EventResponse, 'id'| 'respondedAt'> & { respondedAt: any } = {
             userId: user.uid,
             status: status,
             respondedAt: serverTimestamp(),
@@ -490,7 +514,33 @@ export default function KalenderPage() {
         }
 
         if (isWithinInterval(currentDate, interval)) {
-             visibleEvents.push({ ...event, displayDate: currentDate });
+             const displayDate = new Date(currentDate);
+             const finalEvent = { ...event, displayDate };
+
+              if (event.endTime) {
+                const originalEndDate = event.endTime.toDate();
+                const daysDiff = differenceInDays(originalEndDate, event.date.toDate());
+                const adjustedEndDateTime = add(displayDate, {
+                  hours: originalEndDate.getHours(),
+                  minutes: originalEndDate.getMinutes(),
+                  seconds: originalEndDate.getSeconds(),
+                  days: daysDiff,
+                });
+                finalEvent.endTime = Timestamp.fromDate(adjustedEndDateTime);
+              }
+              
+              if (event.rsvpDeadline) {
+                const originalRsvpDate = event.rsvpDeadline.toDate();
+                const daysDiff = differenceInDays(event.date.toDate(), originalRsvpDate);
+                const adjustedRsvpDateTime = add(displayDate, {
+                  hours: originalRsvpDate.getHours(),
+                  minutes: originalRsvpDate.getMinutes(),
+                  seconds: originalRsvpDate.getSeconds(),
+                  days: -daysDiff,
+                });
+                 finalEvent.rsvpDeadline = Timestamp.fromDate(adjustedRsvpDateTime);
+              }
+             visibleEvents.push(finalEvent);
         }
 
         switch (event.recurrence) {
@@ -651,6 +701,7 @@ export default function KalenderPage() {
     </div>
   );
 }
+
 
 
 
