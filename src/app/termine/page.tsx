@@ -19,7 +19,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { PlusCircle, Trash2, Loader2, CalendarIcon, Edit, Clock, MapPin, Users, Repeat, ChevronLeft, ChevronRight, Check, XIcon, HelpCircle } from 'lucide-react';
+import { PlusCircle, Trash2, Loader2, CalendarIcon, Edit, Clock, MapPin, Users, Repeat, ChevronLeft, ChevronRight, Check, XIcon, HelpCircle, Ban } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, add, startOfWeek, eachDayOfInterval, isSameDay, startOfDay, addWeeks, isWithinInterval, getDay, differenceInDays } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -55,19 +55,6 @@ interface Event {
   createdAt: Timestamp;
 }
 
-interface DisplayEvent extends Event {
-  displayDate: Date;
-}
-
-interface EventResponse {
-    id: string;
-    eventId: string;
-    userId: string;
-    eventDate: Timestamp;
-    status: 'attending' | 'declined' | 'uncertain';
-    respondedAt: Timestamp;
-}
-
 interface EventOverride {
   id: string;
   eventId: string;
@@ -85,6 +72,20 @@ interface EventOverride {
   updatedAt?: Timestamp;
 }
 
+interface DisplayEvent extends Event {
+  displayDate: Date;
+  isCancelled?: boolean;
+}
+
+
+interface EventResponse {
+    id: string;
+    eventId: string;
+    userId: string;
+    eventDate: Timestamp;
+    status: 'attending' | 'declined' | 'uncertain';
+    respondedAt: Timestamp;
+}
 
 interface GroupMember {
   id: string;
@@ -532,8 +533,6 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
             locationId: values.locationId || '',
             meetingPoint: values.meetingPoint || '',
             description: values.description || '',
-            createdBy: event?.createdBy || user.uid,
-            createdAt: event ? event.createdAt : serverTimestamp(),
         };
 
         const startDate = combineDateAndTime(values.date, values.isAllDay ? undefined : values.startTime);
@@ -560,36 +559,32 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
 
 
         if (event && mode === 'single') {
-            // Create an override for a single instance of a recurring event
-            const overrideData: Partial<EventOverride> = {
+             // Create an override for a single instance of a recurring event
+            const overrideData = {
                 eventId: event.id,
                 originalDate: Timestamp.fromDate(event.displayDate),
                 updatedAt: serverTimestamp(),
+                titleId: values.titleId,
+                date: dataToSave.date,
+                endTime: dataToSave.endTime,
+                isAllDay: values.isAllDay,
+                targetTeamIds: values.targetTeamIds,
+                rsvpDeadline: dataToSave.rsvpDeadline,
+                locationId: values.locationId,
+                meetingPoint: values.meetingPoint,
+                description: values.description,
             };
-
-            const changedValues: Partial<EventOverride> = {};
-            const originalEventDate = event.date.toDate();
-
-            const newStartDate = combineDateAndTime(values.date, values.startTime);
-            if (newStartDate.getTime() !== originalEventDate.getTime()) {
-                changedValues.date = Timestamp.fromDate(newStartDate);
-            }
-             if (values.endTime && values.endDate) {
-                const newEndDate = combineDateAndTime(values.endDate, values.endTime);
-                if (newEndDate.getTime() !== event.endTime?.toDate().getTime()) {
-                    changedValues.endTime = Timestamp.fromDate(newEndDate);
-                }
-            }
-            // Add other fields to compare...
-            if (values.titleId !== event.titleId) changedValues.titleId = values.titleId;
-            if (values.locationId !== event.locationId) changedValues.locationId = values.locationId;
-            // etc for all fields
-
+            
             const overrideRef = doc(collection(firestore, 'event_overrides'));
-            await setDoc(overrideRef, { ...overrideData, ...changedValues });
+            await setDoc(overrideRef, overrideData);
 
         } else {
-            // Create a new event or update all future events
+            const finalData = {
+                ...dataToSave,
+                createdBy: event?.createdBy || user.uid,
+                createdAt: event?.createdAt || serverTimestamp(),
+            };
+            
             let promise;
             if (event) {
                 if(mode === 'future') {
@@ -599,12 +594,17 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
                     const oldEventRef = doc(firestore, 'events', event.id);
                     const newRecurrenceEndDate = add(event.displayDate, { days: -1 });
                     await updateDoc(oldEventRef, { recurrenceEndDate: Timestamp.fromDate(newRecurrenceEndDate) });
-                    promise = addDoc(collection(firestore, 'events'), dataToSave);
+
+                    // The new series starts on the day of the edited instance
+                    const newSeriesStartDate = combineDateAndTime(event.displayDate, values.startTime);
+                    finalData.date = Timestamp.fromDate(newSeriesStartDate);
+
+                    promise = addDoc(collection(firestore, 'events'), finalData);
                 } else {
                      promise = updateDoc(doc(firestore, 'events', event.id), dataToSave);
                 }
             } else {
-                promise = addDoc(collection(firestore, 'events'), dataToSave);
+                promise = addDoc(collection(firestore, 'events'), finalData);
             }
             await promise;
         }
@@ -934,7 +934,7 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
   );
 }
 
-const EventCard = ({ event, allUsers, teams, onEdit, onDelete, eventTitles, locations, canEdit }: { event: DisplayEvent; allUsers: GroupMember[]; teams: Team[], onEdit: (event: DisplayEvent) => void; onDelete: (event: DisplayEvent) => void, eventTitles: EventTitle[], locations: Location[], canEdit: boolean }) => {
+const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, eventTitles, locations, canEdit }: { event: DisplayEvent; allUsers: GroupMember[]; teams: Team[], onEdit: (event: DisplayEvent) => void; onDelete: (event: DisplayEvent) => void; onCancel: (event: DisplayEvent) => void; eventTitles: EventTitle[], locations: Location[], canEdit: boolean }) => {
     const { user } = useUser();
     const firestore = useFirestore();
     const {toast} = useToast();
@@ -1028,6 +1028,7 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, eventTitles, loca
     
     const getEventTitle = () => {
         const titleName = eventTitles.find(t => t.id === event.titleId)?.name || 'Unbekannter Termin';
+        if (event.isCancelled) return `ABGESAGT: ${titleName}`;
         if (!event.targetTeamIds || event.targetTeamIds.length === 0) {
             return titleName;
         }
@@ -1057,7 +1058,7 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, eventTitles, loca
     }, [responsesForThisInstance, allUsers]);
 
     const handleRsvp = (status: 'attending' | 'declined' | 'uncertain') => {
-        if (!user || !firestore) return;
+        if (!user || !firestore || event.isCancelled) return;
 
         const responseCollectionRef = collection(firestore, 'event_responses');
         
@@ -1107,13 +1108,32 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, eventTitles, loca
 
 
     return (
-        <Card key={event.id}>
+        <Card key={event.id} className={cn(event.isCancelled && "bg-destructive/10 border-destructive/30")}>
             <CardHeader>
                  <div className="flex justify-between items-start">
-                    <CardTitle>{getEventTitle()}</CardTitle>
+                    <CardTitle className={cn(event.isCancelled && "text-destructive")}>{getEventTitle()}</CardTitle>
                     {canEdit && (
                         <div className="flex items-center">
-                            <Button variant="ghost" size="icon" onClick={() => onEdit(event)}><Edit className="h-4 w-4"/></Button>
+                            {!event.isCancelled && <Button variant="ghost" size="icon" onClick={() => onEdit(event)}><Edit className="h-4 w-4"/></Button>}
+                            {isRecurring && !event.isCancelled && (
+                                <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="hover:bg-amber-500/10 hover:text-amber-600"><Ban className="h-4 w-4" /></Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                            <AlertDialogTitle>Nur diesen Termin absagen?</AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                                Diese Aktion kann nicht rückgängig gemacht werden. Dadurch wird nur dieser eine Termin am {format(event.displayDate, "dd.MM.yyyy")} abgesagt. Die Serie bleibt bestehen.
+                                            </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                                            <AlertDialogAction onClick={() => onCancel(event)} className="bg-amber-500 hover:bg-amber-600">Ja, nur diesen Termin absagen</AlertDialogAction>
+                                        </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                </AlertDialog>
+                            )}
                             <AlertDialog>
                                 <AlertDialogTrigger asChild>
                                     <Button variant="ghost" size="icon" className="hover:bg-destructive/10 hover:text-destructive"><Trash2 className="h-4 w-4" /></Button>
@@ -1134,7 +1154,7 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, eventTitles, loca
                         </div>
                     )}
                 </div>
-                 <div className="text-sm text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:flex-wrap gap-x-4 gap-y-1 pt-1">
+                 <div className={cn("text-sm text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:flex-wrap gap-x-4 gap-y-1 pt-1", event.isCancelled && "text-destructive/80")}>
                     <div className="flex items-center gap-1.5">
                         <Clock className="h-4 w-4 flex-shrink-0" />
                         <span>{timeString}</span>
@@ -1158,92 +1178,94 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, eventTitles, loca
                         </div>
                     )}
                     {recurrenceText && (
-                        <Badge variant="outline" className="flex items-center gap-1.5 w-fit mt-1 sm:mt-0">
+                        <Badge variant="outline" className={cn("flex items-center gap-1.5 w-fit mt-1 sm:mt-0", event.isCancelled && "border-destructive/30 text-destructive")}>
                             <Repeat className="h-3 w-3" />
                             <span>{recurrenceText}</span>
                         </Badge>
                     )}
                 </div>
             </CardHeader>
-            {(event.description || event.meetingPoint) && (
+            {(event.description || event.meetingPoint) && !event.isCancelled && (
                 <CardContent className="space-y-2">
                     {event.meetingPoint && <p className="text-sm"><span className="font-semibold">Treffpunkt:</span> {event.meetingPoint}</p>}
                     {event.description && <p className="text-sm whitespace-pre-wrap">{event.description}</p>}
                 </CardContent>
             )}
-             <CardFooter className="flex-col sm:flex-row items-start sm:items-center sm:justify-between gap-4">
-                 <Popover>
-                    <PopoverTrigger asChild>
-                         <Button variant="link" className="p-0 h-auto text-muted-foreground" disabled={responsesLoading || (attendingCount === 0 && declinedCount === 0 && uncertainCount === 0)}>
-                             {responsesLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Users className="h-4 w-4 mr-2" />}
-                             { error ? <span className="text-destructive">Fehler beim Laden</span> : 
-                                <span className="flex gap-2">
-                                    <span className="text-green-600">{attendingCount} Zusagen</span>
-                                    <span className="text-red-600">{declinedCount} Absagen</span>
-                                    {uncertainCount > 0 && <span className="text-yellow-600">{uncertainCount} Unsicher</span>}
-                                </span>
-                             }
-                         </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-64">
-                        <div className="space-y-4">
-                            <div>
-                                <h4 className="font-semibold text-sm mb-2">Zusagen ({attendees.length})</h4>
-                                {attendees.length > 0 ? (
-                                    <ul className="list-disc list-inside text-sm space-y-1">
-                                        {attendees.map((name, i) => <li key={i}>{name}</li>)}
-                                    </ul>
-                                ) : <p className="text-xs text-muted-foreground">Noch keine Zusagen.</p>}
+             {!event.isCancelled && (
+                <CardFooter className="flex-col sm:flex-row items-start sm:items-center sm:justify-between gap-4">
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Button variant="link" className="p-0 h-auto text-muted-foreground" disabled={responsesLoading || (attendingCount === 0 && declinedCount === 0 && uncertainCount === 0)}>
+                                {responsesLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Users className="h-4 w-4 mr-2" />}
+                                { error ? <span className="text-destructive">Fehler beim Laden</span> : 
+                                    <span className="flex gap-2">
+                                        <span className="text-green-600">{attendingCount} Zusagen</span>
+                                        <span className="text-red-600">{declinedCount} Absagen</span>
+                                        {uncertainCount > 0 && <span className="text-yellow-600">{uncertainCount} Unsicher</span>}
+                                    </span>
+                                }
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-64">
+                            <div className="space-y-4">
+                                <div>
+                                    <h4 className="font-semibold text-sm mb-2">Zusagen ({attendees.length})</h4>
+                                    {attendees.length > 0 ? (
+                                        <ul className="list-disc list-inside text-sm space-y-1">
+                                            {attendees.map((name, i) => <li key={i}>{name}</li>)}
+                                        </ul>
+                                    ) : <p className="text-xs text-muted-foreground">Noch keine Zusagen.</p>}
+                                </div>
+                                <div>
+                                    <h4 className="font-semibold text-sm mb-2">Unsicher ({uncertains.length})</h4>
+                                    {uncertains.length > 0 ? (
+                                        <ul className="list-disc list-inside text-sm space-y-1">
+                                            {uncertains.map((name, i) => <li key={i}>{name}</li>)}
+                                        </ul>
+                                    ) : <p className="text-xs text-muted-foreground">Keine unsicheren Antworten.</p>}
+                                </div>
+                                <div>
+                                    <h4 className="font-semibold text-sm mb-2">Absagen ({decliners.length})</h4>
+                                    {decliners.length > 0 ? (
+                                        <ul className="list-disc list-inside text-sm space-y-1">
+                                            {decliners.map((name, i) => <li key={i}>{name}</li>)}
+                                        </ul>
+                                    ) : <p className="text-xs text-muted-foreground">Noch keine Absagen.</p>}
+                                </div>
                             </div>
-                            <div>
-                                <h4 className="font-semibold text-sm mb-2">Unsicher ({uncertains.length})</h4>
-                                {uncertains.length > 0 ? (
-                                    <ul className="list-disc list-inside text-sm space-y-1">
-                                        {uncertains.map((name, i) => <li key={i}>{name}</li>)}
-                                    </ul>
-                                ) : <p className="text-xs text-muted-foreground">Keine unsicheren Antworten.</p>}
-                            </div>
-                             <div>
-                                <h4 className="font-semibold text-sm mb-2">Absagen ({decliners.length})</h4>
-                                {decliners.length > 0 ? (
-                                    <ul className="list-disc list-inside text-sm space-y-1">
-                                        {decliners.map((name, i) => <li key={i}>{name}</li>)}
-                                    </ul>
-                                ) : <p className="text-xs text-muted-foreground">Noch keine Absagen.</p>}
-                            </div>
-                        </div>
-                    </PopoverContent>
-                </Popover>
+                        </PopoverContent>
+                    </Popover>
 
-                <div className="flex items-center gap-2">
-                    <Button 
-                        size="sm"
-                        variant={userResponse?.status === 'attending' ? 'default' : 'outline'}
-                        onClick={() => handleRsvp('attending')}
-                        className={cn(userResponse?.status === 'attending' && 'bg-green-600 hover:bg-green-700')}
-                    >
-                        <Check className="mr-2 h-4 w-4" />
-                        Zusagen
-                    </Button>
-                     <Button 
-                        size="sm"
-                        variant={userResponse?.status === 'uncertain' ? 'secondary' : 'outline'}
-                        onClick={() => handleRsvp('uncertain')}
-                        className={cn(userResponse?.status === 'uncertain' && 'bg-yellow-500 hover:bg-yellow-600 text-black')}
-                    >
-                        <HelpCircle className="mr-2 h-4 w-4" />
-                        Unsicher
-                    </Button>
-                    <Button 
-                        size="sm"
-                        variant={userResponse?.status === 'declined' ? 'destructive' : 'outline'}
-                        onClick={() => handleRsvp('declined')}
-                    >
-                        <XIcon className="mr-2 h-4 w-4" />
-                        Absagen
-                    </Button>
-                </div>
-            </CardFooter>
+                    <div className="flex items-center gap-2">
+                        <Button 
+                            size="sm"
+                            variant={userResponse?.status === 'attending' ? 'default' : 'outline'}
+                            onClick={() => handleRsvp('attending')}
+                            className={cn(userResponse?.status === 'attending' && 'bg-green-600 hover:bg-green-700')}
+                        >
+                            <Check className="mr-2 h-4 w-4" />
+                            Zusagen
+                        </Button>
+                        <Button 
+                            size="sm"
+                            variant={userResponse?.status === 'uncertain' ? 'secondary' : 'outline'}
+                            onClick={() => handleRsvp('uncertain')}
+                            className={cn(userResponse?.status === 'uncertain' && 'bg-yellow-500 hover:bg-yellow-600 text-black')}
+                        >
+                            <HelpCircle className="mr-2 h-4 w-4" />
+                            Unsicher
+                        </Button>
+                        <Button 
+                            size="sm"
+                            variant={userResponse?.status === 'declined' ? 'destructive' : 'outline'}
+                            onClick={() => handleRsvp('declined')}
+                        >
+                            <XIcon className="mr-2 h-4 w-4" />
+                            Absagen
+                        </Button>
+                    </div>
+                </CardFooter>
+             )}
         </Card>
     );
 };
@@ -1311,7 +1333,6 @@ export default function TerminePage() {
 
   const eventOverridesQuery = useMemo(() => {
     if (!firestore) return null;
-    // This could be improved by filtering for overrides in the current view
     return query(collection(firestore, 'event_overrides'));
   }, [firestore]);
   
@@ -1359,18 +1380,18 @@ export default function TerminePage() {
     }));
   }, [categories, teams]);
   
-  const eventsForWeek = useMemo(() => {
-    if (!localEvents) return new Map();
+ const eventsForWeek = useMemo(() => {
+    if (!localEvents || !overridesData) return new Map<string, DisplayEvent[]>();
 
     const filteredByTeam = localEvents.filter(event => {
-        if (selectedTeamIds.length === 0) return true;
-        if (!event.targetTeamIds || event.targetTeamIds.length === 0) return true;
-        return event.targetTeamIds.some(id => selectedTeamIds.includes(id));
+      if (selectedTeamIds.length === 0) return true;
+      if (!event.targetTeamIds || event.targetTeamIds.length === 0) return true;
+      return event.targetTeamIds.some(id => selectedTeamIds.includes(id));
     });
 
     const filteredByTitle = filteredByTeam.filter(event => {
-        if (selectedTitleIds.length === 0) return true;
-        return selectedTitleIds.includes(event.titleId);
+      if (selectedTitleIds.length === 0) return true;
+      return selectedTitleIds.includes(event.titleId);
     });
     
     const weeklyEventsMap = new Map<string, DisplayEvent[]>();
@@ -1380,7 +1401,6 @@ export default function TerminePage() {
       const originalStartDate = event.date.toDate();
       const recurrenceEndDate = event.recurrenceEndDate?.toDate();
 
-      // Handle non-recurring events
       if (event.recurrence === 'none' || !event.recurrence) {
         if (isWithinInterval(originalStartDate, interval)) {
           const dayKey = format(originalStartDate, 'yyyy-MM-dd');
@@ -1390,90 +1410,62 @@ export default function TerminePage() {
         continue;
       }
       
-      // Handle recurring events
       let currentDate = originalStartDate;
-      let limit = 100; // Safety break
+      let limit = 200; // Safety break for while loops
       
-      // Fast-forward to the current week's interval if the event starts before
-      while(currentDate < interval.start && limit > 0) {
-          if (recurrenceEndDate && currentDate > recurrenceEndDate) {
-            limit = 0; // Stop if the recurrence end date is passed
-            continue;
-          }
-           switch (event.recurrence) {
-            case 'weekly': currentDate = addWeeks(currentDate, 1); break;
-            case 'biweekly': currentDate = addWeeks(currentDate, 2); break;
-            case 'monthly': currentDate = add(currentDate, { months: 1 }); break;
-            default: limit = 0; break;
-           }
-           limit--;
+      while (currentDate < interval.start && limit > 0) {
+        if (recurrenceEndDate && currentDate > recurrenceEndDate) {
+          limit = 0;
+          continue;
+        }
+        switch (event.recurrence) {
+          case 'weekly': currentDate = addWeeks(currentDate, 1); break;
+          case 'biweekly': currentDate = addWeeks(currentDate, 2); break;
+          case 'monthly': currentDate = add(currentDate, { months: 1 }); break;
+          default: limit = 0; break;
+        }
+        limit--;
       }
 
-      limit = 100; // Reset limit
+      limit = 100;
       while (currentDate <= interval.end && limit > 0) {
-        // Stop if recurrence end date is passed
         if (recurrenceEndDate && currentDate > recurrenceEndDate) {
-            limit = 0;
-            continue;
+          limit = 0;
+          continue;
         }
         
         if (isWithinInterval(currentDate, interval)) {
-             const dayKey = format(currentDate, 'yyyy-MM-dd');
-             if (!weeklyEventsMap.has(dayKey)) weeklyEventsMap.set(dayKey, []);
+          const dayKey = format(currentDate, 'yyyy-MM-dd');
+          if (!weeklyEventsMap.has(dayKey)) weeklyEventsMap.set(dayKey, []);
 
-             // Check for overrides
-             const override = overridesData?.find(o => o.eventId === event.id && isSameDay(o.originalDate.toDate(), currentDate));
-             if(override && override.isCancelled) {
-                // don't add this instance
-             } else {
-                 const displayDate = override?.date ? override.date.toDate() : currentDate;
-                 
-                 const finalEvent: DisplayEvent = {
-                    ...event,
-                    id: event.id, // Ensure original event ID is kept
-                    displayDate: displayDate,
-                    ...(override || {}),
-                    // Make sure timestamps from override are used if they exist
-                    date: override?.date || event.date,
-                };
-                
-                if (finalEvent.endTime) {
-                    const originalEndDate = finalEvent.endTime.toDate();
-                    let adjustedEndDate = new Date(displayDate);
-                    adjustedEndDate.setHours(originalEndDate.getHours(), originalEndDate.getMinutes(), originalEndDate.getSeconds());
-                     if (adjustedEndDate < displayDate) {
-                        adjustedEndDate = add(adjustedEndDate, { days: 1 });
-                    }
-                    const daysDiff = differenceInDays(originalEndDate, finalEvent.date.toDate());
-                     if(daysDiff > 0) {
-                       adjustedEndDate = add(adjustedEndDate, {days: daysDiff});
-                    }
-                    finalEvent.endTime = Timestamp.fromDate(adjustedEndDate);
-                }
-
-                if (finalEvent.rsvpDeadline) {
-                    const originalRsvpDate = finalEvent.rsvpDeadline.toDate();
-                    const daysDiff = differenceInDays(finalEvent.date.toDate(), originalRsvpDate);
-                    let adjustedRsvpDate = new Date(displayDate);
-                    adjustedRsvpDate.setHours(originalRsvpDate.getHours(), originalRsvpDate.getMinutes(), originalRsvpDate.getSeconds());
-                    adjustedRsvpDate = add(adjustedRsvpDate, {days: -daysDiff});
-                    finalEvent.rsvpDeadline = Timestamp.fromDate(adjustedRsvpDate);
-                }
-                
-                weeklyEventsMap.get(dayKey)?.push(finalEvent);
-             }
+          const override = overridesData.find(o => o.eventId === event.id && isSameDay(o.originalDate.toDate(), currentDate));
+          
+          let finalEvent: DisplayEvent;
+          if (override) {
+            finalEvent = {
+              ...event,
+              ...override,
+              id: event.id, // Keep original event ID for keying
+              displayDate: override.date ? override.date.toDate() : currentDate,
+              isCancelled: override.isCancelled,
+            };
+          } else {
+            finalEvent = { ...event, displayDate: currentDate };
+          }
+          
+          weeklyEventsMap.get(dayKey)?.push(finalEvent);
         }
 
         switch (event.recurrence) {
-            case 'weekly': currentDate = addWeeks(currentDate, 1); break;
-            case 'biweekly': currentDate = addWeeks(currentDate, 2); break;
-            case 'monthly': currentDate = add(currentDate, { months: 1 }); break;
-            default: limit = 0; break;
+          case 'weekly': currentDate = addWeeks(currentDate, 1); break;
+          case 'biweekly': currentDate = addWeeks(currentDate, 2); break;
+          case 'monthly': currentDate = add(currentDate, { months: 1 }); break;
+          default: limit = 0; break;
         }
         limit--;
       }
     }
-     // Sort events within each day
+    
     weeklyEventsMap.forEach((dayEvents) => {
         dayEvents.sort((a, b) => a.displayDate.getTime() - b.displayDate.getTime());
     });
@@ -1492,20 +1484,53 @@ export default function TerminePage() {
     setSelectedEvent(undefined);
   };
 
-  const handleDelete = (eventToDelete: DisplayEvent) => {
-    if (!firestore || !canEditEvents) {
-      toast({ variant: 'destructive', title: 'Keine Berechtigung' });
-      return;
-    }
+ const handleDelete = (eventToDelete: DisplayEvent) => {
+    if (!firestore || !canEditEvents) return;
+    
     const eventDocRef = doc(firestore, 'events', eventToDelete.id);
+    
+    // Optimistic UI update
+    setLocalEvents(prev => prev ? prev.filter(e => e.id !== eventToDelete.id) : null);
+    
+    toast({ title: 'Termin wird gelöscht...' });
+    
+    deleteDoc(eventDocRef)
+      .then(() => {
+        toast({ title: 'Termin erfolgreich gelöscht' });
+      })
+      .catch((err) => {
+        // Revert optimistic update on error
+        setLocalEvents(eventsData); 
+        toast({
+          variant: 'destructive',
+          title: 'Fehler beim Löschen',
+          description: err.message,
+        });
+      });
+  };
 
-    setLocalEvents((prevEvents) =>
-      prevEvents ? prevEvents.filter((e) => e.id !== eventToDelete.id) : null
-    );
+  const handleCancelSingleEvent = async (eventToCancel: DisplayEvent) => {
+    if (!firestore || !canEditEvents) return;
 
-    deleteDoc(eventDocRef);
+    const overrideData = {
+        eventId: eventToCancel.id,
+        originalDate: Timestamp.fromDate(eventToCancel.displayDate),
+        isCancelled: true,
+        updatedAt: serverTimestamp(),
+    };
 
-    toast({ title: 'Termin gelöscht' });
+    const overrideRef = doc(collection(firestore, 'event_overrides'));
+    
+    try {
+        await setDoc(overrideRef, overrideData);
+        toast({ title: 'Termin abgesagt' });
+    } catch (serverError: any) {
+        toast({
+            variant: "destructive",
+            title: "Fehler beim Absagen",
+            description: serverError.message
+        });
+    }
   };
 
 
@@ -1548,6 +1573,7 @@ export default function TerminePage() {
                                         teams={teams || []}
                                         onEdit={handleOpenForm}
                                         onDelete={handleDelete}
+                                        onCancel={handleCancelSingleEvent}
                                         eventTitles={eventTitles || []}
                                         locations={locations || []}
                                         canEdit={!!canEditEvents}
@@ -1667,3 +1693,4 @@ export default function TerminePage() {
     </div>
   );
 }
+
