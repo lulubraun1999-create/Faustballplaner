@@ -1110,7 +1110,7 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, onReact
 
     const isRecurring = event.recurrence && event.recurrence !== 'none';
     const deleteMessage = isRecurring
-        ? `Diese Aktion kann nicht rückgängig gemacht werden. Dadurch wird die gesamte Terminserie "${eventTitles?.find(t => t.id === event?.titleId)?.name || 'Unbenannt'}" und alle zugehörigen Daten dauerhaft gelöscht.`
+        ? `Diese Aktion kann nicht rückgängig gemacht werden. Dadurch wird die gesamte Terminserie "${eventTitles?.find(t => t.id === event?.titleId)?.name || 'Unbenannt'}" und alle zugehörigen Daten dauerhaft gelöscht. Beachten Sie, dass einzelne Änderungen an Terminen in dieser Serie ebenfalls verloren gehen.`
         : `Diese Aktion kann nicht rückgängig gemacht werden. Dadurch wird der Termin "${eventTitles?.find(t => t.id === event?.titleId)?.name || 'Unbenannt'}" und alle zugehörigen Daten dauerhaft gelöscht.`;
 
 
@@ -1467,6 +1467,30 @@ export default function TerminePage() {
             finalEvent = { ...event, displayDate: currentDate };
           }
           
+           if (finalEvent.endTime) {
+              const originalEndDate = finalEvent.endTime.toDate();
+              const daysDiff = differenceInDays(originalEndDate, event.date.toDate());
+              const adjustedEndDateTime = add(finalEvent.displayDate, {
+                hours: originalEndDate.getHours(),
+                minutes: originalEndDate.getMinutes(),
+                seconds: originalEndDate.getSeconds(),
+                days: daysDiff,
+              });
+              finalEvent.endTime = Timestamp.fromDate(adjustedEndDateTime);
+            }
+            
+            if (finalEvent.rsvpDeadline) {
+              const originalRsvpDate = finalEvent.rsvpDeadline.toDate();
+              const daysDiff = differenceInDays(event.date.toDate(), originalRsvpDate);
+              const adjustedRsvpDateTime = add(finalEvent.displayDate, {
+                hours: originalRsvpDate.getHours(),
+                minutes: originalRsvpDate.getMinutes(),
+                seconds: originalRsvpDate.getSeconds(),
+                days: -daysDiff,
+              });
+               finalEvent.rsvpDeadline = Timestamp.fromDate(adjustedRsvpDateTime);
+            }
+
           weeklyEventsMap.get(dayKey)?.push(finalEvent);
         }
 
@@ -1498,18 +1522,21 @@ export default function TerminePage() {
     setSelectedEvent(undefined);
   };
 
-  const handleDelete = async (eventToDelete: DisplayEvent) => {
+  const handleDelete = (eventToDelete: DisplayEvent) => {
     if (!firestore || !canEditEvents) return;
-    try {
-        await deleteDoc(doc(firestore, 'events', eventToDelete.id));
+    const eventDocRef = doc(firestore, 'events', eventToDelete.id);
+    
+    deleteDoc(eventDocRef)
+      .then(() => {
         toast({ title: 'Termin gelöscht' });
-    } catch (serverError: any) {
+      })
+      .catch((serverError: any) => {
         toast({
           variant: "destructive",
           title: "Fehler beim Löschen",
           description: serverError.message,
         });
-    }
+      });
   };
 
   const handleCancelSingleEvent = async (eventToCancel: DisplayEvent) => {
@@ -1741,5 +1768,6 @@ export default function TerminePage() {
     </div>
   );
 }
+
 
 
