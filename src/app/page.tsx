@@ -69,21 +69,21 @@ export default function Home() {
             </Card>
             <Card className="hover:border-primary/80 transition-all">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">Termine</CardTitle>
+                <CardTitle className="text-sm font-medium">Kalender</CardTitle>
                 <CalendarDays className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <p className="text-xs text-muted-foreground">
-                  Infos zu vergangenen und zukünftigen Spielen.
+                  Verwalte und sehe alle anstehenden Termine.
                 </p>
                 <Button size="sm" className="mt-4" asChild>
-                  <Link href="/termine">Zu den Terminen</Link>
+                  <Link href="/kalender">Zum Kalender</Link>
                 </Button>
               </CardContent>
             </Card>
             <Card className="hover:border-primary/80 transition-all">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">Kader</CardTitle>
+                <CardTitle className="text-sm font-medium">Mannschaften</CardTitle>
                 <Users className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>

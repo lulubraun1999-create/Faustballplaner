@@ -46,7 +46,7 @@ export function LoginForm() {
 
   useEffect(() => {
     if (!isUserLoading && user && user.emailVerified) {
-      router.push("/aktuelles");
+      router.push("/");
     }
   }, [user, isUserLoading, router]);
 
@@ -115,7 +115,7 @@ export function LoginForm() {
           title: "Erfolgreich angemeldet",
           description: "Sie werden weitergeleitet.",
         });
-        router.push("/aktuelles");
+        router.push("/");
       } catch (error: any) {
         let description = "Ein unerwarteter Fehler ist aufgetreten.";
         if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
