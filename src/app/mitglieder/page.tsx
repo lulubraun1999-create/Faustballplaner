@@ -159,6 +159,7 @@ export default function MitgliederPage() {
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedFilterTeamId, setSelectedFilterTeamId] = useState('all');
+  const [selectedFilterRole, setSelectedFilterRole] = useState('all');
 
   const currentUserDocRef = useMemo(() => {
     if (!firestore || !authUser) return null;
@@ -200,9 +201,16 @@ export default function MitgliederPage() {
   
   const filteredMembers = useMemo(() => {
     if (!members) return [];
-    if (selectedFilterTeamId === 'all') return members;
-    return members.filter(member => member.teamIds?.includes(selectedFilterTeamId));
-  }, [members, selectedFilterTeamId]);
+    let tempMembers = members;
+    if (selectedFilterTeamId !== 'all') {
+      tempMembers = tempMembers.filter(member => member.teamIds?.includes(selectedFilterTeamId));
+    }
+    if (selectedFilterRole !== 'all') {
+        const isAdmin = selectedFilterRole === 'trainer';
+        tempMembers = tempMembers.filter(member => (member.adminRechte || false) === isAdmin);
+    }
+    return tempMembers;
+  }, [members, selectedFilterTeamId, selectedFilterRole]);
   
   // Action handlers
   const openDeleteAlert = (user: Member) => {
@@ -338,7 +346,7 @@ export default function MitgliederPage() {
     if (members && teams && categories) {
       return (
         <>
-          <div className="flex items-center justify-start mb-4">
+          <div className="flex items-center justify-start gap-4 mb-4">
                 <Select value={selectedFilterTeamId} onValueChange={setSelectedFilterTeamId}>
                     <SelectTrigger className="w-[280px]">
                         <SelectValue placeholder="Nach Mannschaft filtern..." />
@@ -350,6 +358,16 @@ export default function MitgliederPage() {
                                 {team.name}
                             </SelectItem>
                         ))}
+                    </SelectContent>
+                </Select>
+                 <Select value={selectedFilterRole} onValueChange={setSelectedFilterRole}>
+                    <SelectTrigger className="w-[280px]">
+                        <SelectValue placeholder="Nach Rolle filtern..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">Alle Rollen</SelectItem>
+                        <SelectItem value="trainer">Trainer</SelectItem>
+                        <SelectItem value="user">Benutzer</SelectItem>
                     </SelectContent>
                 </Select>
             </div>
@@ -528,3 +546,4 @@ export default function MitgliederPage() {
 }
 
     
+
