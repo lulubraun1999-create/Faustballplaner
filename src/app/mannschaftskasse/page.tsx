@@ -44,10 +44,10 @@ import {
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
+  AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-  AlertDialogFooter,
 } from "@/components/ui/alert-dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from '@/components/ui/input';
@@ -55,7 +55,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Loader2, PlusCircle, Trash2, Edit, TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 // Schemas & Interfaces
@@ -72,10 +71,21 @@ interface Penalty {
 }
 
 const transactionSchema = z.object({
-  type: z.enum(['deposit', 'payout']),
-  amount: z.coerce.number().min(0.01, 'Betrag muss größer als 0 sein.'),
-  description: z.string().min(1, 'Beschreibung ist erforderlich.'),
-  userId: z.string().optional(), // Optional, for member-specific transactions
+  type: z.enum(['deposit', 'payout', 'penalty']),
+  amount: z.coerce.number().min(0.01, 'Betrag muss größer als 0 sein.').optional(),
+  description: z.string().min(1, 'Beschreibung ist erforderlich.').optional(),
+  userId: z.string().min(1, "Es muss ein Mitglied ausgewählt werden."),
+  penaltyId: z.string().optional(),
+}).superRefine((data, ctx) => {
+    if (data.type === 'penalty' && !data.penaltyId) {
+        ctx.addIssue({ code: 'custom', message: 'Bitte eine Strafe aus dem Katalog auswählen.', path: ['penaltyId'] });
+    }
+    if (data.type !== 'penalty' && (!data.amount || data.amount <= 0)) {
+         ctx.addIssue({ code: 'custom', message: 'Betrag muss größer als 0 sein.', path: ['amount'] });
+    }
+     if (data.type !== 'penalty' && !data.description) {
+         ctx.addIssue({ code: 'custom', message: 'Beschreibung ist erforderlich.', path: ['description'] });
+    }
 });
 type TransactionFormValues = z.infer<typeof transactionSchema>;
 
@@ -83,18 +93,12 @@ interface TreasuryTransaction {
   id: string;
   teamId: string;
   userId?: string;
-  type: 'deposit' | 'payout' | 'correction' | 'penalty';
+  type: 'deposit' | 'payout' | 'correction';
   amount: number;
   description: string;
   date: Timestamp;
   recordedBy: string;
 }
-
-const assignPenaltySchema = z.object({
-  memberIds: z.array(z.string()).min(1, 'Es muss mindestens ein Mitglied ausgewählt werden.'),
-  penaltyIds: z.array(z.string()).min(1, 'Es muss mindestens eine Strafe ausgewählt werden.'),
-});
-type AssignPenaltyFormValues = z.infer<typeof assignPenaltySchema>;
 
 interface UserPenalty {
     id: string;
@@ -265,7 +269,7 @@ function PenaltyCatalogManager({ teamId, penalties, penaltiesLoading }: { teamId
   );
 }
 
-function TreasuryManager({ teamId, members, transactions, transactionsLoading }: { teamId: string, members: GroupMember[] | null, transactions: TreasuryTransaction[] | null, transactionsLoading: boolean }) {
+function TreasuryManager({ teamId, members, transactions, penalties, userPenalties, transactionsLoading, userPenaltiesLoading }: { teamId: string, members: GroupMember[] | null, transactions: TreasuryTransaction[] | null, penalties: Penalty[] | null, userPenalties: UserPenalty[] | null, transactionsLoading: boolean, userPenaltiesLoading: boolean }) {
     const firestore = useFirestore();
     const { toast } = useToast();
     const { user } = useUser();
@@ -274,195 +278,73 @@ function TreasuryManager({ teamId, members, transactions, transactionsLoading }:
     const balance = useMemo(() => {
         return transactions?.reduce((acc, t) => acc + t.amount, 0) ?? 0;
     }, [transactions]);
-
+    
     const form = useForm<TransactionFormValues>({
         resolver: zodResolver(transactionSchema),
-        defaultValues: { type: 'deposit', amount: 0, description: '', userId: undefined },
+        defaultValues: { type: 'deposit', userId: '' },
     });
+    
+    const transactionType = form.watch('type');
 
     const onSubmit = async (values: TransactionFormValues) => {
         if (!firestore || !teamId || !user) return;
-        const amount = values.type === 'deposit' ? values.amount : -values.amount;
-
+        
         try {
-            await addDoc(collection(firestore, 'teams', teamId, 'transactions'), {
-                teamId,
-                type: values.type,
-                amount,
-                description: values.description,
-                userId: values.userId || null,
-                date: serverTimestamp(),
-                recordedBy: user.uid,
-            });
-            toast({ title: 'Transaktion gespeichert' });
+            if (values.type === 'penalty') {
+                const penalty = penalties?.find(p => p.id === values.penaltyId);
+                if (!penalty) throw new Error("Ausgewählte Strafe nicht gefunden.");
+
+                await addDoc(collection(firestore, 'user_penalties'), {
+                    userId: values.userId,
+                    teamId: teamId,
+                    penaltyId: penalty.id,
+                    penaltyName: penalty.name,
+                    amount: penalty.amount,
+                    assignedAt: serverTimestamp(),
+                    paid: false,
+                });
+                toast({ title: 'Strafe zugewiesen' });
+            } else {
+                const amount = values.type === 'deposit' ? values.amount : -(values.amount ?? 0);
+                await addDoc(collection(firestore, 'teams', teamId, 'transactions'), {
+                    teamId,
+                    type: values.type,
+                    amount,
+                    description: values.description,
+                    userId: values.userId || null,
+                    date: serverTimestamp(),
+                    recordedBy: user.uid,
+                });
+                toast({ title: 'Transaktion gespeichert' });
+            }
+            
             setIsFormOpen(false);
-            form.reset();
+            form.reset({ type: 'deposit', userId: '' });
         } catch (error: any) {
             toast({ variant: 'destructive', title: 'Fehler', description: error.message });
         }
     };
     
-    return (
-        <Card>
-            <CardHeader>
-                <div className="flex justify-between items-center">
-                    <div>
-                        <CardTitle>Kontostand</CardTitle>
-                        <CardDescription className="text-2xl font-bold">{new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(balance)}</CardDescription>
-                    </div>
-                     <Button variant="outline" onClick={() => setIsFormOpen(true)}>
-                        <PlusCircle className="mr-2 h-4 w-4" /> Zahlung verbuchen
-                    </Button>
-                </div>
-            </CardHeader>
-            <CardContent>
-                 <h3 className="font-semibold mb-2">Transaktionen</h3>
-                 <ScrollArea className="h-72">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Datum</TableHead>
-                                <TableHead>Beschreibung</TableHead>
-                                <TableHead>Mitglied</TableHead>
-                                <TableHead className="text-right">Betrag</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {transactionsLoading ? (
-                                <TableRow><TableCell colSpan={4} className="text-center"><Loader2 className="animate-spin"/></TableCell></TableRow>
-                            ) : transactions?.map(t => {
-                                const member = members?.find(m => m.id === t.userId);
-                                return (
-                                <TableRow key={t.id}>
-                                    <TableCell>{t.date?.toDate ? format(t.date.toDate(), 'dd.MM.yyyy') : '...'}</TableCell>
-                                    <TableCell>{t.description}</TableCell>
-                                    <TableCell>{member ? `${member.vorname} ${member.nachname}` : (t.type === 'correction' ? 'System' : 'Allgemein')}</TableCell>
-                                    <TableCell className={cn("text-right", t.amount > 0 ? 'text-green-600' : 'text-red-600')}>
-                                        {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(t.amount)}
-                                    </TableCell>
-                                </TableRow>
-                            )})
-                            }
-                             {transactions?.length === 0 && !transactionsLoading && (
-                                <TableRow>
-                                <TableCell colSpan={4} className="text-center text-muted-foreground">Keine Transaktionen vorhanden.</TableCell>
-                                </TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
-                </ScrollArea>
-            </CardContent>
-            <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Zahlung verbuchen</DialogTitle>
-                    </DialogHeader>
-                    <Form {...form}>
-                        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                            <FormField name="type" control={form.control} render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Art</FormLabel>
-                                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                        <FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl>
-                                        <SelectContent>
-                                            <SelectItem value="deposit">Einzahlung</SelectItem>
-                                            <SelectItem value="payout">Auszahlung</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </FormItem>
-                            )} />
-                            <FormField name="amount" control={form.control} render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Betrag (€)</FormLabel>
-                                    <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )} />
-                            <FormField name="description" control={form.control} render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Beschreibung</FormLabel>
-                                    <FormControl><Textarea {...field} /></FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )} />
-                             <FormField name="userId" control={form.control} render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Mitglied (optional)</FormLabel>
-                                    <Select onValueChange={field.onChange} value={field.value}>
-                                        <FormControl>
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Allgemeine Transaktion"/>
-                                            </SelectTrigger>
-                                        </FormControl>
-                                        <SelectContent>
-                                            {members?.map(m => <SelectItem key={m.id} value={m.id}>{m.vorname} {m.nachname}</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
-                                </FormItem>
-                            )} />
-                            <DialogFooter>
-                                <DialogClose asChild><Button type="button" variant="outline">Abbrechen</Button></DialogClose>
-                                <Button type="submit">Speichern</Button>
-                            </DialogFooter>
-                        </form>
-                    </Form>
-                </DialogContent>
-            </Dialog>
-        </Card>
-    );
-}
-
-function AssignPenaltiesManager({ teamId, members, penalties, userPenalties, userPenaltiesLoading }: { teamId: string, members: GroupMember[] | null, penalties: Penalty[] | null, userPenalties: UserPenalty[] | null, userPenaltiesLoading: boolean }) {
-    const firestore = useFirestore();
-    const { toast } = useToast();
-    const { user } = useUser();
-    const [isFormOpen, setIsFormOpen] = useState(false);
-
-    const form = useForm<AssignPenaltyFormValues>({
-        resolver: zodResolver(assignPenaltySchema),
-        defaultValues: { memberIds: [], penaltyIds: [] }
-    });
-    
-    const calculateMemberBalance = useCallback((memberId: string) => {
-        if(!userPenalties) return 0;
-        const penaltiesTotal = userPenalties
-            .filter(up => up.userId === memberId && !up.paid)
-            .reduce((sum, up) => sum + up.amount, 0);
-        return penaltiesTotal;
-    }, [userPenalties]);
-
-    const onSubmit = async (values: AssignPenaltyFormValues) => {
-        if (!firestore || !teamId || !user) return;
-        const { memberIds, penaltyIds } = values;
-
-        const batch = writeBatch(firestore);
+    const combinedTransactions = useMemo(() => {
+        const paidTransactions = (transactions || []).map(t => ({...t, isPenalty: false}));
+        const unpaidPenalties = (userPenalties || [])
+            .filter(up => !up.paid)
+            .map(up => ({
+                id: up.id,
+                date: up.assignedAt,
+                description: `Strafe: ${up.penaltyName}`,
+                userId: up.userId,
+                amount: -up.amount,
+                isPenalty: true,
+                teamId: up.teamId,
+                recordedBy: '',
+                type: 'payout' as const,
+            }));
+            
+        return [...paidTransactions, ...unpaidPenalties].sort((a,b) => (b.date?.toDate()?.getTime() || 0) - (a.date?.toDate()?.getTime() || 0));
         
-        for (const memberId of memberIds) {
-            for (const penaltyId of penaltyIds) {
-                const penalty = penalties?.find(p => p.id === penaltyId);
-                if (penalty) {
-                    const userPenaltyRef = doc(collection(firestore, 'user_penalties'));
-                    batch.set(userPenaltyRef, {
-                        userId: memberId,
-                        teamId: teamId,
-                        penaltyId: penalty.id,
-                        penaltyName: penalty.name,
-                        amount: penalty.amount,
-                        assignedAt: serverTimestamp(),
-                        paid: false,
-                    });
-                }
-            }
-        }
-        try {
-            await batch.commit();
-            toast({ title: 'Strafen zugewiesen' });
-            setIsFormOpen(false);
-            form.reset();
-        } catch (error: any) {
-             toast({ variant: 'destructive', title: 'Fehler', description: error.message });
-        }
-    };
+    }, [transactions, userPenalties]);
+    
     
     const markAsPaid = async (userPenaltyId: string) => {
         if (!firestore || !user || !teamId) return;
@@ -492,149 +374,202 @@ function AssignPenaltiesManager({ teamId, members, penalties, userPenalties, use
              toast({ variant: 'destructive', title: 'Fehler', description: error.message });
         }
     };
-
+    
+    
     return (
         <Card>
             <CardHeader>
                 <div className="flex justify-between items-center">
-                    <CardTitle>Strafen verwalten</CardTitle>
-                    <Button variant="outline" onClick={() => setIsFormOpen(true)}>Strafen zuweisen</Button>
+                    <div>
+                        <CardTitle>Kontostand</CardTitle>
+                        <CardDescription className="text-2xl font-bold">{new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(balance)}</CardDescription>
+                    </div>
+                     <Button variant="outline" onClick={() => setIsFormOpen(true)}>
+                        <PlusCircle className="mr-2 h-4 w-4" /> Zahlung verbuchen
+                    </Button>
                 </div>
             </CardHeader>
             <CardContent>
-                <h3 className="font-semibold mb-2">Offene Strafen</h3>
-                <ScrollArea className="h-96">
+                 <h3 className="font-semibold mb-2">Transaktionen & offene Strafen</h3>
+                 <ScrollArea className="h-96">
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead>Mitglied</TableHead>
-                                <TableHead>Strafe</TableHead>
                                 <TableHead>Datum</TableHead>
-                                <TableHead>Betrag</TableHead>
-                                <TableHead className="text-right">Aktion</TableHead>
+                                <TableHead>Beschreibung</TableHead>
+                                <TableHead>Mitglied</TableHead>
+                                <TableHead className="text-right">Betrag</TableHead>
+                                <TableHead className="text-right">Status</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {userPenaltiesLoading ? <TableRow><TableCell colSpan={5} className="text-center"><Loader2 className="animate-spin"/></TableCell></TableRow> :
-                             userPenalties?.filter(up => !up.paid).map(up => {
-                                const member = members?.find(m => m.id === up.userId);
+                            {(transactionsLoading || userPenaltiesLoading) ? (
+                                <TableRow><TableCell colSpan={5} className="text-center"><Loader2 className="animate-spin"/></TableCell></TableRow>
+                            ) : combinedTransactions.map(t => {
+                                const member = members?.find(m => m.id === t.userId);
                                 return (
-                                    <TableRow key={up.id}>
-                                        <TableCell>{member ? `${member.vorname} ${member.nachname}`: 'Unbekannt'}</TableCell>
-                                        <TableCell>{up.penaltyName}</TableCell>
-                                        <TableCell>{up.assignedAt?.toDate ? format(up.assignedAt.toDate(), 'dd.MM.yyyy') : '...'}</TableCell>
-                                        <TableCell>{new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(up.amount)}</TableCell>
-                                        <TableCell className="text-right">
+                                <TableRow key={`${t.id}-${t.isPenalty}`}>
+                                    <TableCell>{t.date?.toDate ? format(t.date.toDate(), 'dd.MM.yyyy') : '...'}</TableCell>
+                                    <TableCell>{t.description}</TableCell>
+                                    <TableCell>{member ? `${member.vorname} ${member.nachname}` : (t.type === 'correction' ? 'System' : 'Allgemein')}</TableCell>
+                                    <TableCell className={cn("text-right", t.amount > 0 ? 'text-green-600' : 'text-red-600')}>
+                                        {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(t.amount)}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        {t.isPenalty ? (
                                             <AlertDialog>
                                                 <AlertDialogTrigger asChild>
-                                                    <Button size="sm">Bezahlt</Button>
+                                                    <Button size="sm" variant="secondary">Offen</Button>
                                                 </AlertDialogTrigger>
                                                 <AlertDialogContent>
                                                     <AlertDialogHeader>
-                                                        <AlertDialogTitle>Wurde diese Strafe wirklich bezahlt?</AlertDialogTitle>
+                                                        <AlertDialogTitle>Strafe als bezahlt markieren?</AlertDialogTitle>
                                                         <AlertDialogDescription>
-                                                            Diese Aktion markiert die Strafe als bezahlt und erstellt eine entsprechende Einzahlung in der Mannschaftskasse.
+                                                          Diese Aktion markiert die Strafe als bezahlt und erstellt eine entsprechende Einzahlung in der Mannschaftskasse.
                                                         </AlertDialogDescription>
                                                     </AlertDialogHeader>
                                                     <AlertDialogFooter>
                                                         <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-                                                        <AlertDialogAction onClick={() => markAsPaid(up.id)}>Ja, bezahlt</AlertDialogAction>
+                                                        <AlertDialogAction onClick={() => markAsPaid(t.id)}>Ja, bezahlt</AlertDialogAction>
                                                     </AlertDialogFooter>
                                                 </AlertDialogContent>
                                             </AlertDialog>
-                                        </TableCell>
-                                    </TableRow>
-                                )
-                             })
+                                        ) : <Badge variant="outline">Bezahlt</Badge>}
+                                    </TableCell>
+                                </TableRow>
+                            )})
                             }
-                             {userPenalties?.filter(up => !up.paid).length === 0 && !userPenaltiesLoading && (
+                             {combinedTransactions?.length === 0 && !(transactionsLoading || userPenaltiesLoading) && (
                                 <TableRow>
-                                <TableCell colSpan={5} className="text-center text-muted-foreground">Keine offenen Strafen.</TableCell>
+                                <TableCell colSpan={5} className="text-center text-muted-foreground">Keine Transaktionen oder Strafen vorhanden.</TableCell>
                                 </TableRow>
                             )}
                         </TableBody>
                     </Table>
                 </ScrollArea>
-                
-                 <h3 className="font-semibold mt-6 mb-2">Salden der Mitglieder</h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {members?.map(member => {
-                        const balance = calculateMemberBalance(member.id);
-                        return (
-                            <Card key={member.id} className={cn(balance > 0 && "border-red-500")}>
-                                <CardHeader className="p-4">
-                                    <CardTitle className="text-base">{member.vorname} {member.nachname}</CardTitle>
-                                    <CardDescription className={cn("text-xl font-bold", balance > 0 ? "text-red-600" : "text-green-600")}>
-                                        {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(-balance)}
-                                    </CardDescription>
-                                </CardHeader>
-                            </Card>
-                        )
-                    })}
-                </div>
-
             </CardContent>
             <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-                <DialogContent className="max-w-2xl">
-                    <DialogHeader><DialogTitle>Strafen zuweisen</DialogTitle></DialogHeader>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Zahlung verbuchen</DialogTitle>
+                    </DialogHeader>
                     <Form {...form}>
-                        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                            <div className="grid grid-cols-2 gap-6">
-                                <FormField control={form.control} name="memberIds" render={({ field }) => (
+                        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                            <FormField name="type" control={form.control} render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Art</FormLabel>
+                                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                        <FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl>
+                                        <SelectContent>
+                                            <SelectItem value="deposit">Einzahlung</SelectItem>
+                                            <SelectItem value="payout">Auszahlung</SelectItem>
+                                            <SelectItem value="penalty">Strafe zuweisen</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </FormItem>
+                            )} />
+                             <FormField name="userId" control={form.control} render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Mitglied</FormLabel>
+                                    <Select onValueChange={field.onChange} value={field.value}>
+                                        <FormControl>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Mitglied auswählen..."/>
+                                            </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                            {members?.map(m => <SelectItem key={m.id} value={m.id}>{m.vorname} {m.nachname}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                </FormItem>
+                            )} />
+                            
+                            {transactionType === 'penalty' && (
+                                <FormField name="penaltyId" control={form.control} render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel>Mitglieder</FormLabel>
-                                        <ScrollArea className="h-60 rounded-md border p-4">
-                                            {members?.map(m => (
-                                                <FormField key={m.id} control={form.control} name="memberIds" render={({ field }) => (
-                                                    <FormItem className="flex items-center gap-2 space-y-0 py-1">
-                                                        <FormControl>
-                                                            <Checkbox
-                                                                checked={field.value?.includes(m.id)}
-                                                                onCheckedChange={(checked) => {
-                                                                    return checked ? field.onChange([...(field.value || []), m.id]) : field.onChange(field.value?.filter(id => id !== m.id))
-                                                                }}
-                                                            />
-                                                        </FormControl>
-                                                        <FormLabel className="font-normal">{m.vorname} {m.nachname}</FormLabel>
-                                                    </FormItem>
-                                                )} />
-                                            ))}
-                                        </ScrollArea>
-                                        <FormMessage/>
+                                        <FormLabel>Strafe aus Katalog</FormLabel>
+                                        <Select onValueChange={field.onChange} value={field.value}>
+                                            <FormControl>
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Strafe auswählen..."/>
+                                                </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent>
+                                                {penalties?.map(p => <SelectItem key={p.id} value={p.id}>{p.name} ({new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(p.amount)})</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
+                                        <FormMessage />
                                     </FormItem>
                                 )} />
-                                <FormField control={form.control} name="penaltyIds" render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Strafen</FormLabel>
-                                        <ScrollArea className="h-60 rounded-md border p-4">
-                                            {penalties?.map(p => (
-                                                 <FormField key={p.id} control={form.control} name="penaltyIds" render={({ field }) => (
-                                                    <FormItem className="flex items-center gap-2 space-y-0 py-1">
-                                                        <FormControl>
-                                                            <Checkbox
-                                                                checked={field.value?.includes(p.id)}
-                                                                onCheckedChange={(checked) => {
-                                                                    return checked ? field.onChange([...(field.value || []), p.id]) : field.onChange(field.value?.filter(id => id !== p.id))
-                                                                }}
-                                                            />
-                                                        </FormControl>
-                                                        <FormLabel className="font-normal">{p.name} ({new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(p.amount)})</FormLabel>
-                                                    </FormItem>
-                                                )} />
-                                            ))}
-                                        </ScrollArea>
-                                        <FormMessage/>
-                                    </FormItem>
-                                )}/>
-                            </div>
+                            )}
+                            
+                            {transactionType !== 'penalty' && (
+                                <>
+                                    <FormField name="amount" control={form.control} render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Betrag (€)</FormLabel>
+                                            <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )} />
+                                    <FormField name="description" control={form.control} render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Beschreibung</FormLabel>
+                                            <FormControl><Textarea {...field} /></FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )} />
+                                </>
+                            )}
+                           
                             <DialogFooter>
-                                <DialogClose asChild><Button variant="outline">Abbrechen</Button></DialogClose>
-                                <Button type="submit">Zuweisen</Button>
+                                <DialogClose asChild><Button type="button" variant="outline">Abbrechen</Button></DialogClose>
+                                <Button type="submit">Speichern</Button>
                             </DialogFooter>
                         </form>
                     </Form>
                 </DialogContent>
             </Dialog>
+        </Card>
+    );
+}
+
+function Balances({ members, userPenalties, userPenaltiesLoading }: { members: GroupMember[] | null, userPenalties: UserPenalty[] | null, userPenaltiesLoading: boolean }) {
+    
+    const calculateMemberBalance = useCallback((memberId: string) => {
+        if(!userPenalties) return 0;
+        const penaltiesTotal = userPenalties
+            .filter(up => up.userId === memberId && !up.paid)
+            .reduce((sum, up) => sum + up.amount, 0);
+        return penaltiesTotal;
+    }, [userPenalties]);
+    
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Salden der Mitglieder</CardTitle>
+                <CardDescription>Summe der offenen Strafen pro Mitglied.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                {userPenaltiesLoading ? <Loader2 className="animate-spin" /> : (
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                        {members?.map(member => {
+                            const balance = calculateMemberBalance(member.id);
+                            return (
+                                <Card key={member.id} className={cn(balance > 0 && "border-red-500")}>
+                                    <CardHeader className="p-4">
+                                        <CardTitle className="text-base">{member.vorname} {member.nachname}</CardTitle>
+                                        <CardDescription className={cn("text-xl font-bold", balance > 0 ? "text-red-600" : "text-green-600")}>
+                                            {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(-balance)}
+                                        </CardDescription>
+                                    </CardHeader>
+                                </Card>
+                            )
+                        })}
+                    </div>
+                )}
+            </CardContent>
         </Card>
     );
 }
@@ -695,7 +630,7 @@ export default function MannschaftskassePage() {
   }, [firestore, selectedTeamId]);
   const { data: userPenalties, isLoading: userPenaltiesLoading } = useCollection<UserPenalty>(userPenaltiesQuery);
 
-  const isLoadingInitial = isUserLoading || teamsLoading;
+  const isLoadingInitial = isUserLoading || teamsLoading || membersLoading;
   
   if (!isUserLoading && userData && !userData.adminRechte) {
        return (
@@ -717,7 +652,7 @@ export default function MannschaftskassePage() {
     <div className="flex min-h-screen w-full flex-col bg-background">
       <Header />
       <main className="flex-1 p-4 md:p-8">
-        <div className="mx-auto max-w-6xl space-y-8">
+        <div className="mx-auto max-w-7xl space-y-8">
            <div className="flex items-center justify-between mb-8">
                 <h1 className="text-3xl font-bold">Mannschaftskasse</h1>
                 {adminTeams && adminTeams.length > 0 && (
@@ -741,13 +676,16 @@ export default function MannschaftskassePage() {
                     <Loader2 className="h-16 w-16 animate-spin text-primary" />
                  </div>
             ) : selectedTeamId ? (
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 items-start">
                     <div className="space-y-8">
                         <TreasuryManager 
                           teamId={selectedTeamId} 
                           members={membersForTeam}
                           transactions={transactions}
+                          penalties={penalties}
+                          userPenalties={userPenalties}
                           transactionsLoading={transactionsLoading}
+                          userPenaltiesLoading={userPenaltiesLoading}
                         />
                        <PenaltyCatalogManager 
                           teamId={selectedTeamId}
@@ -755,10 +693,8 @@ export default function MannschaftskassePage() {
                           penaltiesLoading={penaltiesLoading}
                         />
                     </div>
-                    <AssignPenaltiesManager 
-                      teamId={selectedTeamId} 
+                    <Balances 
                       members={membersForTeam}
-                      penalties={penalties}
                       userPenalties={userPenalties}
                       userPenaltiesLoading={userPenaltiesLoading}
                     />
