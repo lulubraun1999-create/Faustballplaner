@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
@@ -276,7 +275,7 @@ function TreasuryManager({ teamId, members, transactions, transactionsLoading }:
 
     const form = useForm<TransactionFormValues>({
         resolver: zodResolver(transactionSchema),
-        defaultValues: { type: 'deposit', amount: 0, description: '' },
+        defaultValues: { type: 'deposit', amount: 0, description: '', userId: undefined },
     });
 
     const onSubmit = async (values: TransactionFormValues) => {
@@ -289,7 +288,7 @@ function TreasuryManager({ teamId, members, transactions, transactionsLoading }:
                 type: values.type,
                 amount,
                 description: values.description,
-                userId: values.userId,
+                userId: values.userId || null,
                 date: serverTimestamp(),
                 recordedBy: user.uid,
             });
@@ -387,10 +386,9 @@ function TreasuryManager({ teamId, members, transactions, transactionsLoading }:
                              <FormField name="userId" control={form.control} render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>Mitglied (optional)</FormLabel>
-                                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                    <Select onValueChange={field.onChange} value={field.value}>
                                         <FormControl><SelectTrigger><SelectValue placeholder="Allgemeine Transaktion"/></SelectTrigger></FormControl>
                                         <SelectContent>
-                                            <SelectItem value="">Allgemeine Transaktion</SelectItem>
                                             {members?.map(m => <SelectItem key={m.id} value={m.id}>{m.vorname} {m.nachname}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
