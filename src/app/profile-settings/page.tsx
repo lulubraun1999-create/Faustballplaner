@@ -515,14 +515,13 @@ export default function ProfileSettingsPage() {
     <div className="flex min-h-screen w-full flex-col bg-background">
       <Header />
       <main className="flex-1 p-4 md:p-8">
-        <div className="mx-auto max-w-6xl grid grid-cols-1 md:grid-cols-[280px_1fr] gap-8">
-          <aside>
+        <div className="mx-auto max-w-6xl grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-8">
+          <aside className="lg:sticky lg:top-24 self-start">
             <Card>
               <CardHeader>
                 <CardTitle>Menü</CardTitle>
               </CardHeader>
               <CardContent className="grid gap-2">
-                <Button variant="ghost" className="justify-start">Daten ändern</Button>
                 <Dialog>
                   <DialogTrigger asChild>
                     <Button variant="ghost" className="justify-start">E-Mail-Adresse ändern</Button>
@@ -612,5 +611,3 @@ export default function ProfileSettingsPage() {
     </div>
   );
 }
-
-    

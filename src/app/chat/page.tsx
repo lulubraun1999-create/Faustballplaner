@@ -8,7 +8,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Send, Loader2, Users, Trash2 } from 'lucide-react';
+import { Send, Loader2, Users, Trash2, ArrowLeft } from 'lucide-react';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -264,7 +264,7 @@ export default function ChatPage() {
     <div className="flex min-h-screen w-full flex-col bg-background">
       <Header />
       <main className="flex-1 flex flex-col md:grid md:grid-cols-[280px_1fr] h-[calc(100vh-4rem)]">
-        <aside className="border-r flex flex-col">
+        <aside className={cn("border-r flex-col", activeRoom ? "hidden md:flex" : "flex")}>
            <div className="p-4 border-b">
              <h2 className="text-xl font-bold tracking-tight">Chaträume</h2>
            </div>
@@ -287,9 +287,12 @@ export default function ChatPage() {
            </nav>
         </aside>
 
-        <section className="flex flex-col h-full">
+        <section className={cn("flex-col h-full", activeRoom ? "flex" : "hidden md:flex")}>
             <Card className="flex-1 flex flex-col rounded-none border-0 md:border-l">
-                <CardHeader className="border-b">
+                <CardHeader className="border-b flex-row items-center gap-4">
+                    <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setActiveRoom(null)}>
+                        <ArrowLeft className="h-5 w-5" />
+                    </Button>
                     <CardTitle>{activeRoom?.name || 'Lade...'}</CardTitle>
                 </CardHeader>
                 <CardContent className="flex-1 overflow-y-auto p-4 md:p-6">

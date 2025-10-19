@@ -1423,117 +1423,117 @@ export default function TerminePage() {
   }, [categories, teams]);
   
  const eventsForWeek = useMemo(() => {
-    if (!localEvents || !overridesData) return new Map<string, DisplayEvent[]>();
-
-    const filteredEvents = localEvents.filter(event => {
-        if (selectedTeamIds.length > 0 && !event.targetTeamIds?.some(id => selectedTeamIds.includes(id))) return false;
-        if (selectedTitleIds.length > 0 && !selectedTitleIds.includes(event.titleId)) return false;
-        return true;
-    });
-
     const weeklyEventsMap = new Map<string, DisplayEvent[]>();
+    if (!localEvents || !overridesData) return weeklyEventsMap;
+  
     const interval = { start: startOfDay(currentWeekStart), end: add(startOfDay(currentWeekEnd), { days: 1 }) };
-
-    // --- 1. Process Overrides First ---
-    // Create a map to track which original event instances have been overridden
-    const overriddenInstances = new Map<string, EventOverride>();
-    for (const override of overridesData) {
-        const key = `${override.eventId}_${format(override.originalDate.toDate(), 'yyyy-MM-dd')}`;
-        overriddenInstances.set(key, override);
-        
-        const overrideDate = override.date?.toDate() || override.originalDate.toDate();
-        // Check if the override's *new* date is within the week
-        if (isWithinInterval(overrideDate, interval)) {
-            const originalEvent = localEvents.find(e => e.id === override.eventId);
-            if (originalEvent) {
-                // Apply filters to the override
-                const finalTargetTeams = override.targetTeamIds || originalEvent.targetTeamIds;
-                const finalTitleId = override.titleId || originalEvent.titleId;
-                if (selectedTeamIds.length > 0 && !finalTargetTeams?.some(id => selectedTeamIds.includes(id))) continue;
-                if (selectedTitleIds.length > 0 && !selectedTitleIds.includes(finalTitleId)) continue;
-                
-                const dayKey = format(overrideDate, 'yyyy-MM-dd');
-                if (!weeklyEventsMap.has(dayKey)) weeklyEventsMap.set(dayKey, []);
-                weeklyEventsMap.get(dayKey)!.push({
-                    ...originalEvent,
-                    ...override,
-                    id: originalEvent.id, // Ensure original event ID is preserved
-                    displayDate: overrideDate,
-                });
-            }
-        }
-    }
-
-    // --- 2. Process Base Events ---
-    for (const event of filteredEvents) {
-        // Handle non-recurring events
-        if (event.recurrence === 'none' || !event.recurrence) {
-            const originalDate = event.date.toDate();
-            const key = `${event.id}_${format(originalDate, 'yyyy-MM-dd')}`;
-            if (isWithinInterval(originalDate, interval) && !overriddenInstances.has(key)) {
-                const dayKey = format(originalDate, 'yyyy-MM-dd');
-                if (!weeklyEventsMap.has(dayKey)) weeklyEventsMap.set(dayKey, []);
-                weeklyEventsMap.get(dayKey)!.push({ ...event, displayDate: originalDate });
-            }
-            continue;
-        }
-
-        // Handle recurring events
-        let currentDate = event.date.toDate();
-        const recurrenceEndDate = event.recurrenceEndDate?.toDate();
-        
-        // Fast-forward to a date near the start of the interval for performance
-        if (currentDate < interval.start) {
-          let tempDate = new Date(currentDate);
-          if (event.recurrence === 'weekly' || event.recurrence === 'biweekly') {
-              const weeksDiff = Math.floor((interval.start.getTime() - tempDate.getTime()) / (1000 * 60 * 60 * 24 * 7));
-              const step = event.recurrence === 'weekly' ? 1 : 2;
-              const stepsToSkip = Math.floor(weeksDiff / step);
-              if (stepsToSkip > 0) {
-                tempDate = addWeeks(tempDate, stepsToSkip * step);
-              }
-          } else if (event.recurrence === 'monthly') {
-               const monthDiff = (interval.start.getFullYear() - tempDate.getFullYear()) * 12 + (interval.start.getMonth() - tempDate.getMonth());
-               if (monthDiff > 0) {
-                  tempDate = add(tempDate, {months: monthDiff -1});
-               }
-          }
-          currentDate = tempDate;
-        }
-
-        let safety = 100;
-        while (currentDate < interval.end && safety > 0) {
-            if (recurrenceEndDate && currentDate > recurrenceEndDate) break;
-
-            if (currentDate >= interval.start) {
-                const key = `${event.id}_${format(currentDate, 'yyyy-MM-dd')}`;
-                if (!overriddenInstances.has(key)) {
-                    const dayKey = format(currentDate, 'yyyy-MM-dd');
-                    if (!weeklyEventsMap.has(dayKey)) weeklyEventsMap.set(dayKey, []);
-                    weeklyEventsMap.get(dayKey)!.push({ ...event, displayDate: currentDate });
-                }
-            }
-
-            switch (event.recurrence) {
-                case 'weekly': currentDate = addWeeks(currentDate, 1); break;
-                case 'biweekly': currentDate = addWeeks(currentDate, 2); break;
-                case 'monthly': currentDate = add(currentDate, { months: 1 }); break;
-                default: safety = 0; break;
-            }
-            safety--;
-        }
-    }
-
-    weeklyEventsMap.forEach((dayEvents) => {
-        dayEvents.sort((a, b) => {
-            const timeA = a.isAllDay ? 0 : a.displayDate.getTime();
-            const timeB = b.isAllDay ? 0 : b.displayDate.getTime();
-            return timeA - timeB;
-        });
+  
+    // 1. Create a set of overridden instance keys for quick lookup.
+    // An instance is a specific occurrence of a recurring event on a particular day.
+    const overriddenInstanceKeys = new Set<string>();
+    overridesData.forEach(override => {
+      const key = `${override.eventId}_${format(override.originalDate.toDate(), 'yyyy-MM-dd')}`;
+      overriddenInstanceKeys.add(key);
     });
-
+  
+    // 2. Process all overrides. Add them to the map if they fall within the week.
+    for (const override of overridesData) {
+      const originalEvent = localEvents.find(e => e.id === override.eventId);
+      if (!originalEvent) continue;
+  
+      // Apply filters to the override
+      const finalTargetTeams = override.targetTeamIds || originalEvent.targetTeamIds;
+      const finalTitleId = override.titleId || originalEvent.titleId;
+      if (selectedTeamIds.length > 0 && !(finalTargetTeams || []).some(id => selectedTeamIds.includes(id))) continue;
+      if (selectedTitleIds.length > 0 && !selectedTitleIds.includes(finalTitleId)) continue;
+  
+      const displayDate = override.date?.toDate() || override.originalDate.toDate();
+  
+      if (isWithinInterval(displayDate, interval)) {
+        const dayKey = format(displayDate, 'yyyy-MM-dd');
+        if (!weeklyEventsMap.has(dayKey)) weeklyEventsMap.set(dayKey, []);
+        
+        const eventWithOverride: DisplayEvent = {
+          ...originalEvent,
+          ...(override as Partial<Event>),
+          id: originalEvent.id, // Ensure original event ID is preserved
+          displayDate: displayDate,
+        };
+        weeklyEventsMap.get(dayKey)!.push(eventWithOverride);
+      }
+    }
+    
+    // 3. Process base events.
+    for (const event of localEvents) {
+      // Apply filters to the base event
+      if (selectedTeamIds.length > 0 && !(event.targetTeamIds || []).some(id => selectedTeamIds.includes(id))) continue;
+      if (selectedTitleIds.length > 0 && !selectedTitleIds.includes(event.titleId)) continue;
+  
+      // Handle non-recurring events
+      if (event.recurrence === 'none' || !event.recurrence) {
+        const originalDate = event.date.toDate();
+        const key = `${event.id}_${format(originalDate, 'yyyy-MM-dd')}`;
+        if (isWithinInterval(originalDate, interval) && !overriddenInstanceKeys.has(key)) {
+          const dayKey = format(originalDate, 'yyyy-MM-dd');
+          if (!weeklyEventsMap.has(dayKey)) weeklyEventsMap.set(dayKey, []);
+          weeklyEventsMap.get(dayKey)!.push({ ...event, displayDate: originalDate });
+        }
+        continue;
+      }
+  
+      // Handle recurring events
+      let currentDate = event.date.toDate();
+      const recurrenceEndDate = event.recurrenceEndDate?.toDate();
+  
+      // Performance optimization: Fast-forward to a point before the current week
+      if (currentDate < interval.start) {
+        if (event.recurrence === 'weekly' || event.recurrence === 'biweekly') {
+          const weeksDiff = Math.floor((interval.start.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24 * 7));
+          const step = event.recurrence === 'weekly' ? 1 : 2;
+          currentDate = addWeeks(currentDate, Math.floor(weeksDiff / step) * step);
+        } else if (event.recurrence === 'monthly') {
+          const monthDiff = (interval.start.getFullYear() - currentDate.getFullYear()) * 12 + (interval.start.getMonth() - currentDate.getMonth());
+          if (monthDiff > 0) {
+            currentDate = add(currentDate, { months: monthDiff - 1 });
+          }
+        }
+      }
+  
+      let safety = 100;
+      while (currentDate < interval.end && safety > 0) {
+        if (recurrenceEndDate && currentDate > recurrenceEndDate) break;
+  
+        if (currentDate >= interval.start) {
+          const key = `${event.id}_${format(currentDate, 'yyyy-MM-dd')}`;
+          // Only add the recurring instance if it hasn't been overridden.
+          if (!overriddenInstanceKeys.has(key)) {
+            const dayKey = format(currentDate, 'yyyy-MM-dd');
+            if (!weeklyEventsMap.has(dayKey)) weeklyEventsMap.set(dayKey, []);
+            weeklyEventsMap.get(dayKey)!.push({ ...event, displayDate: currentDate });
+          }
+        }
+  
+        switch (event.recurrence) {
+          case 'weekly': currentDate = addWeeks(currentDate, 1); break;
+          case 'biweekly': currentDate = addWeeks(currentDate, 2); break;
+          case 'monthly': currentDate = add(currentDate, { months: 1 }); break;
+          default: safety = 0; break;
+        }
+        safety--;
+      }
+    }
+  
+    // 4. Sort events within each day
+    weeklyEventsMap.forEach((dayEvents) => {
+      dayEvents.sort((a, b) => {
+        const timeA = a.isAllDay ? 0 : a.displayDate.getTime();
+        const timeB = b.isAllDay ? 0 : b.displayDate.getTime();
+        return timeA - timeB;
+      });
+    });
+  
     return weeklyEventsMap;
-}, [localEvents, overridesData, currentWeekStart, currentWeekEnd, selectedTeamIds, selectedTitleIds]);
+  }, [localEvents, overridesData, currentWeekStart, currentWeekEnd, selectedTeamIds, selectedTitleIds]);
 
 
   const handleOpenForm = (event?: DisplayEvent) => {
@@ -1687,9 +1687,9 @@ export default function TerminePage() {
       <Header />
       <main className="flex-1 p-4 md:p-8">
         <div className="mx-auto max-w-7xl">
-          <div className="flex items-center justify-between mb-8 flex-wrap gap-4">
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
             <h1 className="text-3xl font-bold">Termine</h1>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 justify-center flex-wrap">
                 <Button variant="outline" size="sm" onClick={goToPreviousWeek}><ChevronLeft className="h-4 w-4"/></Button>
                 <Button variant="outline" onClick={goToToday}>Heute</Button>
                 <Button variant="outline" size="sm" onClick={goToNextWeek}><ChevronRight className="h-4 w-4"/></Button>
@@ -1706,7 +1706,7 @@ export default function TerminePage() {
             </div>
             
              <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-8">
-                 <Card>
+                 <Card className="md:sticky md:top-24 self-start">
                     <CardHeader>
                         <CardTitle>Filter</CardTitle>
                     </CardHeader>
@@ -1765,7 +1765,7 @@ export default function TerminePage() {
                     </CardContent>
                 </Card>
                  
-                <div>
+                <div className="row-start-1 md:row-start-auto">
                   {renderContent()}
                 </div>
             </div>

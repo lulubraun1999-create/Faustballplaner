@@ -5,7 +5,7 @@ import { useAuth, useUser } from '@/firebase';
 import { useRouter, usePathname } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
-import { LogOut, ChevronDown, User as UserIcon, Instagram } from 'lucide-react';
+import { LogOut, ChevronDown, User as UserIcon, Instagram, Menu } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,9 +14,30 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  Sheet,
+  SheetContent,
+  SheetTrigger,
+  SheetClose,
+} from "@/components/ui/sheet"
 import Link from 'next/link';
 import { ModeToggle } from './mode-toggle';
 import { cn } from '@/lib/utils';
+import React from 'react';
+
+const NavLink = ({ href, children, onNavigate }: { href: string, children: React.ReactNode, onNavigate?: () => void }) => {
+    const pathname = usePathname();
+    const isActive = pathname.startsWith(href);
+    return (
+        <Link 
+            href={href} 
+            onClick={onNavigate}
+            className={cn("transition-colors hover:text-foreground/80", isActive ? 'text-foreground' : 'text-muted-foreground')}
+        >
+            {children}
+        </Link>
+    )
+}
 
 export function Header() {
   const auth = useAuth();
@@ -24,6 +45,7 @@ export function Header() {
   const router = useRouter();
   const pathname = usePathname();
   const { toast } = useToast();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
 
   const handleLogout = async () => {
     if(auth) {
@@ -43,13 +65,39 @@ export function Header() {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 max-w-screen-2xl items-center justify-between">
-        <div className="flex items-center gap-6 flex-1">
-          <Link href="/" className="flex items-center gap-2">
+        <div className="flex items-center gap-2 md:gap-6 flex-1">
+          <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
+            <SheetTrigger asChild>
+                <Button variant="outline" size="icon" className="md:hidden">
+                    <Menu className="h-5 w-5" />
+                    <span className="sr-only">Menü öffnen</span>
+                </Button>
+            </SheetTrigger>
+            <SheetContent side="left">
+                <nav className="grid gap-6 text-lg font-medium mt-8">
+                     <Link href="/" className="flex items-center gap-2 mb-4" onClick={() => setIsMobileMenuOpen(false)}>
+                        <span className="font-bold text-lg">TSV Bayer Leverkusen</span>
+                    </Link>
+                    <NavLink href="/kalender" onNavigate={() => setIsMobileMenuOpen(false)}>Kalender</NavLink>
+                    <NavLink href="/chat" onNavigate={() => setIsMobileMenuOpen(false)}>Chat</NavLink>
+                    <p className="text-muted-foreground">Verwaltung</p>
+                    <div className="grid gap-4 pl-4 text-base">
+                        <NavLink href="/aktuelles" onNavigate={() => setIsMobileMenuOpen(false)}>Newsverwaltung</NavLink>
+                        <NavLink href="/mannschaften" onNavigate={() => setIsMobileMenuOpen(false)}>Mannschaften</NavLink>
+                        <NavLink href="/mitglieder" onNavigate={() => setIsMobileMenuOpen(false)}>Mitglieder</NavLink>
+                        <NavLink href="/admin/news" onNavigate={() => setIsMobileMenuOpen(false)}>News bearbeiten</NavLink>
+                        <NavLink href="/umfragen" onNavigate={() => setIsMobileMenuOpen(false)}>Umfragen</NavLink>
+                        <NavLink href="/termine" onNavigate={() => setIsMobileMenuOpen(false)}>Termine</NavLink>
+                    </div>
+                </nav>
+            </SheetContent>
+          </Sheet>
+          <Link href="/" className="hidden md:flex items-center gap-2">
              <span className="font-bold text-lg">TSV Bayer Leverkusen</span>
           </Link>
         </div>
 
-        <nav className="hidden md:flex items-center justify-center gap-4 text-sm font-medium flex-1">
+        <nav className="hidden md:flex items-center justify-center gap-6 text-sm font-medium flex-1">
           <Link 
             href="/kalender" 
             className={cn("transition-colors hover:text-foreground/80", pathname.startsWith('/kalender') ? 'text-foreground' : 'text-muted-foreground')}
@@ -72,7 +120,7 @@ export function Header() {
             </DropdownMenuTrigger>
             <DropdownMenuContent>
               <DropdownMenuItem asChild>
-                <Link href="/aktuelles">Aktuelles</Link>
+                <Link href="/aktuelles">Newsverwaltung</Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link href="/mannschaften">Mannschaften</Link>
@@ -81,7 +129,7 @@ export function Header() {
                 <Link href="/mitglieder">Mitglieder</Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <Link href="/admin/news">Newsverwaltung</Link>
+                <Link href="/admin/news">News bearbeiten</Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link href="/umfragen">Umfragen</Link>
@@ -105,7 +153,7 @@ export function Header() {
             <DropdownMenuTrigger asChild>
               <Button variant="outline" className="flex items-center gap-2">
                 <UserIcon className="h-4 w-4 text-muted-foreground" />
-                {user?.displayName || 'Benutzer'}
+                <span className="hidden sm:inline">{user?.displayName || 'Benutzer'}</span>
                 <ChevronDown className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>

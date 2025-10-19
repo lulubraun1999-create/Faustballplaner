@@ -736,8 +736,8 @@ export default function KalenderPage() {
             <div className="flex items-center justify-between mb-8">
               <h1 className="text-3xl font-bold">Kalender</h1>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] lg:grid-cols-[320px_1fr] gap-8">
-                <Card>
+            <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-8">
+                <Card className="lg:sticky lg:top-24 self-start">
                     <CardHeader>
                         <CardTitle>Filter</CardTitle>
                     </CardHeader>
@@ -796,7 +796,7 @@ export default function KalenderPage() {
                     </CardContent>
                 </Card>
 
-                <div className="md:col-start-2 lg:col-start-2 row-start-1 md:row-start-auto">
+                <div className="lg:col-start-2 row-start-1 lg:row-start-auto">
                     <Card>
                     <CardContent className="p-0 sm:p-2 flex justify-center">
                         <Calendar
@@ -836,7 +836,7 @@ export default function KalenderPage() {
                     </Card>
                 </div>
 
-                <div className="md:col-start-2 lg:col-start-2">
+                <div className="lg:col-start-2">
                     <div className="mb-4">
                         <h2 className="text-2xl font-bold">Termine für {selectedDate ? format(selectedDate, 'dd. MMMM yyyy', {locale: de}) : '...'}</h2>
                     </div>

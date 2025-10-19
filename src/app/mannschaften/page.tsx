@@ -319,7 +319,7 @@ export default function MannschaftenPage() {
     return (
       <div className="space-y-8">
         <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-8">
-           <Card>
+           <Card className="md:sticky md:top-24 self-start">
             <CardHeader>
               <CardTitle className="text-lg">TSV Bayer Leverkusen</CardTitle>
             </CardHeader>
