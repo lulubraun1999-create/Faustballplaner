@@ -660,7 +660,7 @@ export default function MannschaftskassePage() {
     if (adminTeams && adminTeams.length > 0 && !selectedTeamId) {
       setSelectedTeamId(adminTeams[0].id);
     }
-  }, [adminTeams]);
+  }, [adminTeams, selectedTeamId]);
   
   const allMembersQuery = useMemo(() => {
     if (!firestore) return null;
@@ -691,7 +691,7 @@ export default function MannschaftskassePage() {
   }, [firestore, selectedTeamId]);
   const { data: userPenalties, isLoading: userPenaltiesLoading } = useCollection<UserPenalty>(userPenaltiesQuery);
 
-  const isLoadingInitial = isUserLoading || teamsLoading || membersLoading;
+  const isLoadingInitial = isUserLoading || teamsLoading;
   
   if (!isUserLoading && userData && !userData.adminRechte) {
        return (
@@ -774,6 +774,3 @@ export default function MannschaftskassePage() {
     </div>
   );
 }
-
-
-    
