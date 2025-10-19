@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { useFirestore, useUser, useCollection, useDoc } from '@/firebase';
+import { useFirestore, useUser, useCollection, useDoc, FirestorePermissionError, errorEmitter } from '@/firebase';
 import { collection, query, where, orderBy, doc, addDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -111,6 +111,7 @@ interface Team {
 }
 
 interface UserData {
+  id: string;
   adminRechte?: boolean;
   teamIds?: string[];
   vorname: string;
@@ -326,7 +327,7 @@ function TreasuryManager({ teamId }: { teamId: string }) {
                                 const member = members?.find(m => m.id === t.userId);
                                 return (
                                 <TableRow key={t.id}>
-                                    <TableCell>{t.date.toDate ? format(t.date.toDate(), 'dd.MM.yyyy') : '...'}</TableCell>
+                                    <TableCell>{t.date?.toDate ? format(t.date.toDate(), 'dd.MM.yyyy') : '...'}</TableCell>
                                     <TableCell>{t.description}</TableCell>
                                     <TableCell>{member ? `${member.vorname} ${member.nachname}` : (t.type === 'correction' ? 'System' : 'Allgemein')}</TableCell>
                                     <TableCell className={cn("text-right", t.amount > 0 ? 'text-green-600' : 'text-red-600')}>
@@ -407,13 +408,22 @@ function AssignPenaltiesManager({ teamId }: { teamId: string }) {
     const { user } = useUser();
     const [isFormOpen, setIsFormOpen] = useState(false);
 
-    const penaltiesQuery = useMemo(() => collection(firestore, 'teams', teamId, 'penalties'), [firestore, teamId]);
+    const penaltiesQuery = useMemo(() => {
+        if (!firestore || !teamId) return null;
+        return collection(firestore, 'teams', teamId, 'penalties')
+    }, [firestore, teamId]);
     const { data: penalties } = useCollection<Penalty>(penaltiesQuery);
 
-    const membersQuery = useMemo(() => query(collection(firestore, 'members'), where('teamIds', 'array-contains', teamId)), [firestore, teamId]);
+    const membersQuery = useMemo(() => {
+        if (!firestore || !teamId) return null;
+        return query(collection(firestore, 'members'), where('teamIds', 'array-contains', teamId))
+    }, [firestore, teamId]);
     const { data: members } = useCollection<UserData>(membersQuery);
     
-    const userPenaltiesQuery = useMemo(() => query(collection(firestore, 'user_penalties'), where('teamId', '==', teamId), orderBy('assignedAt', 'desc')), [firestore, teamId]);
+    const userPenaltiesQuery = useMemo(() => {
+        if (!firestore || !teamId) return null;
+        return query(collection(firestore, 'user_penalties'), where('teamId', '==', teamId), orderBy('assignedAt', 'desc'))
+    }, [firestore, teamId]);
     const { data: userPenalties, isLoading } = useCollection<UserPenalty>(userPenaltiesQuery);
 
     const form = useForm<AssignPenaltyFormValues>({
@@ -463,7 +473,7 @@ function AssignPenaltiesManager({ teamId }: { teamId: string }) {
     };
     
     const markAsPaid = async (userPenaltyId: string) => {
-        if (!firestore || !user) return;
+        if (!firestore || !user || !teamId) return;
         
         const userPenaltyRef = doc(firestore, 'user_penalties', userPenaltyId);
         const userPenalty = userPenalties?.find(up => up.id === userPenaltyId);
@@ -520,7 +530,7 @@ function AssignPenaltiesManager({ teamId }: { teamId: string }) {
                                     <TableRow key={up.id}>
                                         <TableCell>{member ? `${member.vorname} ${member.nachname}`: 'Unbekannt'}</TableCell>
                                         <TableCell>{up.penaltyName}</TableCell>
-                                        <TableCell>{up.assignedAt.toDate ? format(up.assignedAt.toDate(), 'dd.MM.yyyy') : '...'}</TableCell>
+                                        <TableCell>{up.assignedAt?.toDate ? format(up.assignedAt.toDate(), 'dd.MM.yyyy') : '...'}</TableCell>
                                         <TableCell>{new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(up.amount)}</TableCell>
                                         <TableCell className="text-right">
                                             <AlertDialog>
@@ -584,7 +594,7 @@ function AssignPenaltiesManager({ teamId }: { teamId: string }) {
                                                             <Checkbox
                                                                 checked={field.value?.includes(m.id)}
                                                                 onCheckedChange={(checked) => {
-                                                                    return checked ? field.onChange([...field.value, m.id]) : field.onChange(field.value?.filter(id => id !== m.id))
+                                                                    return checked ? field.onChange([...(field.value || []), m.id]) : field.onChange(field.value?.filter(id => id !== m.id))
                                                                 }}
                                                             />
                                                         </FormControl>
@@ -607,7 +617,7 @@ function AssignPenaltiesManager({ teamId }: { teamId: string }) {
                                                             <Checkbox
                                                                 checked={field.value?.includes(p.id)}
                                                                 onCheckedChange={(checked) => {
-                                                                    return checked ? field.onChange([...field.value, p.id]) : field.onChange(field.value?.filter(id => id !== p.id))
+                                                                    return checked ? field.onChange([...(field.value || []), p.id]) : field.onChange(field.value?.filter(id => id !== p.id))
                                                                 }}
                                                             />
                                                         </FormControl>
@@ -645,8 +655,9 @@ export default function MannschaftskassePage() {
   const { data: userData, isLoading: isUserLoading } = useDoc<UserData>(userDocRef);
 
   const adminTeamsQuery = useMemo(() => {
-    if (!firestore || !userData || !userData.adminRechte) return null;
-    return query(collection(firestore, 'teams'), where('__name__', 'in', userData.teamIds || [' ']));
+    if (!firestore || !userData?.adminRechte || !userData.teamIds) return null;
+    if (userData.teamIds.length === 0) return query(collection(firestore, 'teams'), where('__name__', '==', 'dummy-id')); // No teams, return empty query
+    return query(collection(firestore, 'teams'), where('__name__', 'in', userData.teamIds));
   }, [firestore, userData]);
   const { data: adminTeams, isLoading: teamsLoading } = useCollection<Team>(adminTeamsQuery);
 
@@ -722,5 +733,3 @@ export default function MannschaftskassePage() {
     </div>
   );
 }
-
-    
