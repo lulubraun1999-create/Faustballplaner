@@ -358,10 +358,15 @@ function NextMatchDay() {
 
     }, [events, overrides, eventTitles]);
     
+    const eventIdForNextMatchDay = useMemo(() => {
+        if (eventsLoading || !nextMatchDay) return [];
+        return [nextMatchDay.id];
+    }, [nextMatchDay, eventsLoading]);
+
     const responsesQuery = useMemo(() => {
-      if (!firestore || !nextMatchDay || eventsLoading) return null;
-      return query(collection(firestore, 'event_responses'), where('eventId', '==', nextMatchDay.id));
-    }, [firestore, nextMatchDay, eventsLoading]);
+        if (!firestore || eventIdForNextMatchDay.length === 0) return null;
+        return query(collection(firestore, 'event_responses'), where('eventId', 'in', eventIdForNextMatchDay));
+    }, [firestore, eventIdForNextMatchDay]);
 
     const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
 
@@ -482,9 +487,9 @@ function UpcomingEvents() {
     }, [upcomingEvents, eventsLoading]);
 
     const responsesQuery = useMemo(() => {
-        if (!firestore || eventIdsForUpcoming.length === 0 || eventsLoading) return null;
+        if (!firestore || eventIdsForUpcoming.length === 0) return null;
         return query(collection(firestore, 'event_responses'), where('eventId', 'in', eventIdsForUpcoming));
-    }, [firestore, eventIdsForUpcoming, eventsLoading]);
+    }, [firestore, eventIdsForUpcoming]);
     
     const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
     

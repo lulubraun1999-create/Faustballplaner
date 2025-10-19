@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -1543,16 +1544,17 @@ export default function TerminePage() {
 
     const eventIdsInView = useMemo(() => {
         const ids = new Set<string>();
+        if(eventsLoading) return [];
         eventsForWeek.forEach(dayEvents => {
             dayEvents.forEach(event => ids.add(event.id));
         });
         return Array.from(ids);
-    }, [eventsForWeek]);
+    }, [eventsForWeek, eventsLoading]);
 
     const responsesQuery = useMemo(() => {
-        if (!firestore || eventIdsInView.length === 0 || eventsLoading || overridesLoading) return null;
+        if (!firestore || eventIdsInView.length === 0) return null;
         return query(collection(firestore, 'event_responses'), where('eventId', 'in', eventIdsInView));
-    }, [firestore, eventIdsInView, eventsLoading, overridesLoading]);
+    }, [firestore, eventIdsInView]);
 
     const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
     
@@ -1715,6 +1717,14 @@ export default function TerminePage() {
         </div>
     );
   };
+
+  const groupedTeams = useMemo(() => {
+    if (!categories || !teams) return [];
+    return categories.map(category => ({
+      ...category,
+      teams: teams.filter(team => team.categoryId === category.id).sort((a,b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
+    }));
+  }, [categories, teams]);
 
   return (
     <div className="flex min-h-screen w-full flex-col bg-background">
