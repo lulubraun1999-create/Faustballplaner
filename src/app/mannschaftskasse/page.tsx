@@ -670,7 +670,7 @@ function AssignPenaltiesManager({ teamId }: { teamId: string }) {
 export default function MannschaftskassePage() {
   const { user } = useUser();
   const firestore = useFirestore();
-  const [selectedTeamId, setSelectedTeamId] = useState<string>('');
+  const [selectedTeamId, setSelectedTeamId] = useState<string | undefined>(undefined);
 
   const userDocRef = useMemo(() => {
     if (!firestore || !user) return null;
@@ -688,10 +688,10 @@ export default function MannschaftskassePage() {
   const { data: adminTeams, isLoading: teamsLoading } = useCollection<Team>(adminTeamsQuery);
 
   useEffect(() => {
-      if(adminTeams && adminTeams.length > 0) {
+      if(adminTeams && adminTeams.length > 0 && !selectedTeamId) {
           setSelectedTeamId(adminTeams[0].id);
       }
-  }, [adminTeams]);
+  }, [adminTeams, selectedTeamId]);
 
 
   if (isUserLoading || teamsLoading) {
