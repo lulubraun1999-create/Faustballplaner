@@ -143,9 +143,9 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
     const [declineReason, setDeclineReason] = useState('');
 
     const responsesQuery = useMemo(() => {
-        if (!event.id || !firestore) return null;
+        if (!event.id || !firestore || !eventTitles || !locations) return null;
         return query(collection(firestore, 'event_responses'), where('eventId', '==', event.id))
-    }, [firestore, event.id]);
+    }, [firestore, event.id, eventTitles, locations]);
 
     const { data: allResponses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
     
