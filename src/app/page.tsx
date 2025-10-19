@@ -375,17 +375,15 @@ function NextMatchDay() {
 
     }, [events, overrides, eventTitles]);
 
-    const eventIdForNextMatch = useMemo(() => {
-        if (!nextMatchDay) return [];
-        return [nextMatchDay.id];
-    }, [nextMatchDay]);
-
     const responsesQuery = useMemo(() => {
-        if (!firestore || !userData || isUserLoading || eventIdForNextMatch.length === 0) {
-          return null;
+        if (!firestore || isUserLoading) {
+            return null;
         }
-        return query(collection(firestore, 'event_responses'), where('eventId', 'in', eventIdForNextMatch));
-    }, [firestore, userData, isUserLoading, eventIdForNextMatch]);
+        if (userData?.teamIds && userData.teamIds.length > 0) {
+            return query(collection(firestore, 'event_responses'), where('teamId', 'in', userData.teamIds));
+        }
+        return collection(firestore, 'event_responses');
+    }, [firestore, userData, isUserLoading]);
     
     const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
 
@@ -515,16 +513,15 @@ function UpcomingEvents() {
 
     }, [events, overrides, userData, eventTitles]);
 
-    const eventIdsForUpcoming = useMemo(() => {
-        return upcomingEvents.map(e => e.id);
-    }, [upcomingEvents]);
-
     const responsesQuery = useMemo(() => {
-        if (!firestore || !userData || isUserLoading || eventIdsForUpcoming.length === 0) {
-          return null;
+        if (!firestore || isUserLoading) {
+            return null;
         }
-        return query(collection(firestore, 'event_responses'), where('eventId', 'in', eventIdsForUpcoming));
-    }, [firestore, userData, isUserLoading, eventIdsForUpcoming]);
+        if (userData?.teamIds && userData.teamIds.length > 0) {
+            return query(collection(firestore, 'event_responses'), where('teamId', 'in', userData.teamIds));
+        }
+        return collection(firestore, 'event_responses');
+    }, [firestore, userData, isUserLoading]);
 
     const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
 

@@ -1438,7 +1438,7 @@ export default function TerminePage() {
   const { data: overridesData, isLoading: overridesLoading } = useCollection<EventOverride>(eventOverridesQuery);
   
   const responsesQuery = useMemo(() => {
-    if (isUserLoading || !firestore) {
+    if (!firestore || isUserLoading) {
       return null;
     }
     if (userData?.teamIds && userData.teamIds.length > 0) {
@@ -1849,5 +1849,6 @@ export default function TerminePage() {
     </div>
   );
 }
+
 
 
