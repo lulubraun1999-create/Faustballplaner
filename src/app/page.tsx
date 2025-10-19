@@ -130,11 +130,15 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
     
     const endDate = useMemo(() => {
         if (!event.endTime) return undefined;
-        const start = event.date.toDate();
-        const end = event.endTime.toDate();
-        const duration = end.getTime() - start.getTime();
-        return new Date(event.displayDate.getTime() + duration);
-    }, [event.date, event.endTime, event.displayDate]);
+        const originalEndDate = event.endTime.toDate();
+        const newEndDate = new Date(startDate);
+        newEndDate.setHours(originalEndDate.getHours(), originalEndDate.getMinutes(), originalEndDate.getSeconds());
+        const daysDifference = differenceInDays(originalEndDate, event.date.toDate());
+        if (daysDifference > 0) {
+            newEndDate.setDate(newEndDate.getDate() + daysDifference);
+        }
+        return newEndDate;
+    }, [event.date, event.endTime, startDate]);
 
 
     let timeString;
@@ -198,6 +202,12 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
                     )}
                 </div>
             </CardHeader>
+            {(event.description || event.meetingPoint) && !event.isCancelled && (
+                <CardContent className="space-y-2">
+                    {event.meetingPoint && <p className="text-sm"><span className="font-semibold">Treffpunkt:</span> {event.meetingPoint}</p>}
+                    {event.description && <p className="text-sm whitespace-pre-wrap">{event.description}</p>}
+                </CardContent>
+            )}
             {!event.isCancelled && (
                 <CardFooter className="flex-col sm:flex-row items-start sm:items-center sm:justify-between gap-4">
                  <div className="text-sm text-muted-foreground flex items-center gap-1.5">
@@ -284,6 +294,11 @@ function NextMatchDay() {
             let currentDate = originalStartDate;
             const recurrenceEndDate = event.recurrenceEndDate?.toDate();
             let limit = 100;
+            
+            // Fast-forward
+            if(currentDate < now) {
+                currentDate = now;
+            }
 
             while (currentDate < futureLimit && limit > 0) {
                  if (recurrenceEndDate && currentDate > recurrenceEndDate) {
@@ -350,7 +365,7 @@ function UpcomingEvents() {
 
     // Data fetching
     const { data: userData } = useDoc<UserData>(user ? doc(firestore, 'users', user.uid) : null);
-    const { data: events, isLoading: eventsLoading } = useCollection<Event>(firestore ? collection(firestore, 'events') : null);
+    const { data: events, isLoading: eventsLoading } = useCollection<Event>(firestore ? query(collection(firestore, 'events')) : null);
     const { data: overrides, isLoading: overridesLoading } = useCollection<EventOverride>(firestore ? collection(firestore, 'event_overrides') : null);
     const { data: allUsers, isLoading: usersLoading } = useCollection<GroupMember>(firestore ? collection(firestore, 'group_members') : null);
     const { data: locations, isLoading: locationsLoading } = useCollection<Location>(firestore ? collection(firestore, 'locations') : null);
@@ -364,7 +379,7 @@ function UpcomingEvents() {
         const userTeamIds = userData.teamIds || [];
         const now = new Date();
         const futureLimit = add(now, { months: 6 }); // Look 6 months into the future for recurring events
-
+        
         const relevantEvents = events.filter(event => {
             const isPublic = !event.targetTeamIds || event.targetTeamIds.length === 0;
             const isInUserTeam = event.targetTeamIds?.some(id => userTeamIds.includes(id));
@@ -389,6 +404,11 @@ function UpcomingEvents() {
 
             // Handle recurring events
             let currentDate = originalStartDate;
+             // Fast-forward
+            if(currentDate < now) {
+                currentDate = now;
+            }
+            
             const recurrenceEndDate = event.recurrenceEndDate?.toDate();
             let limit = 100; // Safety break
 
