@@ -307,9 +307,9 @@ function AbsenceManager() {
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const absencesQuery = useMemo(() => {
-        if (!firestore || !user) return null;
+        if (!firestore || !user?.uid) return null;
         return query(collection(firestore, 'users', user.uid, 'absences'), orderBy('startDate', 'desc'));
-    }, [firestore, user]);
+    }, [firestore, user?.uid]);
 
     const { data: absences, isLoading: absencesLoading } = useCollection<UserAbsence>(absencesQuery);
     
@@ -605,9 +605,9 @@ export default function ProfileSettingsPage() {
   const [isChangingEmail, setIsChangingEmail] = useState(false);
 
   const userDocRef = useMemo(() => {
-    if (!firestore || !user) return null;
+    if (!firestore || !user?.uid) return null;
     return doc(firestore, 'users', user.uid);
-  }, [firestore, user]);
+  }, [firestore, user?.uid]);
 
   const { data: userData, isLoading: isUserDataLoading } = useDoc<UserData>(userDocRef);
 
@@ -791,4 +791,3 @@ export default function ProfileSettingsPage() {
     </div>
   );
 }
-

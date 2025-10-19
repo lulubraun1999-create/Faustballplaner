@@ -162,9 +162,9 @@ export default function MitgliederPage() {
   const [selectedFilterRole, setSelectedFilterRole] = useState('all');
 
   const currentUserDocRef = useMemo(() => {
-    if (!firestore || !authUser) return null;
+    if (!firestore || !authUser?.uid) return null;
     return doc(firestore, 'users', authUser.uid);
-  }, [firestore, authUser]);
+  }, [firestore, authUser?.uid]);
   const { data: currentUserData, isLoading: isCurrentUserLoading } = useDoc<UserData>(currentUserDocRef);
   const hasAdminRights = currentUserData?.adminRechte;
 
@@ -544,6 +544,3 @@ export default function MitgliederPage() {
     </div>
   );
 }
-
-    
-

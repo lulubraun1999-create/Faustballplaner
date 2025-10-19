@@ -86,9 +86,9 @@ export default function ChatPage() {
 
 
   const currentUserDocRef = useMemo(() => {
-    if (!firestore || !user) return null;
+    if (!firestore || !user?.uid) return null;
     return doc(firestore, 'users', user.uid);
-  }, [firestore, user]);
+  }, [firestore, user?.uid]);
   const { data: currentUserData, isLoading: isUserLoading } = useDoc<UserData>(currentUserDocRef);
   
   const teamsQuery = useMemo(() => {
@@ -119,7 +119,7 @@ export default function ChatPage() {
   }, [chatRooms, activeRoom]);
 
   useEffect(() => {
-    if (!firestore || !user || chatRooms.length <= 1) return;
+    if (!firestore || !user?.uid || chatRooms.length <= 1) return;
 
     const unsubscribes: (() => void)[] = [];
 
@@ -159,18 +159,18 @@ export default function ChatPage() {
     fetchAndListen();
 
     return () => unsubscribes.forEach(unsub => unsub());
-  }, [firestore, user, chatRooms]);
+  }, [firestore, user?.uid, chatRooms]);
 
 
   useEffect(() => {
-    if(!firestore || !user || !activeRoom) return;
+    if(!firestore || !user?.uid || !activeRoom) return;
 
     const statusRef = doc(firestore, 'users', user.uid, 'chat_status', activeRoom.id);
     setDoc(statusRef, { lastSeen: serverTimestamp() }, { merge: true });
     // Also reset the local unread count for the active room
     setUnreadCounts(prev => ({...prev, [activeRoom.id]: 0}));
 
-  }, [firestore, user, activeRoom]);
+  }, [firestore, user?.uid, activeRoom]);
 
   
   const messagesQuery = useMemo(() => {
@@ -385,5 +385,3 @@ export default function ChatPage() {
     </div>
   );
 }
-
-    

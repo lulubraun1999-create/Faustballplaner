@@ -290,9 +290,9 @@ function NextMatchDay() {
     const { user, isUserLoading: isAuthLoading } = useUser();
     
     const userDocRef = useMemo(() => {
-        if (!firestore || !user) return null;
+        if (!firestore || !user?.uid) return null;
         return doc(firestore, 'users', user.uid);
-    }, [firestore, user]);
+    }, [firestore, user?.uid]);
     const { data: userData, isLoading: isUserDocLoading } = useDoc<UserData>(userDocRef);
 
     // Data fetching
@@ -426,9 +426,9 @@ function UpcomingEvents() {
     const { user, isUserLoading: isAuthLoading } = useUser();
 
     const userDocRef = useMemo(() => {
-        if (!firestore || !user) return null;
+        if (!firestore || !user?.uid) return null;
         return doc(firestore, 'users', user.uid);
-    }, [firestore, user]);
+    }, [firestore, user?.uid]);
     const { data: userData, isLoading: isUserDocLoading } = useDoc<UserData>(userDocRef);
 
     // Data fetching

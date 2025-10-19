@@ -209,9 +209,9 @@ export default function AdminNewsPage() {
   }, []);
   
   const userDocRef = useMemo(() => {
-    if (!firestore || !user) return null;
+    if (!firestore || !user?.uid) return null;
     return doc(firestore, 'users', user.uid);
-  }, [firestore, user]);
+  }, [firestore, user?.uid]);
   const { data: userData, isLoading: isUserLoading } = useDoc<UserData>(userDocRef);
 
   const canManageNews = userData?.adminRechte;
