@@ -6,7 +6,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { collection, doc, setDoc, deleteDoc, Timestamp, query, where, getDocs, writeBatch, serverTimestamp, addDoc, getDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, deleteDoc, Timestamp, query, where, getDocs, writeBatch, serverTimestamp, addDoc, getDoc, orderBy } from 'firebase/firestore';
 import { useAuth, useUser, useFirestore, useDoc, useCollection, FirestorePermissionError, errorEmitter } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { format, eachDayOfInterval, startOfDay, endOfDay, isSameDay } from 'date-fns';
