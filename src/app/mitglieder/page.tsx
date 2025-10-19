@@ -183,7 +183,7 @@ export default function MitgliederPage() {
 
   
   const isLoading = isAuthLoading || isCurrentUserLoading || usersLoading || teamsLoading || categoriesLoading;
-  const error = usersError || teamsError || categoriesError;
+  const dataError = usersError || teamsError || categoriesError;
 
   
   const groupedTeams = useMemo(() => {
@@ -293,25 +293,46 @@ export default function MitgliederPage() {
   };
 
   const renderContent = () => {
-    if (isLoading) {
+    if (isAuthLoading || isCurrentUserLoading) {
       return (
         <div className="flex items-center justify-center py-8">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="ml-2 text-muted-foreground">Mitglieder werden geladen...</p>
+          <p className="ml-2 text-muted-foreground">Berechtigungen werden geprüft...</p>
         </div>
       );
     }
 
-    if (error || !hasAdminRights) {
+    if (!hasAdminRights) {
       return (
         <div className="text-center py-8 text-destructive flex flex-col items-center gap-4">
           <ShieldAlert className="h-12 w-12" />
           <div className="space-y-1">
              <p className="font-bold text-lg">Zugriff verweigert</p>
-             <p className="text-muted-foreground">{error?.message || 'Sie haben nicht die erforderlichen Berechtigungen, um diese Seite anzuzeigen.'}</p>
+             <p className="text-muted-foreground">Sie haben nicht die erforderlichen Berechtigungen, um diese Seite anzuzeigen.</p>
           </div>
         </div>
       );
+    }
+
+    if (usersLoading || teamsLoading || categoriesLoading) {
+        return (
+            <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="ml-2 text-muted-foreground">Mitglieder werden geladen...</p>
+            </div>
+        )
+    }
+
+    if (dataError) {
+        return (
+             <div className="text-center py-8 text-destructive flex flex-col items-center gap-4">
+              <ShieldAlert className="h-12 w-12" />
+              <div className="space-y-1">
+                 <p className="font-bold text-lg">Fehler beim Laden der Daten</p>
+                 <p className="text-muted-foreground">{dataError.message}</p>
+              </div>
+            </div>
+        )
     }
     
     if (users && teams && categories) {
