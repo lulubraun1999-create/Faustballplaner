@@ -1032,10 +1032,19 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, onReact
 
         const originalStartDate = event.date.toDate();
         const originalEndDate = event.endTime.toDate();
-        const duration = originalEndDate.getTime() - originalStartDate.getTime();
         
-        return new Date(startDate.getTime() + duration);
-    }, [event.date, event.endTime, event.displayDate]);
+        const newEndDate = new Date(startDate);
+        newEndDate.setHours(originalEndDate.getHours());
+        newEndDate.setMinutes(originalEndDate.getMinutes());
+        newEndDate.setSeconds(originalEndDate.getSeconds());
+
+        const daysDifference = differenceInDays(originalEndDate, originalStartDate);
+        if (daysDifference > 0) {
+          newEndDate.setDate(newEndDate.getDate() + daysDifference);
+        }
+
+        return newEndDate;
+    }, [event.date, event.endTime, startDate]);
 
     let timeString;
     if (event.isAllDay) {
@@ -1439,11 +1448,11 @@ export default function TerminePage() {
         if (isWithinInterval(originalStartDate, interval)) {
           const dayKey = format(originalStartDate, 'yyyy-MM-dd');
           if (!weeklyEventsMap.has(dayKey)) weeklyEventsMap.set(dayKey, []);
-          
-          const override = overridesData.find(o => o.eventId === event.id && isSameDay(o.originalDate.toDate(), originalStartDate));
-          if(override) continue; // Will be handled later
 
-          weeklyEventsMap.get(dayKey)?.push({ ...event, displayDate: originalStartDate });
+          const override = overridesData.find(o => o.eventId === event.id && isSameDay(o.originalDate.toDate(), originalStartDate));
+          if(!override) {
+             weeklyEventsMap.get(dayKey)?.push({ ...event, displayDate: originalStartDate });
+          }
         }
         continue;
       }
@@ -1474,11 +1483,11 @@ export default function TerminePage() {
         
         if (isWithinInterval(currentDate, interval)) {
           const dayKey = format(currentDate, 'yyyy-MM-dd');
-          if (!weeklyEventsMap.has(dayKey)) weeklyEventsMap.set(dayKey, []);
-
+          
           const override = overridesData.find(o => o.eventId === event.id && isSameDay(o.originalDate.toDate(), currentDate));
           
           if(!override) {
+            if (!weeklyEventsMap.has(dayKey)) weeklyEventsMap.set(dayKey, []);
             let finalEvent: DisplayEvent = { ...event, displayDate: currentDate };
             weeklyEventsMap.get(dayKey)?.push(finalEvent);
           }
@@ -1494,14 +1503,12 @@ export default function TerminePage() {
       }
     }
     
-    // Process overrides separately
     for (const override of overridesData) {
         const overrideDate = override.date?.toDate() || override.originalDate.toDate();
         if (isWithinInterval(overrideDate, interval)) {
             const originalEvent = localEvents.find(e => e.id === override.eventId);
             if (!originalEvent) continue;
 
-            // Check if override should be displayed based on filters
             const isTeamFiltered = selectedTeamIds.length > 0 && !originalEvent.targetTeamIds?.some(id => selectedTeamIds.includes(id)) && !(override.targetTeamIds || []).some(id => selectedTeamIds.includes(id));
             const isTitleFiltered = selectedTitleIds.length > 0 && !(selectedTitleIds.includes(originalEvent.titleId)) && !(override.titleId && selectedTitleIds.includes(override.titleId));
             if(isTeamFiltered || isTitleFiltered) continue;
