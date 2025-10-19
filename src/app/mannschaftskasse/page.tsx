@@ -671,6 +671,22 @@ export default function MannschaftskassePage() {
   }, [firestore, user]);
   const { data: userData, isLoading: isUserLoading } = useDoc<UserData>(userDocRef);
 
+  if (!isUserLoading && userData && !userData.adminRechte) {
+    return (
+        <div className="flex min-h-screen w-full flex-col bg-background">
+            <Header />
+            <main className="flex-1 p-4 md:p-8">
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Zugriff verweigert</CardTitle>
+                        <CardDescription>Sie haben nicht die erforderlichen Rechte, um auf diese Seite zuzugreifen.</CardDescription>
+                    </CardHeader>
+                </Card>
+            </main>
+        </div>
+    );
+  }
+
   const adminTeamsQuery = useMemo(() => {
     if (!firestore || !userData?.adminRechte || !userData.teamIds || userData.teamIds.length === 0) {
       return null;
@@ -697,35 +713,8 @@ export default function MannschaftskassePage() {
     return allMembers.filter(m => m.teamIds?.includes(selectedTeamId));
   }, [allMembers, selectedTeamId]);
   
-  const isLoadingInitial = isUserLoading || teamsLoading || membersLoading;
-
-  if (isLoadingInitial) {
-    return (
-      <div className="flex min-h-screen w-full flex-col bg-background">
-        <Header />
-        <main className="flex-1 p-4 md:p-8 flex items-center justify-center">
-            <Loader2 className="h-16 w-16 animate-spin text-primary" />
-        </main>
-      </div>
-    )
-  }
-
-  if (!userData?.adminRechte || !adminTeams || adminTeams.length === 0) {
-    return (
-      <div className="flex min-h-screen w-full flex-col bg-background">
-        <Header />
-        <main className="flex-1 p-4 md:p-8">
-            <Card>
-                <CardHeader>
-                    <CardTitle>Zugriff verweigert</CardTitle>
-                    <CardDescription>Sie haben nicht die erforderlichen Rechte oder sind keinem Team mit Mannschaftskasse zugewiesen.</CardDescription>
-                </CardHeader>
-            </Card>
-        </main>
-      </div>
-    );
-  }
-
+  const isLoadingInitial = isUserLoading || teamsLoading;
+  
   return (
     <div className="flex min-h-screen w-full flex-col bg-background">
       <Header />
@@ -733,7 +722,7 @@ export default function MannschaftskassePage() {
         <div className="mx-auto max-w-6xl space-y-8">
            <div className="flex items-center justify-between mb-8">
                 <h1 className="text-3xl font-bold">Mannschaftskasse</h1>
-                {adminTeams.length > 0 && (
+                {adminTeams && adminTeams.length > 0 && (
                   <Select value={selectedTeamId} onValueChange={(value) => setSelectedTeamId(value)}>
                       <SelectTrigger className="w-[280px]">
                           <SelectValue placeholder="Team auswählen..." />
@@ -749,7 +738,11 @@ export default function MannschaftskassePage() {
                 )}
             </div>
           
-            {selectedTeamId ? (
+            {isLoadingInitial ? (
+                 <div className="flex items-center justify-center p-8">
+                    <Loader2 className="h-16 w-16 animate-spin text-primary" />
+                 </div>
+            ) : selectedTeamId && membersForTeam ? (
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
                     <div className="space-y-8">
                         <TreasuryManager 
@@ -769,7 +762,7 @@ export default function MannschaftskassePage() {
                 <Card>
                     <CardContent>
                         <div className="p-8 text-center text-muted-foreground">
-                            {isLoadingInitial ? <Loader2 className="h-8 w-8 animate-spin mx-auto" /> : "Bitte wählen Sie ein Team aus."}
+                            {teamsLoading ? <Loader2 className="h-8 w-8 animate-spin mx-auto" /> : "Bitte wählen Sie ein Team aus oder Ihnen wurden keine Teams zugewiesen."}
                         </div>
                     </CardContent>
                 </Card>
