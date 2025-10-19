@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
@@ -678,10 +679,12 @@ export default function MannschaftskassePage() {
   const { data: userData, isLoading: isUserLoading } = useDoc<UserData>(userDocRef);
 
   const adminTeamsQuery = useMemo(() => {
-    if (!firestore || !userData?.adminRechte || !userData.teamIds) return null;
-    if (userData.teamIds.length === 0) return null;
+    if (!firestore || !userData?.adminRechte || !userData.teamIds || userData.teamIds.length === 0) {
+      return null;
+    }
     return query(collection(firestore, 'teams'), where('__name__', 'in', userData.teamIds));
   }, [firestore, userData]);
+
   const { data: adminTeams, isLoading: teamsLoading } = useCollection<Team>(adminTeamsQuery);
 
   useEffect(() => {
@@ -725,18 +728,20 @@ export default function MannschaftskassePage() {
         <div className="mx-auto max-w-6xl space-y-8">
            <div className="flex items-center justify-between mb-8">
                 <h1 className="text-3xl font-bold">Mannschaftskasse</h1>
-                <Select value={selectedTeamId} onValueChange={setSelectedTeamId}>
-                    <SelectTrigger className="w-[280px]">
-                        <SelectValue placeholder="Team auswählen..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {adminTeams.map(team => (
-                            <SelectItem key={team.id} value={team.id}>
-                                {team.name}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
+                {adminTeams.length > 0 && (
+                  <Select value={selectedTeamId} onValueChange={setSelectedTeamId}>
+                      <SelectTrigger className="w-[280px]">
+                          <SelectValue placeholder="Team auswählen..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                          {adminTeams.map(team => (
+                              <SelectItem key={team.id} value={team.id}>
+                                  {team.name}
+                              </SelectItem>
+                          ))}
+                      </SelectContent>
+                  </Select>
+                )}
             </div>
           
             {selectedTeamId ? (
