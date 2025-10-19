@@ -40,12 +40,13 @@ interface EventOverride {
   eventId: string;
   originalDate: Timestamp;
   isCancelled?: boolean;
-  // ... other fields from Event might be here
+  cancellationReason?: string;
 }
 
 interface DisplayEvent extends Event {
   displayDate: Date;
   isCancelled?: boolean;
+  cancellationReason?: string;
 }
 
 interface EventResponse {
@@ -91,11 +92,13 @@ interface UserData {
 const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds }: { event: DisplayEvent; allUsers: GroupMember[], locations: Location[], eventTitles: EventTitle[], currentUserTeamIds: string[] }) => {
     const { user } = useUser();
     const firestore = useFirestore();
+    const [isDeclineDialogOpen, setIsDeclineDialogOpen] = useState(false);
+    const [declineReason, setDeclineReason] = useState('');
 
     const responsesQuery = useMemo(() => {
-        if (!event.id || !firestore || !eventTitles || !locations) return null;
+        if (!event.id || !firestore || !allUsers || !locations || !eventTitles) return null;
         return query(collection(firestore, 'event_responses'), where('eventId', '==', event.id))
-    }, [firestore, event.id, eventTitles, locations]);
+    }, [firestore, event.id, allUsers, locations, eventTitles]);
 
     const { data: allResponses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
     
@@ -155,10 +158,15 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
 
     const handleRsvp = (status: 'attending' | 'declined' | 'uncertain', reason?: string) => {
         if (!user || !firestore) return;
+
+        if (status === 'declined' && reason === undefined) {
+            setIsDeclineDialogOpen(true);
+            return;
+        }
         
         const responseCollectionRef = collection(firestore, 'event_responses');
         
-        if (userResponse && userResponse.status === status) {
+        if (userResponse && userResponse.status === status && status !== 'declined') {
             const responseRef = doc(responseCollectionRef, userResponse.id);
             deleteDoc(responseRef).catch(console.error);
             return;
@@ -167,7 +175,7 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
         const eventDateAsTimestamp = Timestamp.fromDate(startOfDay(event.displayDate));
         const responseDocId = userResponse?.id || doc(responseCollectionRef).id;
         
-        const data = {
+        const data: Omit<EventResponse, 'id'| 'respondedAt'> & { respondedAt: any } = {
             userId: user.uid,
             status: status,
             respondedAt: serverTimestamp(),
@@ -178,6 +186,11 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
         
         const responseRef = doc(responseCollectionRef, responseDocId);
         setDoc(responseRef, data, { merge: true }).catch(console.error);
+
+        if (isDeclineDialogOpen) {
+            setIsDeclineDialogOpen(false);
+            setDeclineReason('');
+        }
     };
     
     const location = locations.find(l => l.id === event.locationId);
@@ -239,14 +252,35 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
                         <HelpCircle className="mr-2 h-4 w-4" />
                         Unsicher
                     </Button>
-                    <Button 
-                        size="sm"
-                        variant={userResponse?.status === 'declined' ? 'destructive' : 'outline'}
-                        onClick={() => handleRsvp('declined', 'Ohne Grund abgesagt')}
-                    >
-                        <XIcon className="mr-2 h-4 w-4" />
-                        Absagen
-                    </Button>
+                    <Dialog open={isDeclineDialogOpen} onOpenChange={setIsDeclineDialogOpen}>
+                        <DialogTrigger asChild>
+                            <Button 
+                                size="sm"
+                                variant={userResponse?.status === 'declined' ? 'destructive' : 'outline'}
+                                onClick={() => handleRsvp('declined')}
+                            >
+                                <XIcon className="mr-2 h-4 w-4" />
+                                Absagen
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>Absagegrund</DialogTitle>
+                                <DialogDescription>Bitte gib einen Grund für deine Absage an. Dies hilft den Trainern bei der Planung.</DialogDescription>
+                            </DialogHeader>
+                            <Textarea 
+                                placeholder="z.B. Krank, Urlaub, etc."
+                                value={declineReason}
+                                onChange={(e) => setDeclineReason(e.target.value)}
+                            />
+                            <DialogFooter>
+                                 <DialogClose asChild>
+                                    <Button variant="outline">Abbrechen</Button>
+                                </DialogClose>
+                                <Button variant="destructive" onClick={() => handleRsvp('declined', declineReason)}>Absage bestätigen</Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
                 </div>}
                 </CardFooter>
              )}

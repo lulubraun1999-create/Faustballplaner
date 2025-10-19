@@ -143,9 +143,9 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
     const [declineReason, setDeclineReason] = useState('');
 
     const responsesQuery = useMemo(() => {
-        if (!event.id || !firestore || !eventTitles || !locations) return null;
+        if (!event.id || !firestore || !allUsers || !locations || !eventTitles) return null;
         return query(collection(firestore, 'event_responses'), where('eventId', '==', event.id))
-    }, [firestore, event.id, eventTitles, locations]);
+    }, [firestore, event.id, allUsers, locations, eventTitles]);
 
     const { data: allResponses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
     
@@ -224,7 +224,7 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
     const decliners = useMemo(() => {
         return responsesForThisInstance
             .filter(r => r.status === 'declined')
-            .map(r => ({ name: getResponderName(r.userId), reason: r.reason }))
+            .map(r => ({ name: getResponderName(r.userId), reason: r.reason, userId: r.userId }))
             .sort((a,b) => a.name.localeCompare(b.name));
     }, [responsesForThisInstance, allUsers]);
     
