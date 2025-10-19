@@ -660,7 +660,7 @@ export default function MannschaftskassePage() {
     if (adminTeams && adminTeams.length > 0 && !selectedTeamId) {
       setSelectedTeamId(adminTeams[0].id);
     }
-  }, [adminTeams, selectedTeamId]);
+  }, [adminTeams]);
   
   const allMembersQuery = useMemo(() => {
     if (!firestore) return null;
@@ -729,7 +729,7 @@ export default function MannschaftskassePage() {
            <div className="flex items-center justify-between mb-8">
                 <h1 className="text-3xl font-bold">Mannschaftskasse</h1>
                 {adminTeams.length > 0 && (
-                  <Select value={selectedTeamId} onValueChange={(value) => setSelectedTeamId(value === '' ? undefined : value)}>
+                  <Select value={selectedTeamId} onValueChange={(value) => setSelectedTeamId(value)}>
                       <SelectTrigger className="w-[280px]">
                           <SelectValue placeholder="Team auswählen..." />
                       </SelectTrigger>
