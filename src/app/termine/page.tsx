@@ -1030,7 +1030,6 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, onReact
     const endDate = useMemo(() => {
         if (!event.endTime) return undefined;
 
-        const originalStartDate = event.date.toDate();
         const originalEndDate = event.endTime.toDate();
         
         const newEndDate = new Date(startDate);
@@ -1038,7 +1037,7 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, onReact
         newEndDate.setMinutes(originalEndDate.getMinutes());
         newEndDate.setSeconds(originalEndDate.getSeconds());
 
-        const daysDifference = differenceInDays(originalEndDate, originalStartDate);
+        const daysDifference = differenceInDays(originalEndDate, event.date.toDate());
         if (daysDifference > 0) {
           newEndDate.setDate(newEndDate.getDate() + daysDifference);
         }
@@ -1426,103 +1425,102 @@ export default function TerminePage() {
  const eventsForWeek = useMemo(() => {
     if (!localEvents || !overridesData) return new Map<string, DisplayEvent[]>();
 
-    const filteredByTeam = localEvents.filter(event => {
-      if (selectedTeamIds.length === 0) return true;
-      if (!event.targetTeamIds || event.targetTeamIds.length === 0) return true;
-      return event.targetTeamIds.some(id => selectedTeamIds.includes(id));
+    const filteredEvents = localEvents.filter(event => {
+        if (selectedTeamIds.length > 0 && !event.targetTeamIds?.some(id => selectedTeamIds.includes(id))) return false;
+        if (selectedTitleIds.length > 0 && !selectedTitleIds.includes(event.titleId)) return false;
+        return true;
     });
 
-    const filteredByTitle = filteredByTeam.filter(event => {
-      if (selectedTitleIds.length === 0) return true;
-      return selectedTitleIds.includes(event.titleId);
-    });
-    
     const weeklyEventsMap = new Map<string, DisplayEvent[]>();
-    const interval = { start: startOfDay(currentWeekStart), end: startOfDay(currentWeekEnd) };
+    const interval = { start: startOfDay(currentWeekStart), end: add(startOfDay(currentWeekEnd), { days: 1 }) };
 
-    for (const event of filteredByTitle) {
-      const originalStartDate = event.date.toDate();
-      const recurrenceEndDate = event.recurrenceEndDate?.toDate();
-
-      if (event.recurrence === 'none' || !event.recurrence) {
-        if (isWithinInterval(originalStartDate, interval)) {
-          const dayKey = format(originalStartDate, 'yyyy-MM-dd');
-          if (!weeklyEventsMap.has(dayKey)) weeklyEventsMap.set(dayKey, []);
-
-          const override = overridesData.find(o => o.eventId === event.id && isSameDay(o.originalDate.toDate(), originalStartDate));
-          if(!override) {
-             weeklyEventsMap.get(dayKey)?.push({ ...event, displayDate: originalStartDate });
-          }
-        }
-        continue;
-      }
-      
-      let currentDate = originalStartDate;
-      let limit = 200; 
-      
-      while (currentDate < interval.start && limit > 0) {
-        if (recurrenceEndDate && currentDate > recurrenceEndDate) {
-          limit = 0;
-          continue;
-        }
-        switch (event.recurrence) {
-          case 'weekly': currentDate = addWeeks(currentDate, 1); break;
-          case 'biweekly': currentDate = addWeeks(currentDate, 2); break;
-          case 'monthly': currentDate = add(currentDate, { months: 1 }); break;
-          default: limit = 0; break;
-        }
-        limit--;
-      }
-
-      limit = 100;
-      while (currentDate <= interval.end && limit > 0) {
-        if (recurrenceEndDate && currentDate > recurrenceEndDate) {
-          limit = 0;
-          continue;
-        }
-        
-        if (isWithinInterval(currentDate, interval)) {
-          const dayKey = format(currentDate, 'yyyy-MM-dd');
-          
-          const override = overridesData.find(o => o.eventId === event.id && isSameDay(o.originalDate.toDate(), currentDate));
-          
-          if(!override) {
-            if (!weeklyEventsMap.has(dayKey)) weeklyEventsMap.set(dayKey, []);
-            let finalEvent: DisplayEvent = { ...event, displayDate: currentDate };
-            weeklyEventsMap.get(dayKey)?.push(finalEvent);
-          }
-        }
-        
-        switch (event.recurrence) {
-          case 'weekly': currentDate = addWeeks(currentDate, 1); break;
-          case 'biweekly': currentDate = addWeeks(currentDate, 2); break;
-          case 'monthly': currentDate = add(currentDate, { months: 1 }); break;
-          default: limit = 0; break;
-        }
-        limit--;
-      }
-    }
-    
+    // --- 1. Process Overrides First ---
+    // Create a map to track which original event instances have been overridden
+    const overriddenInstances = new Map<string, EventOverride>();
     for (const override of overridesData) {
+        const key = `${override.eventId}_${format(override.originalDate.toDate(), 'yyyy-MM-dd')}`;
+        overriddenInstances.set(key, override);
+        
         const overrideDate = override.date?.toDate() || override.originalDate.toDate();
+        // Check if the override's *new* date is within the week
         if (isWithinInterval(overrideDate, interval)) {
             const originalEvent = localEvents.find(e => e.id === override.eventId);
-            if (!originalEvent) continue;
+            if (originalEvent) {
+                // Apply filters to the override
+                const finalTargetTeams = override.targetTeamIds || originalEvent.targetTeamIds;
+                const finalTitleId = override.titleId || originalEvent.titleId;
+                if (selectedTeamIds.length > 0 && !finalTargetTeams?.some(id => selectedTeamIds.includes(id))) continue;
+                if (selectedTitleIds.length > 0 && !selectedTitleIds.includes(finalTitleId)) continue;
+                
+                const dayKey = format(overrideDate, 'yyyy-MM-dd');
+                if (!weeklyEventsMap.has(dayKey)) weeklyEventsMap.set(dayKey, []);
+                weeklyEventsMap.get(dayKey)!.push({
+                    ...originalEvent,
+                    ...override,
+                    id: originalEvent.id, // Ensure original event ID is preserved
+                    displayDate: overrideDate,
+                });
+            }
+        }
+    }
 
-            const isTeamFiltered = selectedTeamIds.length > 0 && !originalEvent.targetTeamIds?.some(id => selectedTeamIds.includes(id)) && !(override.targetTeamIds || []).some(id => selectedTeamIds.includes(id));
-            const isTitleFiltered = selectedTitleIds.length > 0 && !(selectedTitleIds.includes(originalEvent.titleId)) && !(override.titleId && selectedTitleIds.includes(override.titleId));
-            if(isTeamFiltered || isTitleFiltered) continue;
+    // --- 2. Process Base Events ---
+    for (const event of filteredEvents) {
+        // Handle non-recurring events
+        if (event.recurrence === 'none' || !event.recurrence) {
+            const originalDate = event.date.toDate();
+            const key = `${event.id}_${format(originalDate, 'yyyy-MM-dd')}`;
+            if (isWithinInterval(originalDate, interval) && !overriddenInstances.has(key)) {
+                const dayKey = format(originalDate, 'yyyy-MM-dd');
+                if (!weeklyEventsMap.has(dayKey)) weeklyEventsMap.set(dayKey, []);
+                weeklyEventsMap.get(dayKey)!.push({ ...event, displayDate: originalDate });
+            }
+            continue;
+        }
 
-            const dayKey = format(overrideDate, 'yyyy-MM-dd');
-            if (!weeklyEventsMap.has(dayKey)) weeklyEventsMap.set(dayKey, []);
-            
-            const finalEvent: DisplayEvent = {
-              ...originalEvent,
-              ...override,
-              id: originalEvent.id, 
-              displayDate: overrideDate,
-            };
-            weeklyEventsMap.get(dayKey)?.push(finalEvent);
+        // Handle recurring events
+        let currentDate = event.date.toDate();
+        const recurrenceEndDate = event.recurrenceEndDate?.toDate();
+        
+        // Fast-forward to a date near the start of the interval for performance
+        if (currentDate < interval.start) {
+          let tempDate = new Date(currentDate);
+          if (event.recurrence === 'weekly' || event.recurrence === 'biweekly') {
+              const weeksDiff = Math.floor((interval.start.getTime() - tempDate.getTime()) / (1000 * 60 * 60 * 24 * 7));
+              const step = event.recurrence === 'weekly' ? 1 : 2;
+              const stepsToSkip = Math.floor(weeksDiff / step);
+              if (stepsToSkip > 0) {
+                tempDate = addWeeks(tempDate, stepsToSkip * step);
+              }
+          } else if (event.recurrence === 'monthly') {
+               const monthDiff = (interval.start.getFullYear() - tempDate.getFullYear()) * 12 + (interval.start.getMonth() - tempDate.getMonth());
+               if (monthDiff > 0) {
+                  tempDate = add(tempDate, {months: monthDiff -1});
+               }
+          }
+          currentDate = tempDate;
+        }
+
+        let safety = 100;
+        while (currentDate < interval.end && safety > 0) {
+            if (recurrenceEndDate && currentDate > recurrenceEndDate) break;
+
+            if (currentDate >= interval.start) {
+                const key = `${event.id}_${format(currentDate, 'yyyy-MM-dd')}`;
+                if (!overriddenInstances.has(key)) {
+                    const dayKey = format(currentDate, 'yyyy-MM-dd');
+                    if (!weeklyEventsMap.has(dayKey)) weeklyEventsMap.set(dayKey, []);
+                    weeklyEventsMap.get(dayKey)!.push({ ...event, displayDate: currentDate });
+                }
+            }
+
+            switch (event.recurrence) {
+                case 'weekly': currentDate = addWeeks(currentDate, 1); break;
+                case 'biweekly': currentDate = addWeeks(currentDate, 2); break;
+                case 'monthly': currentDate = add(currentDate, { months: 1 }); break;
+                default: safety = 0; break;
+            }
+            safety--;
         }
     }
 
@@ -1535,7 +1533,7 @@ export default function TerminePage() {
     });
 
     return weeklyEventsMap;
-  }, [localEvents, overridesData, currentWeekStart, currentWeekEnd, selectedTeamIds, selectedTitleIds]);
+}, [localEvents, overridesData, currentWeekStart, currentWeekEnd, selectedTeamIds, selectedTitleIds]);
 
 
   const handleOpenForm = (event?: DisplayEvent) => {
