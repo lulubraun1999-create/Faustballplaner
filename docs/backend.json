@@ -1,6 +1,21 @@
 
 {
   "entities": {
+    "UserAbsence": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "UserAbsence",
+      "type": "object",
+      "description": "Represents a period of absence for a user.",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "startDate": { "type": "string", "format": "date-time" },
+        "endDate": { "type": "string", "format": "date-time" },
+        "reason": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "startDate", "endDate", "reason", "createdAt"]
+    },
     "NewsArticle": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "NewsArticle",
@@ -661,6 +676,16 @@
               "description": "Unique identifier for the forum post."
             }
           ]
+        }
+      },
+       {
+        "path": "/users/{userId}/absences/{absenceId}",
+        "definition": {
+          "entityName": "UserAbsence",
+          "schema": {
+            "$ref": "#/backend/entities/UserAbsence"
+          },
+          "description": "Collection of a user's planned absences."
         }
       },
       {
