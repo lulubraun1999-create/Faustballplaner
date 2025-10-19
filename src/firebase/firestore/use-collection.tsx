@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Query,
   onSnapshot,
@@ -10,6 +10,8 @@ import {
   QuerySnapshot,
   CollectionReference,
 } from 'firebase/firestore';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 /** Utility type to add an 'id' field to a given type T. */
 export type WithId<T> = T & { id: string };
@@ -45,6 +47,7 @@ export function useCollection<T = any>(
   const [error, setError] = useState<FirestoreError | null>(null);
 
   useEffect(() => {
+    // If the query is null or undefined, do nothing.
     if (!queryOrRef) {
       setData(null);
       setIsLoading(false);
@@ -52,31 +55,41 @@ export function useCollection<T = any>(
       return;
     }
 
-    // Start in a loading state whenever the query changes
+    // Start in a loading state and clear previous errors.
     setIsLoading(true);
     setError(null);
 
     const unsubscribe = onSnapshot(
       queryOrRef,
       (snapshot: QuerySnapshot<DocumentData>) => {
-        const results: ResultItemType[] = [];
-        for (const doc of snapshot.docs) {
-          results.push({ ...(doc.data() as T), id: doc.id });
-        }
+        // Map snapshot docs to the desired data format.
+        const results: ResultItemType[] = snapshot.docs.map(doc => ({
+          ...(doc.data() as T),
+          id: doc.id,
+        }));
+        
         setData(results);
         setError(null);
         setIsLoading(false);
       },
       (err: FirestoreError) => {
-        console.error("useCollection Firestore Error:", err);
+        // Create and emit a rich, contextual error for permission issues.
+        const permissionError = new FirestorePermissionError({
+          path: queryOrRef.path,
+          operation: 'list',
+        });
+        errorEmitter.emit('permission-error', permissionError);
+        
+        // Also set local error state for component-level handling if needed.
         setError(err);
         setData(null);
         setIsLoading(false);
       }
     );
 
+    // Cleanup the listener when the component unmounts or the query changes.
     return () => unsubscribe();
-  }, [queryOrRef]); // Re-run only when the stable query reference changes.
+  }, [queryOrRef]); // Effect dependencies.
 
   return { data, isLoading, error };
 }

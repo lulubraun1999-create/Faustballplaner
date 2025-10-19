@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { useFirestore, useUser, useCollection, useDoc } from '@/firebase';
+import { useFirestore, useUser, useCollection, useDoc, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { collection, query, orderBy, addDoc, serverTimestamp, Timestamp, doc, deleteDoc, where, getDocs, setDoc, onSnapshot } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Header } from '@/components/header';
@@ -48,16 +48,16 @@ interface UserChatStatus {
 const getInitials = (name: string) => {
   if (!name) return '??';
   const nameParts = name.split(' ');
-  if (nameParts.length > 1) {
+  if (nameParts.length > 1 && nameParts[0] && nameParts[nameParts.length - 1]) {
     return `${nameParts[0][0]}${nameParts[nameParts.length - 1][0]}`.toUpperCase();
   }
   return name.substring(0, 2).toUpperCase();
 };
 
-const ChatRoomButton = ({ room, activeRoom, setActiveRoom, unreadCount }: { room: ChatRoom, activeRoom: ChatRoom, setActiveRoom: (room: ChatRoom) => void, unreadCount: number }) => {
+const ChatRoomButton = ({ room, activeRoom, setActiveRoom, unreadCount }: { room: ChatRoom, activeRoom: ChatRoom | null, setActiveRoom: (room: ChatRoom) => void, unreadCount: number }) => {
     return (
         <Button
-            variant={activeRoom.id === room.id ? 'secondary' : 'ghost'}
+            variant={activeRoom?.id === room.id ? 'secondary' : 'ghost'}
             className="justify-between w-full"
             onClick={() => setActiveRoom(room)}
         >
@@ -78,7 +78,7 @@ export default function ChatPage() {
   const firestore = useFirestore();
   const { user } = useUser();
   const { toast } = useToast();
-  const [activeRoom, setActiveRoom] = useState<ChatRoom>({ id: 'general', name: 'Alle' });
+  const [activeRoom, setActiveRoom] = useState<ChatRoom | null>(null);
   const [newMessage, setNewMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -113,6 +113,12 @@ export default function ChatPage() {
   }, [currentUserData, teams]);
 
   useEffect(() => {
+    if (chatRooms.length > 0 && !activeRoom) {
+      setActiveRoom(chatRooms[0]);
+    }
+  }, [chatRooms, activeRoom]);
+
+  useEffect(() => {
     if (!firestore || !user || chatRooms.length <= 1) return;
 
     const unsubscribes: (() => void)[] = [];
@@ -129,19 +135,14 @@ export default function ChatPage() {
                 // Count unread messages
                 const messagesRef = collection(firestore, 'chat_rooms', room.id, 'messages');
                 const q = query(messagesRef, where('timestamp', '>', lastSeen), where('userId', '!=', user.uid));
-                const messageSnapshot = await getDocs(q);
-                counts[room.id] = messageSnapshot.size;
-
-                // Set up listener for new messages
-                const liveQuery = query(messagesRef, where('timestamp', '>', Timestamp.now()));
-                const unsubscribe = onSnapshot(liveQuery, (snapshot) => {
-                    const newMessages = snapshot.docs.filter(doc => doc.data().userId !== user.uid);
-                    if (newMessages.length > 0) {
-                        setUnreadCounts(prevCounts => ({
-                            ...prevCounts,
-                            [room.id]: (prevCounts[room.id] || 0) + newMessages.length,
-                        }));
-                    }
+                
+                const unsubscribe = onSnapshot(q, (snapshot) => {
+                     setUnreadCounts(prevCounts => ({
+                        ...prevCounts,
+                        [room.id]: snapshot.size,
+                    }));
+                }, (error) => {
+                    console.error(`Error listening to unread count for room ${room.id}:`, error);
                 });
                 unsubscribes.push(unsubscribe);
 
@@ -150,7 +151,6 @@ export default function ChatPage() {
                 counts[room.id] = 0;
             }
         }
-        setUnreadCounts(counts);
     };
 
     fetchAndListen();
@@ -182,7 +182,7 @@ export default function ChatPage() {
   }, [messages]);
 
   const handleSendMessage = async () => {
-    if (!firestore || !user || !newMessage.trim()) return;
+    if (!firestore || !user || !newMessage.trim() || !activeRoom) return;
     setIsSending(true);
 
     const messageData = {
@@ -200,11 +200,12 @@ export default function ChatPage() {
             setNewMessage('');
         })
         .catch((serverError) => {
-             toast({
-                variant: "destructive",
-                title: "Fehler beim Senden",
-                description: serverError.message,
+             const permissionError = new FirestorePermissionError({
+                path: messagesCollection.path,
+                operation: 'create',
+                requestResourceData: messageData,
             });
+            errorEmitter.emit('permission-error', permissionError);
         })
         .finally(() => {
             setIsSending(false);
@@ -212,16 +213,27 @@ export default function ChatPage() {
   };
 
   const handleDeleteMessage = async (messageId: string) => {
-    if (!firestore || !activeRoom) return;
+    if (!firestore || !activeRoom || !user) return;
+    
+    const messageToDelete = messages?.find(m => m.id === messageId);
+    if (!messageToDelete || messageToDelete.userId !== user.uid) {
+        toast({
+            variant: "destructive",
+            title: "Fehler",
+            description: "Sie können nur Ihre eigenen Nachrichten löschen.",
+        });
+        return;
+    }
+
     const messageRef = doc(firestore, 'chat_rooms', activeRoom.id, 'messages', messageId);
     
     deleteDoc(messageRef)
         .catch((serverError) => {
-            toast({
-                variant: "destructive",
-                title: "Fehler beim Löschen",
-                description: serverError.message,
+            const permissionError = new FirestorePermissionError({
+                path: messageRef.path,
+                operation: 'delete',
             });
+            errorEmitter.emit('permission-error', permissionError);
         });
   }
 
@@ -278,7 +290,7 @@ export default function ChatPage() {
         <section className="flex flex-col h-full">
             <Card className="flex-1 flex flex-col rounded-none border-0 md:border-l">
                 <CardHeader className="border-b">
-                    <CardTitle>{activeRoom.name}</CardTitle>
+                    <CardTitle>{activeRoom?.name || 'Lade...'}</CardTitle>
                 </CardHeader>
                 <CardContent className="flex-1 overflow-y-auto p-4 md:p-6">
                     <div className="space-y-6">
