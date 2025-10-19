@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Newspaper, CalendarDays, Users, MessageSquare, Loader2, Repeat, Clock, MapPin, Check, XIcon, HelpCircle, Ban, CheckCircle2, Edit, Trash2 } from 'lucide-react';
 import { Header } from '@/components/header';
 import Link from 'next/link';
