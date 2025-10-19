@@ -294,7 +294,7 @@ function TreasuryManager({ teamId, members, transactions, penalties, userPenalti
                 const penalty = penalties?.find(p => p.id === values.penaltyId);
                 if (!penalty) throw new Error("Ausgewählte Strafe nicht gefunden.");
 
-                await addDoc(collection(firestore, 'user_penalties'), {
+                await addDoc(collection(firestore, 'teams', teamId, 'user_penalties'), {
                     userId: values.userId,
                     teamId: teamId,
                     penaltyId: penalty.id,
@@ -349,7 +349,7 @@ function TreasuryManager({ teamId, members, transactions, penalties, userPenalti
     const markAsPaid = async (userPenaltyId: string) => {
         if (!firestore || !user || !teamId) return;
         
-        const userPenaltyRef = doc(firestore, 'user_penalties', userPenaltyId);
+        const userPenaltyRef = doc(firestore, 'teams', teamId, 'user_penalties', userPenaltyId);
         const userPenalty = userPenalties?.find(up => up.id === userPenaltyId);
         if(!userPenalty) return;
 
@@ -626,7 +626,7 @@ export default function MannschaftskassePage() {
   
   const userPenaltiesQuery = useMemo(() => {
     if (!firestore || !selectedTeamId) return null;
-    return query(collection(firestore, 'user_penalties'), where('teamId', '==', selectedTeamId), orderBy('assignedAt', 'desc'));
+    return query(collection(firestore, 'teams', selectedTeamId, 'user_penalties'), orderBy('assignedAt', 'desc'));
   }, [firestore, selectedTeamId]);
   const { data: userPenalties, isLoading: userPenaltiesLoading } = useCollection<UserPenalty>(userPenaltiesQuery);
 
