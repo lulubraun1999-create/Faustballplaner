@@ -113,6 +113,8 @@ interface UserData {
   id: string;
   adminRechte?: boolean;
   teamIds?: string[];
+  vorname: string;
+  nachname: string;
 }
 
 interface GroupMember {
@@ -663,7 +665,6 @@ export default function MannschaftskassePage() {
     if (!firestore) return null;
     return collection(firestore, 'group_members');
   }, [firestore]);
-
   const { data: allMembers, isLoading: membersLoading } = useCollection<GroupMember>(allMembersQuery);
 
   const penaltiesQuery = useMemo(() => {
@@ -690,10 +691,11 @@ export default function MannschaftskassePage() {
     return allMembers.filter(m => m.teamIds?.includes(selectedTeamId));
   }, [allMembers, selectedTeamId]);
   
-  const isLoading = isUserLoading || teamsLoading || membersLoading || penaltiesLoading || transactionsLoading || userPenaltiesLoading;
+  const isLoadingInitial = isUserLoading || teamsLoading;
+  const isLoadingTeamData = membersLoading || penaltiesLoading || transactionsLoading || userPenaltiesLoading;
 
 
-  if (isUserLoading || teamsLoading) {
+  if (isLoadingInitial) {
     return (
       <div className="flex min-h-screen w-full flex-col bg-background">
         <Header />
@@ -745,7 +747,7 @@ export default function MannschaftskassePage() {
           
             {selectedTeamId ? (
                 <>
-                {isLoading ? <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin"/></div> : (
+                {isLoadingTeamData ? <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin"/></div> : (
                     <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
                         <div className="space-y-8">
                            <TreasuryManager 
@@ -779,5 +781,3 @@ export default function MannschaftskassePage() {
     </div>
   );
 }
-
-    
