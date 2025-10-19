@@ -125,18 +125,11 @@ interface GroupMember {
 }
 
 // Components
-function PenaltyCatalogManager({ teamId }: { teamId: string }) {
+function PenaltyCatalogManager({ teamId, penalties, isLoading }: { teamId: string, penalties: Penalty[] | null, isLoading: boolean }) {
   const firestore = useFirestore();
   const { toast } = useToast();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingPenalty, setEditingPenalty] = useState<Penalty | null>(null);
-
-  const penaltiesQuery = useMemo(() => {
-    if (!firestore || !teamId) return null;
-    return query(collection(firestore, 'teams', teamId, 'penalties'), orderBy('name'));
-  }, [firestore, teamId]);
-
-  const { data: penalties, isLoading } = useCollection<Penalty>(penaltiesQuery);
 
   const form = useForm<PenaltyFormValues>({
     resolver: zodResolver(penaltySchema),
@@ -270,17 +263,11 @@ function PenaltyCatalogManager({ teamId }: { teamId: string }) {
   );
 }
 
-function TreasuryManager({ teamId, members }: { teamId: string, members: GroupMember[] | null }) {
+function TreasuryManager({ teamId, members, transactions, isLoading }: { teamId: string, members: GroupMember[] | null, transactions: TreasuryTransaction[] | null, isLoading: boolean }) {
     const firestore = useFirestore();
     const { toast } = useToast();
     const { user } = useUser();
     const [isFormOpen, setIsFormOpen] = useState(false);
-
-    const transactionsQuery = useMemo(() => {
-        if (!firestore || !teamId) return null;
-        return query(collection(firestore, 'teams', teamId, 'transactions'), orderBy('date', 'desc'));
-    }, [firestore, teamId]);
-    const { data: transactions, isLoading } = useCollection<TreasuryTransaction>(transactionsQuery);
 
     const balance = useMemo(() => {
         return transactions?.reduce((acc, t) => acc + t.amount, 0) ?? 0;
@@ -420,23 +407,11 @@ function TreasuryManager({ teamId, members }: { teamId: string, members: GroupMe
     );
 }
 
-function AssignPenaltiesManager({ teamId, members }: { teamId: string, members: GroupMember[] | null }) {
+function AssignPenaltiesManager({ teamId, members, userPenalties, penalties, isLoading }: { teamId: string, members: GroupMember[] | null, userPenalties: UserPenalty[] | null, penalties: Penalty[] | null, isLoading: boolean }) {
     const firestore = useFirestore();
     const { toast } = useToast();
     const { user } = useUser();
     const [isFormOpen, setIsFormOpen] = useState(false);
-
-    const penaltiesQuery = useMemo(() => {
-        if (!firestore || !teamId) return null;
-        return collection(firestore, 'teams', teamId, 'penalties')
-    }, [firestore, teamId]);
-    const { data: penalties } = useCollection<Penalty>(penaltiesQuery);
-    
-    const userPenaltiesQuery = useMemo(() => {
-        if (!firestore || !teamId) return null;
-        return query(collection(firestore, 'user_penalties'), where('teamId', '==', teamId), orderBy('assignedAt', 'desc'))
-    }, [firestore, teamId]);
-    const { data: userPenalties, isLoading } = useCollection<UserPenalty>(userPenaltiesQuery);
 
     const form = useForm<AssignPenaltyFormValues>({
         resolver: zodResolver(assignPenaltySchema),
@@ -690,7 +665,25 @@ export default function MannschaftskassePage() {
     if (!allMembers || !selectedTeamId) return null;
     return allMembers.filter(m => m.teamIds?.includes(selectedTeamId));
   }, [allMembers, selectedTeamId]);
+  
+  const penaltiesQuery = useMemo(() => {
+    if (!firestore || !selectedTeamId) return null;
+    return query(collection(firestore, 'teams', selectedTeamId, 'penalties'), orderBy('name'));
+  }, [firestore, selectedTeamId]);
+  
+  const transactionsQuery = useMemo(() => {
+    if (!firestore || !selectedTeamId) return null;
+    return query(collection(firestore, 'teams', selectedTeamId, 'transactions'), orderBy('date', 'desc'));
+  }, [firestore, selectedTeamId]);
 
+  const userPenaltiesQuery = useMemo(() => {
+    if (!firestore || !selectedTeamId) return null;
+    return query(collection(firestore, 'user_penalties'), where('teamId', '==', selectedTeamId), orderBy('assignedAt', 'desc'))
+  }, [firestore, selectedTeamId]);
+
+  const { data: penalties, isLoading: penaltiesLoading } = useCollection<Penalty>(penaltiesQuery);
+  const { data: transactions, isLoading: transactionsLoading } = useCollection<TreasuryTransaction>(transactionsQuery);
+  const { data: userPenalties, isLoading: userPenaltiesLoading } = useCollection<UserPenalty>(userPenaltiesQuery);
 
   useEffect(() => {
     if (adminTeams && adminTeams.length > 0 && !selectedTeamId) {
@@ -751,13 +744,28 @@ export default function MannschaftskassePage() {
           
             {selectedTeamId ? (
                 <>
-                {membersLoading ? <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin"/></div> : (
+                {(membersLoading || penaltiesLoading || transactionsLoading || userPenaltiesLoading) ? <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin"/></div> : (
                     <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
                         <div className="space-y-8">
-                           <TreasuryManager teamId={selectedTeamId} members={membersForTeam || null} />
-                           <PenaltyCatalogManager teamId={selectedTeamId} />
+                           <TreasuryManager 
+                              teamId={selectedTeamId} 
+                              members={membersForTeam}
+                              transactions={transactions}
+                              isLoading={transactionsLoading}
+                            />
+                           <PenaltyCatalogManager 
+                              teamId={selectedTeamId}
+                              penalties={penalties}
+                              isLoading={penaltiesLoading}
+                            />
                         </div>
-                        <AssignPenaltiesManager teamId={selectedTeamId} members={membersForTeam || null}/>
+                        <AssignPenaltiesManager 
+                          teamId={selectedTeamId} 
+                          members={membersForTeam}
+                          userPenalties={userPenalties}
+                          penalties={penalties}
+                          isLoading={userPenaltiesLoading}
+                        />
                     </div>
                 )}
                 </>
