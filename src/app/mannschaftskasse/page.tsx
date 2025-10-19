@@ -47,6 +47,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
+  AlertDialogFooter,
 } from "@/components/ui/alert-dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from '@/components/ui/input';
@@ -388,7 +389,11 @@ function TreasuryManager({ teamId, members, transactions, transactionsLoading }:
                                 <FormItem>
                                     <FormLabel>Mitglied (optional)</FormLabel>
                                     <Select onValueChange={field.onChange} value={field.value}>
-                                        <FormControl><SelectTrigger><SelectValue placeholder="Allgemeine Transaktion"/></SelectTrigger></FormControl>
+                                        <FormControl>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Allgemeine Transaktion"/>
+                                            </SelectTrigger>
+                                        </FormControl>
                                         <SelectContent>
                                             {members?.map(m => <SelectItem key={m.id} value={m.id}>{m.vorname} {m.nachname}</SelectItem>)}
                                         </SelectContent>
