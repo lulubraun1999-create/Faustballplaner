@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useUser, useAuth, useFirestore, useCollection, useDoc } from '@/firebase';
@@ -376,15 +375,13 @@ function NextMatchDay() {
     }, [events, overrides, eventTitles]);
 
     const responsesQuery = useMemo(() => {
-        if (!firestore || isUserLoading) { // Wait for user data to be stable
+        if (!firestore || isUserLoading) { 
             return null;
         }
-        // User data is loaded, now we can create the query
         const teamIds = userData?.teamIds;
         if (teamIds && teamIds.length > 0) {
             return query(collection(firestore, 'event_responses'), where('teamId', 'in', teamIds));
         }
-        // If user has no teams, we might want to fetch all or none, depending on requirements.
         return collection(firestore, 'event_responses');
     }, [firestore, userData, isUserLoading]);
     
@@ -517,10 +514,9 @@ function UpcomingEvents() {
     }, [events, overrides, userData, eventTitles]);
 
     const responsesQuery = useMemo(() => {
-        if (!firestore || isUserLoading) { // Wait for user data to be stable
+        if (!firestore || isUserLoading) {
             return null;
         }
-        // User data is loaded, now we can create the query
         const teamIds = userData?.teamIds;
         if (teamIds && teamIds.length > 0) {
             return query(collection(firestore, 'event_responses'), where('teamId', 'in', teamIds));
