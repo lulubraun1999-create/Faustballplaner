@@ -44,7 +44,6 @@ import {
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
-  AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
@@ -655,17 +654,18 @@ export default function MannschaftskassePage() {
 
   const { data: adminTeams, isLoading: teamsLoading } = useCollection<Team>(adminTeamsQuery);
   
+  useEffect(() => {
+    if (adminTeams && adminTeams.length > 0 && !selectedTeamId) {
+      setSelectedTeamId(adminTeams[0].id);
+    }
+  }, [adminTeams, selectedTeamId]);
+  
   const allMembersQuery = useMemo(() => {
     if (!firestore) return null;
     return collection(firestore, 'group_members');
   }, [firestore]);
   const { data: allMembers, isLoading: membersLoading } = useCollection<GroupMember>(allMembersQuery);
 
-  const membersForTeam = useMemo(() => {
-    if (!allMembers || !selectedTeamId) return null;
-    return allMembers.filter(m => m.teamIds?.includes(selectedTeamId));
-  }, [allMembers, selectedTeamId]);
-  
   const penaltiesQuery = useMemo(() => {
     if (!firestore || !selectedTeamId) return null;
     return query(collection(firestore, 'teams', selectedTeamId, 'penalties'), orderBy('name'));
@@ -684,12 +684,13 @@ export default function MannschaftskassePage() {
   const { data: penalties, isLoading: penaltiesLoading } = useCollection<Penalty>(penaltiesQuery);
   const { data: transactions, isLoading: transactionsLoading } = useCollection<TreasuryTransaction>(transactionsQuery);
   const { data: userPenalties, isLoading: userPenaltiesLoading } = useCollection<UserPenalty>(userPenaltiesQuery);
-
-  useEffect(() => {
-    if (adminTeams && adminTeams.length > 0 && !selectedTeamId) {
-      setSelectedTeamId(adminTeams[0].id);
-    }
-  }, [adminTeams, selectedTeamId]);
+  
+  const membersForTeam = useMemo(() => {
+    if (!allMembers || !selectedTeamId) return null;
+    return allMembers.filter(m => m.teamIds?.includes(selectedTeamId));
+  }, [allMembers, selectedTeamId]);
+  
+  const isLoading = isUserLoading || teamsLoading || membersLoading || penaltiesLoading || transactionsLoading || userPenaltiesLoading;
 
 
   if (isUserLoading || teamsLoading) {
@@ -744,7 +745,7 @@ export default function MannschaftskassePage() {
           
             {selectedTeamId ? (
                 <>
-                {(membersLoading || penaltiesLoading || transactionsLoading || userPenaltiesLoading) ? <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin"/></div> : (
+                {isLoading ? <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin"/></div> : (
                     <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
                         <div className="space-y-8">
                            <TreasuryManager 
@@ -764,7 +765,7 @@ export default function MannschaftskassePage() {
                           members={membersForTeam}
                           userPenalties={userPenalties}
                           penalties={penalties}
-                          isLoading={userPenaltiesLoading}
+                          isLoading={userPenaltiesLoading || membersLoading}
                         />
                     </div>
                 )}
@@ -778,3 +779,5 @@ export default function MannschaftskassePage() {
     </div>
   );
 }
+
+    
