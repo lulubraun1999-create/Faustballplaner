@@ -37,6 +37,17 @@ import {
   DialogFooter,
   DialogClose
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -315,7 +326,7 @@ function TreasuryManager({ teamId }: { teamId: string }) {
                                 const member = members?.find(m => m.id === t.userId);
                                 return (
                                 <TableRow key={t.id}>
-                                    <TableCell>{format(t.date.toDate(), 'dd.MM.yyyy')}</TableCell>
+                                    <TableCell>{t.date.toDate ? format(t.date.toDate(), 'dd.MM.yyyy') : '...'}</TableCell>
                                     <TableCell>{t.description}</TableCell>
                                     <TableCell>{member ? `${member.vorname} ${member.nachname}` : (t.type === 'correction' ? 'System' : 'Allgemein')}</TableCell>
                                     <TableCell className={cn("text-right", t.amount > 0 ? 'text-green-600' : 'text-red-600')}>
@@ -509,10 +520,26 @@ function AssignPenaltiesManager({ teamId }: { teamId: string }) {
                                     <TableRow key={up.id}>
                                         <TableCell>{member ? `${member.vorname} ${member.nachname}`: 'Unbekannt'}</TableCell>
                                         <TableCell>{up.penaltyName}</TableCell>
-                                        <TableCell>{format(up.assignedAt.toDate(), 'dd.MM.yyyy')}</TableCell>
+                                        <TableCell>{up.assignedAt.toDate ? format(up.assignedAt.toDate(), 'dd.MM.yyyy') : '...'}</TableCell>
                                         <TableCell>{new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(up.amount)}</TableCell>
                                         <TableCell className="text-right">
-                                            <Button size="sm" onClick={() => markAsPaid(up.id)}>Bezahlt</Button>
+                                            <AlertDialog>
+                                                <AlertDialogTrigger asChild>
+                                                    <Button size="sm">Bezahlt</Button>
+                                                </AlertDialogTrigger>
+                                                <AlertDialogContent>
+                                                    <AlertDialogHeader>
+                                                        <AlertDialogTitle>Wurde diese Strafe wirklich bezahlt?</AlertDialogTitle>
+                                                        <AlertDialogDescription>
+                                                            Diese Aktion markiert die Strafe als bezahlt und erstellt eine entsprechende Einzahlung in der Mannschaftskasse.
+                                                        </AlertDialogDescription>
+                                                    </AlertDialogHeader>
+                                                    <AlertDialogFooter>
+                                                        <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                                                        <AlertDialogAction onClick={() => markAsPaid(up.id)}>Ja, bezahlt</AlertDialogAction>
+                                                    </AlertDialogFooter>
+                                                </AlertDialogContent>
+                                            </AlertDialog>
                                         </TableCell>
                                     </TableRow>
                                 )
