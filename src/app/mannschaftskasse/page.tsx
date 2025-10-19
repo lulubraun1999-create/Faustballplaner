@@ -688,10 +688,10 @@ export default function MannschaftskassePage() {
   const { data: adminTeams, isLoading: teamsLoading } = useCollection<Team>(adminTeamsQuery);
 
   useEffect(() => {
-      if(adminTeams && adminTeams.length > 0 && !selectedTeamId) {
+      if(adminTeams && adminTeams.length > 0) {
           setSelectedTeamId(adminTeams[0].id);
       }
-  }, [adminTeams, selectedTeamId]);
+  }, [adminTeams]);
 
 
   if (isUserLoading || teamsLoading) {
