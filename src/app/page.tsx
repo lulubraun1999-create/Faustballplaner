@@ -288,7 +288,7 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
 function NextMatchDay() {
     const firestore = useFirestore();
     const { user } = useUser();
-     const { data: userData } = useDoc<UserData>(user ? doc(firestore, 'users', user.uid) : null);
+    const { data: userData } = useDoc<UserData>(user ? doc(firestore, 'users', user.uid) : null);
 
     // Data fetching
     const { data: events, isLoading: eventsLoading } = useCollection<Event>(firestore ? query(collection(firestore, 'events')) : null);
@@ -296,9 +296,6 @@ function NextMatchDay() {
     const { data: locations, isLoading: locationsLoading } = useCollection<Location>(firestore ? collection(firestore, 'locations') : null);
     const { data: eventTitles, isLoading: titlesLoading } = useCollection<EventTitle>(firestore ? collection(firestore, 'event_titles') : null);
     const { data: allUsers, isLoading: usersLoading } = useCollection<GroupMember>(firestore ? collection(firestore, 'group_members') : null);
-    const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(firestore ? query(collection(firestore, 'event_responses')) : null);
-
-    const isLoading = eventsLoading || overridesLoading || locationsLoading || titlesLoading || usersLoading || responsesLoading;
 
     const nextMatchDay = useMemo(() => {
         if (!events || !overrides || !eventTitles) return null;
@@ -310,7 +307,6 @@ function NextMatchDay() {
         const futureLimit = add(now, { years: 1 });
 
         const matchDayEvents = events.filter(event => event.titleId === spieltagTitleId);
-
         const allOccurrences: DisplayEvent[] = [];
 
         for (const event of matchDayEvents) {
@@ -330,7 +326,6 @@ function NextMatchDay() {
             const recurrenceEndDate = event.recurrenceEndDate?.toDate();
             let limit = 100;
             
-            // Fast-forward
             if(currentDate < now) {
                 currentDate = now;
             }
@@ -362,6 +357,16 @@ function NextMatchDay() {
             .slice(0, 1)[0] || null;
 
     }, [events, overrides, eventTitles]);
+    
+    const responsesQuery = useMemo(() => {
+      if (!firestore || !nextMatchDay || eventsLoading) return null;
+      return query(collection(firestore, 'event_responses'), where('eventId', '==', nextMatchDay.id));
+    }, [firestore, nextMatchDay, eventsLoading]);
+
+    const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
+
+
+    const isLoading = eventsLoading || overridesLoading || locationsLoading || titlesLoading || usersLoading || responsesLoading;
 
     if (isLoading) {
         return (
@@ -385,7 +390,7 @@ function NextMatchDay() {
                     locations={locations || []}
                     eventTitles={eventTitles || []}
                     currentUserTeamIds={userData?.teamIds || []}
-                    responses={responses?.filter(r => r.eventId === nextMatchDay.id) || null}
+                    responses={responses || null}
                 />
              </div>
         </div>
@@ -406,16 +411,13 @@ function UpcomingEvents() {
     const { data: allUsers, isLoading: usersLoading } = useCollection<GroupMember>(firestore ? collection(firestore, 'group_members') : null);
     const { data: locations, isLoading: locationsLoading } = useCollection<Location>(firestore ? collection(firestore, 'locations') : null);
     const { data: eventTitles, isLoading: titlesLoading } = useCollection<EventTitle>(firestore ? collection(firestore, 'event_titles') : null);
-    const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(firestore ? query(collection(firestore, 'event_responses')) : null);
-
-    const isLoading = eventsLoading || overridesLoading || usersLoading || locationsLoading || titlesLoading || responsesLoading;
 
     const upcomingEvents = useMemo(() => {
         if (!events || !overrides || !userData || !eventTitles) return [];
 
         const userTeamIds = userData.teamIds || [];
         const now = new Date();
-        const futureLimit = add(now, { months: 6 }); // Look 6 months into the future for recurring events
+        const futureLimit = add(now, { months: 6 }); 
         
         const relevantEvents = events.filter(event => {
             const isPublic = !event.targetTeamIds || event.targetTeamIds.length === 0;
@@ -428,7 +430,6 @@ function UpcomingEvents() {
         for (const event of relevantEvents) {
             const originalStartDate = event.date.toDate();
             
-            // Handle single-instance events
             if (event.recurrence === 'none' || !event.recurrence) {
                 if (isFuture(originalStartDate)) {
                      const override = overrides.find(o => o.eventId === event.id && isSameDay(o.originalDate.toDate(), originalStartDate));
@@ -439,15 +440,13 @@ function UpcomingEvents() {
                 continue;
             }
 
-            // Handle recurring events
             let currentDate = originalStartDate;
-             // Fast-forward
             if(currentDate < now) {
                 currentDate = now;
             }
             
             const recurrenceEndDate = event.recurrenceEndDate?.toDate();
-            let limit = 100; // Safety break
+            let limit = 100; 
 
             while (currentDate < futureLimit && limit > 0) {
                  if (recurrenceEndDate && currentDate > recurrenceEndDate) {
@@ -476,6 +475,20 @@ function UpcomingEvents() {
             .slice(0, 3);
 
     }, [events, overrides, userData, eventTitles]);
+
+    const eventIdsForUpcoming = useMemo(() => {
+      if (eventsLoading) return [];
+      return upcomingEvents.map(e => e.id);
+    }, [upcomingEvents, eventsLoading]);
+
+    const responsesQuery = useMemo(() => {
+        if (!firestore || eventIdsForUpcoming.length === 0 || eventsLoading) return null;
+        return query(collection(firestore, 'event_responses'), where('eventId', 'in', eventIdsForUpcoming));
+    }, [firestore, eventIdsForUpcoming, eventsLoading]);
+    
+    const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
+    
+    const isLoading = eventsLoading || overridesLoading || usersLoading || locationsLoading || titlesLoading || responsesLoading;
 
     if (isLoading) {
         return (

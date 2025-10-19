@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -1551,13 +1550,13 @@ export default function TerminePage() {
     }, [eventsForWeek]);
 
     const responsesQuery = useMemo(() => {
-        if (!firestore || eventIdsInView.length === 0 || !allUsers) return null;
+        if (!firestore || eventIdsInView.length === 0 || eventsLoading || overridesLoading) return null;
         return query(collection(firestore, 'event_responses'), where('eventId', 'in', eventIdsInView));
-    }, [firestore, eventIdsInView, allUsers]);
+    }, [firestore, eventIdsInView, eventsLoading, overridesLoading]);
 
     const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
     
-    const isLoading = isUserLoading || eventsLoading || categoriesLoading || teamsLoading || usersLoading || locationsLoading || eventTitlesLoading || overridesLoading || responsesLoading;
+    const isLoading = isUserLoading || eventsLoading || categoriesLoading || teamsLoading || usersLoading || locationsLoading || eventTitlesLoading || overridesLoading;
 
 
   const handleOpenForm = (event?: DisplayEvent) => {
@@ -1664,7 +1663,7 @@ export default function TerminePage() {
 
 
   const renderContent = () => {
-    if (isLoading) {
+    if (isLoading || responsesLoading) {
       return (
         <div className="flex justify-center items-center py-10">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
