@@ -247,7 +247,7 @@ function NextMatchDay() {
      const { data: userData } = useDoc<UserData>(user ? doc(firestore, 'users', user.uid) : null);
 
     // Data fetching
-    const { data: events, isLoading: eventsLoading } = useCollection<Event>(firestore ? query(collection(firestore, 'events'), where('date', '>=', Timestamp.now())) : null);
+    const { data: events, isLoading: eventsLoading } = useCollection<Event>(firestore ? collection(firestore, 'events') : null);
     const { data: overrides, isLoading: overridesLoading } = useCollection<EventOverride>(firestore ? collection(firestore, 'event_overrides') : null);
     const { data: locations, isLoading: locationsLoading } = useCollection<Location>(firestore ? collection(firestore, 'locations') : null);
     const { data: eventTitles, isLoading: titlesLoading } = useCollection<EventTitle>(firestore ? collection(firestore, 'event_titles') : null);
@@ -350,7 +350,7 @@ function UpcomingEvents() {
 
     // Data fetching
     const { data: userData } = useDoc<UserData>(user ? doc(firestore, 'users', user.uid) : null);
-    const { data: events, isLoading: eventsLoading } = useCollection<Event>(firestore ? query(collection(firestore, 'events'), where('date', '>=', Timestamp.now())) : null);
+    const { data: events, isLoading: eventsLoading } = useCollection<Event>(firestore ? collection(firestore, 'events') : null);
     const { data: overrides, isLoading: overridesLoading } = useCollection<EventOverride>(firestore ? collection(firestore, 'event_overrides') : null);
     const { data: allUsers, isLoading: usersLoading } = useCollection<GroupMember>(firestore ? collection(firestore, 'group_members') : null);
     const { data: locations, isLoading: locationsLoading } = useCollection<Location>(firestore ? collection(firestore, 'locations') : null);
