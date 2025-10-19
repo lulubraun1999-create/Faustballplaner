@@ -9,6 +9,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
 
 import { Header } from '@/components/header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -54,7 +55,6 @@ import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { cn } from '@/lib/utils';
 
 // Schemas & Interfaces
 const penaltySchema = z.object({
@@ -109,19 +109,19 @@ interface Team {
   name: string;
 }
 
+interface GroupMember {
+  id: string;
+  vorname: string;
+  nachname: string;
+  teamIds?: string[];
+}
+
 interface UserData {
   id: string;
   adminRechte?: boolean;
   teamIds?: string[];
   vorname: string;
   nachname: string;
-}
-
-interface GroupMember {
-  id: string;
-  vorname: string;
-  nachname: string;
-  teamIds?: string[];
 }
 
 // Components
@@ -421,18 +421,11 @@ function TreasuryManager({ teamId, members }: { teamId: string, members: GroupMe
     );
 }
 
-function AssignPenaltiesManager({ teamId, members, penalties }: { teamId: string, members: GroupMember[] | null, penalties: Penalty[] | null }) {
+function AssignPenaltiesManager({ teamId, members, penalties, userPenalties, userPenaltiesLoading }: { teamId: string, members: GroupMember[] | null, penalties: Penalty[] | null, userPenalties: UserPenalty[] | null, userPenaltiesLoading: boolean }) {
     const firestore = useFirestore();
     const { toast } = useToast();
     const { user } = useUser();
     const [isFormOpen, setIsFormOpen] = useState(false);
-
-    const userPenaltiesQuery = useMemo(() => {
-        if (!firestore || !teamId) return null;
-        return query(collection(firestore, 'user_penalties'), where('teamId', '==', teamId), orderBy('assignedAt', 'desc'))
-    }, [firestore, teamId]);
-
-    const { data: userPenalties, isLoading: userPenaltiesLoading } = useCollection<UserPenalty>(userPenaltiesQuery);
 
     const form = useForm<AssignPenaltyFormValues>({
         resolver: zodResolver(assignPenaltySchema),
@@ -680,7 +673,7 @@ export default function MannschaftskassePage() {
     if (adminTeams && adminTeams.length > 0 && !selectedTeamId) {
       setSelectedTeamId(adminTeams[0].id);
     }
-  }, [adminTeams, selectedTeamId]);
+  }, [adminTeams]);
   
   const allMembersQuery = useMemo(() => {
     if (!firestore) return null;
@@ -699,7 +692,13 @@ export default function MannschaftskassePage() {
   }, [firestore, selectedTeamId]);
   const { data: penalties, isLoading: penaltiesLoading } = useCollection<Penalty>(penaltiesQuery);
 
-  const isLoadingInitial = isUserLoading || teamsLoading;
+  const userPenaltiesQuery = useMemo(() => {
+    if (!firestore || !selectedTeamId) return null;
+    return query(collection(firestore, 'user_penalties'), where('teamId', '==', selectedTeamId), orderBy('assignedAt', 'desc'))
+  }, [firestore, selectedTeamId]);
+  const { data: userPenalties, isLoading: userPenaltiesLoading } = useCollection<UserPenalty>(userPenaltiesQuery);
+
+  const isLoadingInitial = isUserLoading || teamsLoading || membersLoading;
 
   if (isLoadingInitial) {
     return (
@@ -751,29 +750,33 @@ export default function MannschaftskassePage() {
                 )}
             </div>
           
-            {selectedTeamId ? (
-                <>
-                {membersLoading || penaltiesLoading ? <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin"/></div> : (
-                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-                        <div className="space-y-8">
-                           <TreasuryManager 
-                              teamId={selectedTeamId} 
-                              members={membersForTeam}
-                            />
-                           <PenaltyCatalogManager 
-                              teamId={selectedTeamId}
-                            />
-                        </div>
-                        <AssignPenaltiesManager 
+            {selectedTeamId && !isLoadingInitial && membersForTeam ? (
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                    <div className="space-y-8">
+                        <TreasuryManager 
                           teamId={selectedTeamId} 
                           members={membersForTeam}
-                          penalties={penalties}
+                        />
+                       <PenaltyCatalogManager 
+                          teamId={selectedTeamId}
                         />
                     </div>
-                )}
-                </>
+                    <AssignPenaltiesManager 
+                      teamId={selectedTeamId} 
+                      members={membersForTeam}
+                      penalties={penalties}
+                      userPenalties={userPenalties}
+                      userPenaltiesLoading={userPenaltiesLoading}
+                    />
+                </div>
             ) : (
-                <Card><CardContent><p className="p-8 text-center text-muted-foreground">Bitte wählen Sie ein Team aus, um die Mannschaftskasse anzuzeigen.</p></CardContent></Card>
+                <Card>
+                    <CardContent>
+                        <div className="p-8 text-center text-muted-foreground">
+                            {isLoadingInitial ? <Loader2 className="h-8 w-8 animate-spin mx-auto" /> : "Bitte wählen Sie ein Team aus."}
+                        </div>
+                    </CardContent>
+                </Card>
             )}
 
         </div>
