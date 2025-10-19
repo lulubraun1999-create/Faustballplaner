@@ -1438,18 +1438,24 @@ export default function TerminePage() {
   const { data: overridesData, isLoading: overridesLoading } = useCollection<EventOverride>(eventOverridesQuery);
   
   const responsesQuery = useMemo(() => {
-      if (!firestore || isUserLoading) {
-          return null; // Don't query until user state is stable
-      }
-      if (userData?.teamIds && userData.teamIds.length > 0) {
-          return query(collection(firestore, 'event_responses'), where('teamId', 'in', userData.teamIds));
-      }
-      return collection(firestore, 'event_responses');
+    if (!firestore || isUserLoading) { // Wait for user data to be stable
+        return null;
+    }
+    
+    // User data is loaded, now we can create the query
+    const teamIds = userData?.teamIds;
+    if (teamIds && teamIds.length > 0) {
+        return query(collection(firestore, 'event_responses'), where('teamId', 'in', teamIds));
+    }
+    
+    // If user has no teams, or we don't have teamIds yet, we fetch all.
+    // This could be refined based on security rules.
+    return collection(firestore, 'event_responses');
   }, [firestore, userData, isUserLoading]);
 
   const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
     
-    const isLoadingCombined = isUserLoading || eventsLoading || categoriesLoading || teamsLoading || usersLoading || locationsLoading || eventTitlesLoading || overridesLoading || responsesLoading;
+  const isLoadingCombined = isUserLoading || eventsLoading || categoriesLoading || teamsLoading || usersLoading || locationsLoading || eventTitlesLoading || overridesLoading || responsesLoading;
 
 
   const handleOpenForm = (event?: DisplayEvent) => {
@@ -1846,6 +1852,7 @@ export default function TerminePage() {
     </div>
   );
 }
+
 
 
 
