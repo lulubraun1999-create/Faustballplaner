@@ -124,15 +124,18 @@ export default function ChatPage() {
     const unsubscribes: (() => void)[] = [];
 
     const fetchAndListen = async () => {
-        const counts: Record<string, number> = {};
         for (const room of chatRooms) {
+            // "general" room has public read access, no specific permission check needed here for unread count
+            if (room.id === 'general') {
+                setUnreadCounts(prev => ({...prev, [room.id]: 0})); // Assume 0 or implement different logic
+                continue;
+            };
+
             try {
-                // Get last seen timestamp
                 const statusRef = doc(firestore, 'users', user.uid, 'chat_status', room.id);
                 const statusSnapshot = await getDocs(query(collection(firestore, 'users', user.uid, 'chat_status'), where('__name__', '==', room.id)));
                 const lastSeen = statusSnapshot.docs.length > 0 ? (statusSnapshot.docs[0].data() as UserChatStatus).lastSeen : new Timestamp(0, 0);
-
-                // Count unread messages
+                
                 const messagesRef = collection(firestore, 'chat_rooms', room.id, 'messages');
                 const q = query(messagesRef, where('timestamp', '>', lastSeen), where('userId', '!=', user.uid));
                 
@@ -148,7 +151,7 @@ export default function ChatPage() {
 
             } catch (error) {
                 console.error(`Error processing room ${room.id}:`, error);
-                counts[room.id] = 0;
+                setUnreadCounts(prev => ({...prev, [room.id]: 0}));
             }
         }
     };
@@ -382,3 +385,5 @@ export default function ChatPage() {
     </div>
   );
 }
+
+    

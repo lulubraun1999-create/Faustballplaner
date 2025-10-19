@@ -73,12 +73,16 @@ export function useCollection<T = any>(
         setIsLoading(false);
       },
       (err: FirestoreError) => {
-        // Create and emit a rich, contextual error for permission issues.
-        const permissionError = new FirestorePermissionError({
-          path: queryOrRef.path,
-          operation: 'list',
-        });
-        errorEmitter.emit('permission-error', permissionError);
+        // Check if queryOrRef and its path are defined before creating the error
+        if (queryOrRef && typeof (queryOrRef as any).path === 'string') {
+          const permissionError = new FirestorePermissionError({
+            path: (queryOrRef as any).path,
+            operation: 'list',
+          });
+          errorEmitter.emit('permission-error', permissionError);
+        } else {
+           console.error("useCollection: Firestore permission error on a query with an invalid path.", err);
+        }
         
         // Also set local error state for component-level handling if needed.
         setError(err);
@@ -93,3 +97,5 @@ export function useCollection<T = any>(
 
   return { data, isLoading, error };
 }
+
+    
