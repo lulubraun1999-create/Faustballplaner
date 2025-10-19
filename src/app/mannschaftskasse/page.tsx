@@ -680,7 +680,7 @@ export default function MannschaftskassePage() {
     if (adminTeams && adminTeams.length > 0 && !selectedTeamId) {
       setSelectedTeamId(adminTeams[0].id);
     }
-  }, [adminTeams]);
+  }, [adminTeams, selectedTeamId]);
   
   const allMembersQuery = useMemo(() => {
     if (!firestore) return null;
@@ -689,7 +689,7 @@ export default function MannschaftskassePage() {
   const { data: allMembers, isLoading: membersLoading } = useCollection<GroupMember>(allMembersQuery);
   
   const membersForTeam = useMemo(() => {
-    if (!allMembers || !selectedTeamId) return [];
+    if (!allMembers || !selectedTeamId) return null;
     return allMembers.filter(m => m.teamIds?.includes(selectedTeamId));
   }, [allMembers, selectedTeamId]);
   
@@ -698,7 +698,6 @@ export default function MannschaftskassePage() {
     return query(collection(firestore, 'teams', selectedTeamId, 'penalties'), orderBy('name'));
   }, [firestore, selectedTeamId]);
   const { data: penalties, isLoading: penaltiesLoading } = useCollection<Penalty>(penaltiesQuery);
-
 
   const isLoadingInitial = isUserLoading || teamsLoading;
 
@@ -754,7 +753,7 @@ export default function MannschaftskassePage() {
           
             {selectedTeamId ? (
                 <>
-                {membersLoading ? <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin"/></div> : (
+                {membersLoading || penaltiesLoading ? <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin"/></div> : (
                     <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
                         <div className="space-y-8">
                            <TreasuryManager 
@@ -782,5 +781,3 @@ export default function MannschaftskassePage() {
     </div>
   );
 }
-
-    
