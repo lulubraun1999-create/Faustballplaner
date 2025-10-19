@@ -257,7 +257,7 @@ function NextMatchDay() {
      const { data: userData } = useDoc<UserData>(user ? doc(firestore, 'users', user.uid) : null);
 
     // Data fetching
-    const { data: events, isLoading: eventsLoading } = useCollection<Event>(firestore ? collection(firestore, 'events') : null);
+    const { data: events, isLoading: eventsLoading } = useCollection<Event>(firestore ? query(collection(firestore, 'events')) : null);
     const { data: overrides, isLoading: overridesLoading } = useCollection<EventOverride>(firestore ? collection(firestore, 'event_overrides') : null);
     const { data: locations, isLoading: locationsLoading } = useCollection<Location>(firestore ? collection(firestore, 'locations') : null);
     const { data: eventTitles, isLoading: titlesLoading } = useCollection<EventTitle>(firestore ? collection(firestore, 'event_titles') : null);
@@ -535,7 +535,7 @@ export default function Home() {
             </Card>
             <Card className="hover:border-primary/80 transition-all">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">Kalender</CardTitle>
+                <CardTitle className="text-sm font-medium">Termine</CardTitle>
                 <CalendarDays className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
@@ -543,7 +543,7 @@ export default function Home() {
                   Verwalte und sehe alle anstehenden Termine.
                 </p>
                 <Button size="sm" className="mt-4" asChild>
-                  <Link href="/kalender">Zum Kalender</Link>
+                  <Link href="/termine">Zu den Terminen</Link>
                 </Button>
               </CardContent>
             </Card>
