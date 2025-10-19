@@ -1438,16 +1438,13 @@ export default function TerminePage() {
   const { data: overridesData, isLoading: overridesLoading } = useCollection<EventOverride>(eventOverridesQuery);
   
   const responsesQuery = useMemo(() => {
-    if (!firestore || isUserLoading) {
-      return null;
-    }
-    if (userData?.teamIds && userData.teamIds.length > 0) {
-      return query(
-        collection(firestore, 'event_responses'),
-        where('teamId', 'in', userData.teamIds)
-      );
-    }
-    return collection(firestore, 'event_responses');
+      if (!firestore || isUserLoading) {
+          return null; // Don't query until user state is stable
+      }
+      if (userData?.teamIds && userData.teamIds.length > 0) {
+          return query(collection(firestore, 'event_responses'), where('teamId', 'in', userData.teamIds));
+      }
+      return collection(firestore, 'event_responses');
   }, [firestore, userData, isUserLoading]);
 
   const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
@@ -1849,6 +1846,7 @@ export default function TerminePage() {
     </div>
   );
 }
+
 
 
 

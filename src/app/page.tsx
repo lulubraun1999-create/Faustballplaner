@@ -375,13 +375,22 @@ function NextMatchDay() {
 
     }, [events, overrides, eventTitles]);
 
+    const eventIdsForNextMatch = useMemo(() => {
+        if (!nextMatchDay) return [];
+        return [nextMatchDay.id];
+    }, [nextMatchDay]);
+
+
     const responsesQuery = useMemo(() => {
-        if (!firestore || isUserLoading) {
-            return null;
+        if (!firestore || isUserLoading) return null;
+        if (!userData) return null; // Wait for userData
+    
+        const teamIds = userData.teamIds;
+        if (teamIds && teamIds.length > 0) {
+            return query(collection(firestore, 'event_responses'), where('teamId', 'in', teamIds));
         }
-        if (userData?.teamIds && userData.teamIds.length > 0) {
-            return query(collection(firestore, 'event_responses'), where('teamId', 'in', userData.teamIds));
-        }
+        // If user has no teams, we might want to fetch all or none, depending on requirements.
+        // Let's assume fetching all is okay for now, but this could be refined.
         return collection(firestore, 'event_responses');
     }, [firestore, userData, isUserLoading]);
     
@@ -513,13 +522,21 @@ function UpcomingEvents() {
 
     }, [events, overrides, userData, eventTitles]);
 
+    const eventIdsForUpcoming = useMemo(() => {
+        if (upcomingEvents.length === 0) return [];
+        return upcomingEvents.map(e => e.id);
+    }, [upcomingEvents]);
+
     const responsesQuery = useMemo(() => {
-        if (!firestore || isUserLoading) {
-            return null;
+        if (!firestore || isUserLoading) return null;
+        if (!userData) return null; // Wait for userData
+    
+        const teamIds = userData.teamIds;
+        if (teamIds && teamIds.length > 0) {
+            return query(collection(firestore, 'event_responses'), where('teamId', 'in', teamIds));
         }
-        if (userData?.teamIds && userData.teamIds.length > 0) {
-            return query(collection(firestore, 'event_responses'), where('teamId', 'in', userData.teamIds));
-        }
+        // If user has no teams, we might want to fetch all or none, depending on requirements.
+        // Let's assume fetching all is okay for now, but this could be refined.
         return collection(firestore, 'event_responses');
     }, [firestore, userData, isUserLoading]);
 
