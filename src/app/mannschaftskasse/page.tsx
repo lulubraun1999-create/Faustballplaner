@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
@@ -44,10 +45,8 @@ import {
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
-  AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from '@/components/ui/input';
@@ -71,15 +70,11 @@ interface Penalty {
 }
 
 const transactionSchema = z.object({
-  type: z.enum(['deposit', 'payout', 'penalty']),
+  type: z.enum(['deposit', 'payout', 'correction']),
   amount: z.coerce.number().min(0.01, 'Betrag muss größer als 0 sein.').optional(),
   description: z.string().min(1, 'Beschreibung ist erforderlich.').optional(),
-  userId: z.string().min(1, "Es muss ein Mitglied ausgewählt werden."),
-  penaltyId: z.string().optional(),
+  userId: z.string().optional(),
 }).superRefine((data, ctx) => {
-    if (data.type === 'penalty' && !data.penaltyId) {
-        ctx.addIssue({ code: 'custom', message: 'Bitte eine Strafe aus dem Katalog auswählen.', path: ['penaltyId'] });
-    }
     if (data.type !== 'penalty' && (!data.amount || data.amount <= 0)) {
          ctx.addIssue({ code: 'custom', message: 'Betrag muss größer als 0 sein.', path: ['amount'] });
     }
@@ -88,6 +83,14 @@ const transactionSchema = z.object({
     }
 });
 type TransactionFormValues = z.infer<typeof transactionSchema>;
+
+const assignPenaltySchema = z.object({
+    userId: z.string().min(1, "Ein Mitglied muss ausgewählt werden."),
+    penaltyId: z.string().min(1, "Eine Strafe muss ausgewählt werden."),
+});
+
+type AssignPenaltyFormValues = z.infer<typeof assignPenaltySchema>;
+
 
 interface TreasuryTransaction {
   id: string;
@@ -164,7 +167,14 @@ function PenaltyCatalogManager({ teamId, penalties, penaltiesLoading }: { teamId
       setIsFormOpen(false);
       setEditingPenalty(null);
     } catch (error: any) {
-      toast({ variant: 'destructive', title: 'Fehler', description: error.message });
+       const permissionError = new FirestorePermissionError({
+            path: editingPenalty 
+                ? `teams/${teamId}/penalties/${editingPenalty.id}`
+                : `teams/${teamId}/penalties`,
+            operation: editingPenalty ? 'update' : 'create',
+            requestResourceData: values,
+        });
+        errorEmitter.emit('permission-error', permissionError);
     }
   };
 
@@ -174,7 +184,11 @@ function PenaltyCatalogManager({ teamId, penalties, penaltiesLoading }: { teamId
       await deleteDoc(doc(firestore, 'teams', teamId, 'penalties', penaltyId));
       toast({ title: 'Strafe gelöscht' });
     } catch (error: any) {
-      toast({ variant: 'destructive', title: 'Fehler', description: error.message });
+       const permissionError = new FirestorePermissionError({
+            path: `teams/${teamId}/penalties/${penaltyId}`,
+            operation: 'delete',
+        });
+        errorEmitter.emit('permission-error', permissionError);
     }
   };
 
@@ -269,7 +283,7 @@ function PenaltyCatalogManager({ teamId, penalties, penaltiesLoading }: { teamId
   );
 }
 
-function TreasuryManager({ teamId, members, transactions, penalties, userPenalties, transactionsLoading, userPenaltiesLoading }: { teamId: string, members: GroupMember[] | null, transactions: TreasuryTransaction[] | null, penalties: Penalty[] | null, userPenalties: UserPenalty[] | null, transactionsLoading: boolean, userPenaltiesLoading: boolean }) {
+function TreasuryManager({ teamId, members, transactions, userPenalties, transactionsLoading, userPenaltiesLoading }: { teamId: string, members: GroupMember[] | null, transactions: TreasuryTransaction[] | null, userPenalties: UserPenalty[] | null, transactionsLoading: boolean, userPenaltiesLoading: boolean }) {
     const firestore = useFirestore();
     const { toast } = useToast();
     const { user } = useUser();
@@ -281,47 +295,36 @@ function TreasuryManager({ teamId, members, transactions, penalties, userPenalti
     
     const form = useForm<TransactionFormValues>({
         resolver: zodResolver(transactionSchema),
-        defaultValues: { type: 'deposit', userId: '' },
+        defaultValues: { type: 'deposit', userId: undefined },
     });
     
-    const transactionType = form.watch('type');
-
     const onSubmit = async (values: TransactionFormValues) => {
         if (!firestore || !teamId || !user) return;
         
         try {
-            if (values.type === 'penalty') {
-                const penalty = penalties?.find(p => p.id === values.penaltyId);
-                if (!penalty) throw new Error("Ausgewählte Strafe nicht gefunden.");
-
-                await addDoc(collection(firestore, 'teams', teamId, 'user_penalties'), {
-                    userId: values.userId,
-                    teamId: teamId,
-                    penaltyId: penalty.id,
-                    penaltyName: penalty.name,
-                    amount: penalty.amount,
-                    assignedAt: serverTimestamp(),
-                    paid: false,
-                });
-                toast({ title: 'Strafe zugewiesen' });
-            } else {
-                const amount = values.type === 'deposit' ? values.amount : -(values.amount ?? 0);
-                await addDoc(collection(firestore, 'teams', teamId, 'transactions'), {
-                    teamId,
-                    type: values.type,
-                    amount,
-                    description: values.description,
-                    userId: values.userId || null,
-                    date: serverTimestamp(),
-                    recordedBy: user.uid,
-                });
-                toast({ title: 'Transaktion gespeichert' });
-            }
+            const amount = values.type === 'deposit' ? values.amount : -(values.amount ?? 0);
+            const transactionRef = collection(firestore, 'teams', teamId, 'transactions');
+            const transactionData = {
+                teamId,
+                type: values.type,
+                amount,
+                description: values.description,
+                userId: values.userId || null,
+                date: serverTimestamp(),
+                recordedBy: user.uid,
+            };
+            await addDoc(transactionRef, transactionData);
+            toast({ title: 'Transaktion gespeichert' });
             
             setIsFormOpen(false);
-            form.reset({ type: 'deposit', userId: '' });
+            form.reset({ type: 'deposit' });
         } catch (error: any) {
-            toast({ variant: 'destructive', title: 'Fehler', description: error.message });
+             const permissionError = new FirestorePermissionError({
+                path: `teams/${teamId}/transactions`,
+                operation: 'create',
+                requestResourceData: values,
+            });
+            errorEmitter.emit('permission-error', permissionError);
         }
     };
     
@@ -371,7 +374,34 @@ function TreasuryManager({ teamId, members, transactions, penalties, userPenalti
             await batch.commit();
             toast({ title: "Strafe als bezahlt markiert."});
         } catch(error: any) {
-             toast({ variant: 'destructive', title: 'Fehler', description: error.message });
+             const permissionError = new FirestorePermissionError({
+                path: `teams/${teamId}/user_penalties/${userPenaltyId}`,
+                operation: 'update',
+                requestResourceData: { paid: true },
+            });
+            errorEmitter.emit('permission-error', permissionError);
+        }
+    };
+
+    const deleteTransaction = async (transaction: (typeof combinedTransactions)[0]) => {
+        if (!firestore || !teamId) return;
+
+        if (transaction.isPenalty) {
+             toast({ variant: 'destructive', title: 'Aktion nicht möglich', description: 'Offene Strafen können nicht direkt gelöscht werden. Markieren Sie sie als bezahlt oder korrigieren Sie sie im Strafenkatalog.' });
+             return;
+        }
+
+        const transactionRef = doc(firestore, 'teams', teamId, 'transactions', transaction.id);
+        
+        try {
+            await deleteDoc(transactionRef);
+            toast({ title: 'Transaktion gelöscht' });
+        } catch (error: any) {
+            const permissionError = new FirestorePermissionError({
+                path: transactionRef.path,
+                operation: 'delete',
+            });
+            errorEmitter.emit('permission-error', permissionError);
         }
     };
     
@@ -385,7 +415,7 @@ function TreasuryManager({ teamId, members, transactions, penalties, userPenalti
                         <CardDescription className="text-2xl font-bold">{new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(balance)}</CardDescription>
                     </div>
                      <Button variant="outline" onClick={() => setIsFormOpen(true)}>
-                        <PlusCircle className="mr-2 h-4 w-4" /> Zahlung verbuchen
+                        <PlusCircle className="mr-2 h-4 w-4" /> Ein-/Auszahlung
                     </Button>
                 </div>
             </CardHeader>
@@ -399,49 +429,74 @@ function TreasuryManager({ teamId, members, transactions, penalties, userPenalti
                                 <TableHead>Beschreibung</TableHead>
                                 <TableHead>Mitglied</TableHead>
                                 <TableHead className="text-right">Betrag</TableHead>
-                                <TableHead className="text-right">Status</TableHead>
+                                <TableHead className="text-center">Status</TableHead>
+                                <TableHead className="text-right">Aktion</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {(transactionsLoading || userPenaltiesLoading) ? (
-                                <TableRow><TableCell colSpan={5} className="text-center"><Loader2 className="animate-spin"/></TableCell></TableRow>
-                            ) : combinedTransactions.map(t => {
-                                const member = members?.find(m => m.id === t.userId);
-                                return (
-                                <TableRow key={`${t.id}-${t.isPenalty}`}>
-                                    <TableCell>{t.date?.toDate ? format(t.date.toDate(), 'dd.MM.yyyy') : '...'}</TableCell>
-                                    <TableCell>{t.description}</TableCell>
-                                    <TableCell>{member ? `${member.vorname} ${member.nachname}` : (t.type === 'correction' ? 'System' : 'Allgemein')}</TableCell>
-                                    <TableCell className={cn("text-right", t.amount > 0 ? 'text-green-600' : 'text-red-600')}>
-                                        {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(t.amount)}
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        {t.isPenalty ? (
-                                            <AlertDialog>
-                                                <AlertDialogTrigger asChild>
-                                                    <Button size="sm" variant="secondary">Offen</Button>
-                                                </AlertDialogTrigger>
-                                                <AlertDialogContent>
-                                                    <AlertDialogHeader>
-                                                        <AlertDialogTitle>Strafe als bezahlt markieren?</AlertDialogTitle>
-                                                        <AlertDialogDescription>
-                                                          Diese Aktion markiert die Strafe als bezahlt und erstellt eine entsprechende Einzahlung in der Mannschaftskasse.
-                                                        </AlertDialogDescription>
-                                                    </AlertDialogHeader>
-                                                    <AlertDialogFooter>
-                                                        <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-                                                        <AlertDialogAction onClick={() => markAsPaid(t.id)}>Ja, bezahlt</AlertDialogAction>
-                                                    </AlertDialogFooter>
-                                                </AlertDialogContent>
-                                            </AlertDialog>
-                                        ) : <Badge variant="outline">Bezahlt</Badge>}
-                                    </TableCell>
-                                </TableRow>
-                            )})
-                            }
-                             {combinedTransactions?.length === 0 && !(transactionsLoading || userPenaltiesLoading) && (
+                                <TableRow><TableCell colSpan={6} className="text-center"><Loader2 className="animate-spin"/></TableCell></TableRow>
+                            ) : combinedTransactions.length > 0 ? (
+                                combinedTransactions.map(t => {
+                                    const member = members?.find(m => m.id === t.userId);
+                                    return (
+                                        <TableRow key={`${t.id}-${t.isPenalty}`}>
+                                            <TableCell>{t.date?.toDate ? format(t.date.toDate(), 'dd.MM.yyyy') : '...'}</TableCell>
+                                            <TableCell>{t.description}</TableCell>
+                                            <TableCell>{member ? `${member.vorname} ${member.nachname}` : (t.type === 'correction' ? 'System' : 'Allgemein')}</TableCell>
+                                            <TableCell className={cn("text-right", t.amount > 0 ? 'text-green-600' : 'text-red-600')}>
+                                                {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(t.amount)}
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                                {t.isPenalty ? (
+                                                    <AlertDialog>
+                                                        <AlertDialogTrigger asChild>
+                                                            <Button size="sm" variant="secondary">Offen</Button>
+                                                        </AlertDialogTrigger>
+                                                        <AlertDialogContent>
+                                                            <AlertDialogHeader>
+                                                                <AlertDialogTitle>Strafe als bezahlt markieren?</AlertDialogTitle>
+                                                                <AlertDialogDescription>
+                                                                  Diese Aktion markiert die Strafe als bezahlt und erstellt eine entsprechende Einzahlung in der Mannschaftskasse.
+                                                                </AlertDialogDescription>
+                                                            </AlertDialogHeader>
+                                                            <AlertDialogFooter>
+                                                                <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                                                                <AlertDialogAction onClick={() => markAsPaid(t.id)}>Ja, bezahlt</AlertDialogAction>
+                                                            </AlertDialogFooter>
+                                                        </AlertDialogContent>
+                                                    </AlertDialog>
+                                                ) : <Badge variant="outline">Bezahlt</Badge>}
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                               {!t.isPenalty && (
+                                                    <AlertDialog>
+                                                        <AlertDialogTrigger asChild>
+                                                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive"><Trash2 className="h-4 w-4"/></Button>
+                                                        </AlertDialogTrigger>
+                                                        <AlertDialogContent>
+                                                             <AlertDialogHeader>
+                                                                <AlertDialogTitle>Transaktion löschen?</AlertDialogTitle>
+                                                                <AlertDialogDescription>
+                                                                    Sind Sie sicher, dass Sie diese Transaktion löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.
+                                                                </AlertDialogDescription>
+                                                            </AlertDialogHeader>
+                                                            <AlertDialogFooter>
+                                                                <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                                                                <AlertDialogAction onClick={() => deleteTransaction(t)} className="bg-destructive hover:bg-destructive/90">
+                                                                    Ja, löschen
+                                                                </AlertDialogAction>
+                                                            </AlertDialogFooter>
+                                                        </AlertDialogContent>
+                                                    </AlertDialog>
+                                               )}
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                })
+                            ) : (
                                 <TableRow>
-                                <TableCell colSpan={5} className="text-center text-muted-foreground">Keine Transaktionen oder Strafen vorhanden.</TableCell>
+                                    <TableCell colSpan={6} className="text-center text-muted-foreground">Keine Transaktionen oder Strafen vorhanden.</TableCell>
                                 </TableRow>
                             )}
                         </TableBody>
@@ -463,14 +518,14 @@ function TreasuryManager({ teamId, members, transactions, penalties, userPenalti
                                         <SelectContent>
                                             <SelectItem value="deposit">Einzahlung</SelectItem>
                                             <SelectItem value="payout">Auszahlung</SelectItem>
-                                            <SelectItem value="penalty">Strafe zuweisen</SelectItem>
+                                            <SelectItem value="correction">Korrektur</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </FormItem>
                             )} />
                              <FormField name="userId" control={form.control} render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Mitglied</FormLabel>
+                                    <FormLabel>Mitglied (optional)</FormLabel>
                                     <Select onValueChange={field.onChange} value={field.value}>
                                         <FormControl>
                                             <SelectTrigger>
@@ -485,43 +540,20 @@ function TreasuryManager({ teamId, members, transactions, penalties, userPenalti
                                 </FormItem>
                             )} />
                             
-                            {transactionType === 'penalty' && (
-                                <FormField name="penaltyId" control={form.control} render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Strafe aus Katalog</FormLabel>
-                                        <Select onValueChange={field.onChange} value={field.value}>
-                                            <FormControl>
-                                                <SelectTrigger>
-                                                    <SelectValue placeholder="Strafe auswählen..."/>
-                                                </SelectTrigger>
-                                            </FormControl>
-                                            <SelectContent>
-                                                {penalties?.map(p => <SelectItem key={p.id} value={p.id}>{p.name} ({new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(p.amount)})</SelectItem>)}
-                                            </SelectContent>
-                                        </Select>
-                                        <FormMessage />
-                                    </FormItem>
-                                )} />
-                            )}
-                            
-                            {transactionType !== 'penalty' && (
-                                <>
-                                    <FormField name="amount" control={form.control} render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Betrag (€)</FormLabel>
-                                            <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )} />
-                                    <FormField name="description" control={form.control} render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Beschreibung</FormLabel>
-                                            <FormControl><Textarea {...field} /></FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )} />
-                                </>
-                            )}
+                            <FormField name="amount" control={form.control} render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Betrag (€)</FormLabel>
+                                    <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )} />
+                            <FormField name="description" control={form.control} render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Beschreibung</FormLabel>
+                                    <FormControl><Textarea {...field} /></FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )} />
                            
                             <DialogFooter>
                                 <DialogClose asChild><Button type="button" variant="outline">Abbrechen</Button></DialogClose>
@@ -535,6 +567,177 @@ function TreasuryManager({ teamId, members, transactions, penalties, userPenalti
     );
 }
 
+function AssignPenaltiesManager({ teamId, members, penalties, userPenalties, userPenaltiesLoading }: { teamId: string, members: GroupMember[] | null, penalties: Penalty[] | null, userPenalties: UserPenalty[] | null, userPenaltiesLoading: boolean }) {
+    const firestore = useFirestore();
+    const { toast } = useToast();
+    const [isFormOpen, setIsFormOpen] = useState(false);
+
+    const form = useForm<AssignPenaltyFormValues>({
+        resolver: zodResolver(assignPenaltySchema),
+        defaultValues: { userId: '', penaltyId: '' },
+    });
+
+    const onSubmit = async (values: AssignPenaltyFormValues) => {
+        if (!firestore || !teamId) return;
+
+        const penalty = penalties?.find(p => p.id === values.penaltyId);
+        if (!penalty || !values.userId) {
+            toast({ variant: 'destructive', title: 'Fehler', description: 'Ausgewählte Strafe oder Mitglied nicht gefunden.' });
+            return;
+        }
+
+        const penaltyRef = collection(firestore, 'teams', teamId, 'user_penalties');
+        const penaltyData = {
+            userId: values.userId,
+            teamId: teamId,
+            penaltyId: penalty.id,
+            penaltyName: penalty.name,
+            amount: penalty.amount,
+            assignedAt: serverTimestamp(),
+            paid: false,
+        };
+
+        try {
+            await addDoc(penaltyRef, penaltyData);
+            toast({ title: 'Strafe zugewiesen' });
+            setIsFormOpen(false);
+            form.reset();
+        } catch (error: any) {
+            const permissionError = new FirestorePermissionError({
+                path: `teams/${teamId}/user_penalties`,
+                operation: 'create',
+                requestResourceData: penaltyData,
+            });
+            errorEmitter.emit('permission-error', permissionError);
+        }
+    };
+
+    const handleDeleteUserPenalty = async (userPenaltyId: string) => {
+      if (!firestore || !teamId) return;
+      try {
+        await deleteDoc(doc(firestore, 'teams', teamId, 'user_penalties', userPenaltyId));
+        toast({title: "Zugewiesene Strafe gelöscht."});
+      } catch (error) {
+        const permissionError = new FirestorePermissionError({
+            path: `teams/${teamId}/user_penalties/${userPenaltyId}`,
+            operation: 'delete',
+        });
+        errorEmitter.emit('permission-error', permissionError);
+      }
+    };
+    
+    return (
+        <Card>
+            <CardHeader>
+                <div className="flex justify-between items-center">
+                    <CardTitle>Strafen zuweisen</CardTitle>
+                    <Button variant="outline" size="sm" onClick={() => setIsFormOpen(true)}>
+                        <PlusCircle className="mr-2 h-4 w-4" /> Strafe zuweisen
+                    </Button>
+                </div>
+            </CardHeader>
+            <CardContent>
+                <h3 className="font-semibold mb-2">Zuletzt zugewiesene Strafen</h3>
+                <ScrollArea className="h-60">
+                    {userPenaltiesLoading ? (
+                        <Loader2 className="animate-spin" />
+                    ) : userPenalties && userPenalties.length > 0 ? (
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Datum</TableHead>
+                                    <TableHead>Mitglied</TableHead>
+                                    <TableHead>Strafe</TableHead>
+                                    <TableHead className="text-right">Betrag</TableHead>
+                                    <TableHead className="text-right">Aktion</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {userPenalties.map(up => {
+                                    const member = members?.find(m => m.id === up.userId);
+                                    return (
+                                        <TableRow key={up.id}>
+                                            <TableCell>{up.assignedAt?.toDate ? format(up.assignedAt.toDate(), 'dd.MM.yyyy') : '...'}</TableCell>
+                                            <TableCell>{member ? `${member.vorname} ${member.nachname}` : 'Unbekannt'}</TableCell>
+                                            <TableCell>{up.penaltyName}</TableCell>
+                                            <TableCell className="text-right">{new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(up.amount)}</TableCell>
+                                            <TableCell className="text-right">
+                                              {!up.paid && (
+                                                <AlertDialog>
+                                                  <AlertDialogTrigger asChild>
+                                                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive"><Trash2 className="h-4 w-4"/></Button>
+                                                  </AlertDialogTrigger>
+                                                  <AlertDialogContent>
+                                                    <AlertDialogHeader>
+                                                      <AlertDialogTitle>Zugewiesene Strafe löschen?</AlertDialogTitle>
+                                                      <AlertDialogDescription>
+                                                        Hiermit wird die zugewiesene Strafe für dieses Mitglied entfernt. Dies kann nicht rückgängig gemacht werden.
+                                                      </AlertDialogDescription>
+                                                    </AlertDialogHeader>
+                                                    <AlertDialogFooter>
+                                                      <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                                                      <AlertDialogAction onClick={() => handleDeleteUserPenalty(up.id)} className="bg-destructive hover:bg-destructive/90">
+                                                          Ja, löschen
+                                                      </AlertDialogAction>
+                                                    </AlertDialogFooter>
+                                                  </AlertDialogContent>
+                                                </AlertDialog>
+                                              )}
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                })}
+                            </TableBody>
+                        </Table>
+                    ) : (
+                        <p className="text-sm text-muted-foreground p-4 text-center">Noch keine Strafen zugewiesen.</p>
+                    )}
+                </ScrollArea>
+            </CardContent>
+            <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Strafe zuweisen</DialogTitle>
+                    </DialogHeader>
+                    <Form {...form}>
+                        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                            <FormField name="userId" control={form.control} render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Mitglied</FormLabel>
+                                    <Select onValueChange={field.onChange} value={field.value}>
+                                        <FormControl><SelectTrigger><SelectValue placeholder="Mitglied auswählen..."/></SelectTrigger></FormControl>
+                                        <SelectContent>
+                                            {members?.map(m => <SelectItem key={m.id} value={m.id}>{m.vorname} {m.nachname}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                </FormItem>
+                            )} />
+                            <FormField name="penaltyId" control={form.control} render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Strafe aus Katalog</FormLabel>
+                                    <Select onValueChange={field.onChange} value={field.value}>
+                                        <FormControl><SelectTrigger><SelectValue placeholder="Strafe auswählen..."/></SelectTrigger></FormControl>
+                                        <SelectContent>
+                                            {penalties?.map(p => <SelectItem key={p.id} value={p.id}>{p.name} ({new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(p.amount)})</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                </FormItem>
+                            )} />
+                            <DialogFooter>
+                                <DialogClose asChild><Button type="button" variant="outline">Abbrechen</Button></DialogClose>
+                                <Button type="submit">Zuweisen</Button>
+                            </DialogFooter>
+                        </form>
+                    </Form>
+                </DialogContent>
+            </Dialog>
+        </Card>
+    );
+}
+
+
 function Balances({ members, userPenalties, userPenaltiesLoading }: { members: GroupMember[] | null, userPenalties: UserPenalty[] | null, userPenaltiesLoading: boolean }) {
     
     const calculateMemberBalance = useCallback((memberId: string) => {
@@ -545,6 +748,20 @@ function Balances({ members, userPenalties, userPenaltiesLoading }: { members: G
         return penaltiesTotal;
     }, [userPenalties]);
     
+    if (userPenaltiesLoading) {
+      return (
+        <Card>
+          <CardHeader>
+              <CardTitle>Salden der Mitglieder</CardTitle>
+              <CardDescription>Summe der offenen Strafen pro Mitglied.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Loader2 className="animate-spin" />
+          </CardContent>
+        </Card>
+      )
+    }
+
     return (
         <Card>
             <CardHeader>
@@ -552,23 +769,21 @@ function Balances({ members, userPenalties, userPenaltiesLoading }: { members: G
                 <CardDescription>Summe der offenen Strafen pro Mitglied.</CardDescription>
             </CardHeader>
             <CardContent>
-                {userPenaltiesLoading ? <Loader2 className="animate-spin" /> : (
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                        {members?.map(member => {
-                            const balance = calculateMemberBalance(member.id);
-                            return (
-                                <Card key={member.id} className={cn(balance > 0 && "border-red-500")}>
-                                    <CardHeader className="p-4">
-                                        <CardTitle className="text-base">{member.vorname} {member.nachname}</CardTitle>
-                                        <CardDescription className={cn("text-xl font-bold", balance > 0 ? "text-red-600" : "text-green-600")}>
-                                            {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(-balance)}
-                                        </CardDescription>
-                                    </CardHeader>
-                                </Card>
-                            )
-                        })}
-                    </div>
-                )}
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {members?.map(member => {
+                      const balance = calculateMemberBalance(member.id);
+                      return (
+                          <Card key={member.id} className={cn(balance > 0 && "border-red-500")}>
+                              <CardHeader className="p-4">
+                                  <CardTitle className="text-base">{member.vorname} {member.nachname}</CardTitle>
+                                  <CardDescription className={cn("text-xl font-bold", balance > 0 ? "text-red-600" : "text-green-600")}>
+                                      {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(-balance)}
+                                  </CardDescription>
+                              </CardHeader>
+                          </Card>
+                      )
+                  })}
+              </div>
             </CardContent>
         </Card>
     );
@@ -682,7 +897,6 @@ export default function MannschaftskassePage() {
                           teamId={selectedTeamId} 
                           members={membersForTeam}
                           transactions={transactions}
-                          penalties={penalties}
                           userPenalties={userPenalties}
                           transactionsLoading={transactionsLoading}
                           userPenaltiesLoading={userPenaltiesLoading}
@@ -693,11 +907,20 @@ export default function MannschaftskassePage() {
                           penaltiesLoading={penaltiesLoading}
                         />
                     </div>
-                    <Balances 
-                      members={membersForTeam}
-                      userPenalties={userPenalties}
-                      userPenaltiesLoading={userPenaltiesLoading}
-                    />
+                     <div className="space-y-8">
+                        <AssignPenaltiesManager 
+                          teamId={selectedTeamId} 
+                          members={membersForTeam}
+                          penalties={penalties}
+                          userPenalties={userPenalties}
+                          userPenaltiesLoading={userPenaltiesLoading}
+                        />
+                        <Balances 
+                          members={membersForTeam}
+                          userPenalties={userPenalties}
+                          userPenaltiesLoading={userPenaltiesLoading}
+                        />
+                    </div>
                 </div>
             ) : (
                 <Card>
