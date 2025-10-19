@@ -1435,11 +1435,14 @@ export default function TerminePage() {
   
   const eventIdsInWeek = useMemo(() => {
       if (eventsLoading || !eventsData) return [];
+      // This is a simplified version. A more accurate version would calculate recurring events in the week.
+      // For now, we'll just get all event IDs which might over-fetch responses, but is safer.
       return eventsData.map(e => e.id) || [];
   }, [eventsData, eventsLoading]);
 
   const responsesQuery = useMemo(() => {
       if (!firestore || eventIdsInWeek.length === 0) return null;
+      // Fetch responses for all potential events, as recurring events share the same ID.
       return query(collection(firestore, 'event_responses'), where('eventId', 'in', eventIdsInWeek));
   }, [firestore, eventIdsInWeek]);
 

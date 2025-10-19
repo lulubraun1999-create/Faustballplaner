@@ -581,7 +581,7 @@ export default function Home() {
                   Verwalte und sehe alle anstehenden Termine.
                 </p>
                 <Button size="sm" className="mt-4" asChild>
-                  <Link href="/termine">Zu den Terminen</Link>
+                  <Link href="/kalender">Zum Kalender</Link>
                 </Button>
               </CardContent>
             </Card>
