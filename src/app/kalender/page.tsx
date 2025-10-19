@@ -1541,26 +1541,16 @@ export default function TerminePage() {
     return weeklyEventsMap;
   }, [eventsData, overridesData, currentWeekStart, currentWeekEnd, selectedTeamIds, selectedTitleIds]);
 
-
-    const eventIdsInView = useMemo(() => {
-        if (isLoading) return [];
-        const ids = new Set<string>();
-        eventsForWeek.forEach(dayEvents => {
-            dayEvents.forEach(event => ids.add(event.id));
-        });
-        return Array.from(ids);
-    }, [eventsForWeek, isLoading]);
-
     const responsesQuery = useMemo(() => {
-        if (!firestore || !user || !userData?.teamIds || eventIdsInView.length === 0 || isLoading) {
-            return null;
+        if (isUserLoading || !firestore || !user) return null; // Wait for user data
+        if (userData?.teamIds && userData.teamIds.length > 0) {
+            return query(collection(firestore, 'event_responses'), where('teamId', 'in', userData.teamIds));
         }
-        return query(collection(firestore, 'event_responses'), where('eventId', 'in', eventIdsInView));
-    }, [firestore, user, userData?.teamIds, eventIdsInView, isLoading]);
-
+        return collection(firestore, 'event_responses');
+    }, [firestore, user, userData, isUserLoading]);
     const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
     
-    const isLoadingCombined = isUserLoading || eventsLoading || categoriesLoading || teamsLoading || usersLoading || locationsLoading || eventTitlesLoading || overridesLoading;
+    const isLoadingCombined = isUserLoading || eventsLoading || categoriesLoading || teamsLoading || usersLoading || locationsLoading || eventTitlesLoading || overridesLoading || responsesLoading;
 
 
   const handleOpenForm = (event?: DisplayEvent) => {
@@ -1667,7 +1657,7 @@ export default function TerminePage() {
 
 
   const renderContent = () => {
-    if (isLoadingCombined || responsesLoading) {
+    if (isLoadingCombined) {
       return (
         <div className="flex justify-center items-center py-10">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -1701,7 +1691,7 @@ export default function TerminePage() {
                                         responses={responses?.filter(r => r.eventId === event.id) || null}
                                         onEdit={handleOpenForm}
                                         onDelete={handleDelete}
-                                        onCancel={setEventToCancel}
+                                        onCancel={() => setEventToCancel(event)}
                                         onReactivate={handleReactivateSingleEvent}
                                         eventTitles={eventTitles || []}
                                         locations={locations || []}
