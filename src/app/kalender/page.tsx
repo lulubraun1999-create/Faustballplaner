@@ -37,6 +37,9 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 
 
 interface Event {
@@ -61,12 +64,13 @@ interface EventOverride {
   eventId: string;
   originalDate: Timestamp;
   isCancelled?: boolean;
-  // ... other fields from Event might be here
+  cancellationReason?: string;
 }
 
 interface DisplayEvent extends Event {
   displayDate: Date;
   isCancelled?: boolean;
+  cancellationReason?: string;
 }
 
 interface EventResponse {
@@ -75,6 +79,7 @@ interface EventResponse {
     userId: string;
     eventDate: Timestamp;
     status: 'attending' | 'declined' | 'uncertain';
+    reason?: string;
     respondedAt: Timestamp;
 }
 
@@ -131,9 +136,11 @@ const getRecurrenceText = (recurrence?: string) => {
 };
 
 
-const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds, canEdit, onReactivate, onCancel }: { event: DisplayEvent; allUsers: GroupMember[], locations: Location[], eventTitles: EventTitle[], currentUserTeamIds: string[], canEdit: boolean, onCancel: (event: DisplayEvent) => void, onReactivate: (event: DisplayEvent) => void; }) => {
+const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds, canEdit, onReactivate, onCancel }: { event: DisplayEvent; allUsers: GroupMember[], locations: Location[], eventTitles: EventTitle[], currentUserTeamIds: string[], canEdit: boolean, onCancel: (event: DisplayEvent, reason: string) => void, onReactivate: (event: DisplayEvent) => void; }) => {
     const { user } = useUser();
     const firestore = useFirestore();
+    const [isDeclineDialogOpen, setIsDeclineDialogOpen] = useState(false);
+    const [declineReason, setDeclineReason] = useState('');
 
     const responsesQuery = useMemo(() => {
         if (!event.id || !firestore) return null;
@@ -210,32 +217,32 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
     const attendees = useMemo(() => {
         return responsesForThisInstance
             .filter(r => r.status === 'attending')
-            .map(r => getResponderName(r.userId))
-            .sort();
+            .map(r => ({ name: getResponderName(r.userId) }))
+            .sort((a,b) => a.name.localeCompare(b.name));
     }, [responsesForThisInstance, allUsers]);
 
     const decliners = useMemo(() => {
         return responsesForThisInstance
             .filter(r => r.status === 'declined')
-            .map(r => getResponderName(r.userId))
-            .sort();
+            .map(r => ({ name: getResponderName(r.userId), reason: r.reason }))
+            .sort((a,b) => a.name.localeCompare(b.name));
     }, [responsesForThisInstance, allUsers]);
     
     const uncertains = useMemo(() => {
         return responsesForThisInstance
             .filter(r => r.status === 'uncertain')
-            .map(r => getResponderName(r.userId))
-            .sort();
+            .map(r => ({ name: getResponderName(r.userId) }))
+            .sort((a,b) => a.name.localeCompare(b.name));
     }, [responsesForThisInstance, allUsers]);
 
 
-    const handleRsvp = (status: 'attending' | 'declined' | 'uncertain') => {
+    const handleRsvp = (status: 'attending' | 'declined' | 'uncertain', reason?: string) => {
         if (!user || !firestore) return;
 
         const responseCollectionRef = collection(firestore, 'event_responses');
         
-        if (userResponse && userResponse.status === status) {
-            // User is toggling off their current status, so delete the response
+        if (userResponse && userResponse.status === status && status !== 'declined') {
+            // User is toggling off their current status (except for decline, which might have a new reason)
             const responseRef = doc(responseCollectionRef, userResponse.id);
             deleteDoc(responseRef)
                 .catch(serverError => {
@@ -258,6 +265,7 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
             respondedAt: serverTimestamp(),
             eventDate: eventDateAsTimestamp,
             eventId: event.id,
+            reason: status === 'declined' ? reason : '',
         };
         
         const responseRef = doc(responseCollectionRef, responseDocId);
@@ -271,6 +279,11 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
                 });
                 errorEmitter.emit('permission-error', permissionError);
             });
+        
+        if (isDeclineDialogOpen) {
+            setIsDeclineDialogOpen(false);
+            setDeclineReason('');
+        }
     };
     
     const location = locations.find(l => l.id === event.locationId);
@@ -291,23 +304,29 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
                                         <CheckCircle2 className="h-4 w-4" />
                                     </Button>
                                 ) : (
-                                    <AlertDialog>
-                                        <AlertDialogTrigger asChild>
-                                            <Button variant="ghost" size="icon" className="hover:bg-amber-500/10 hover:text-amber-600"><Ban className="h-4 w-4" /></Button>
-                                        </AlertDialogTrigger>
-                                        <AlertDialogContent>
-                                            <AlertDialogHeader>
-                                                <AlertDialogTitle>Nur diesen Termin absagen?</AlertDialogTitle>
-                                                <AlertDialogDescription>
-                                                    Diese Aktion kann nicht rückgängig gemacht werden. Dadurch wird nur dieser eine Termin am {format(event.displayDate, "dd.MM.yyyy")} abgesagt. Die Serie bleibt bestehen.
-                                                </AlertDialogDescription>
-                                            </AlertDialogHeader>
-                                            <AlertDialogFooter>
-                                                <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-                                                <AlertDialogAction onClick={() => onCancel(event)} className="bg-amber-500 hover:bg-amber-600">Ja, nur diesen Termin absagen</AlertDialogAction>
-                                            </AlertDialogFooter>
-                                        </AlertDialogContent>
-                                    </AlertDialog>
+                                     <Dialog>
+                                        <DialogTrigger asChild>
+                                             <Button variant="ghost" size="icon" className="hover:bg-amber-500/10 hover:text-amber-600"><Ban className="h-4 w-4" /></Button>
+                                        </DialogTrigger>
+                                        <DialogContent>
+                                            <DialogHeader>
+                                                <DialogTitle>Termin am {format(event.displayDate, "dd.MM.yyyy")} absagen?</DialogTitle>
+                                                <DialogDescription>
+                                                   Geben Sie einen Grund für die Absage an. Dieser wird den Mitgliedern angezeigt.
+                                                </DialogDescription>
+                                            </DialogHeader>
+                                            <Textarea
+                                                placeholder="Grund für die Absage..."
+                                                onChange={(e) => setDeclineReason(e.target.value)}
+                                            />
+                                            <DialogFooter>
+                                                <DialogClose asChild>
+                                                    <Button variant="outline">Abbrechen</Button>
+                                                </DialogClose>
+                                                <Button onClick={() => onCancel(event, declineReason)} className="bg-amber-500 hover:bg-amber-600">Ja, absagen</Button>
+                                            </DialogFooter>
+                                        </DialogContent>
+                                    </Dialog>
                                 )
                             )}
                         </div>
@@ -343,6 +362,9 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
                         </Badge>
                     )}
                 </div>
+                {event.isCancelled && event.cancellationReason && (
+                    <p className="text-destructive text-sm mt-2 font-semibold">Grund: {event.cancellationReason}</p>
+                )}
             </CardHeader>
             {(!event.isCancelled && (event.description || event.meetingPoint)) && (
                 <CardContent className="space-y-2">
@@ -369,7 +391,7 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
                                 <h4 className="font-semibold text-sm mb-2">Zusagen ({attendees.length})</h4>
                                 {attendees.length > 0 ? (
                                     <ul className="list-disc list-inside text-sm space-y-1">
-                                        {attendees.map((name, i) => <li key={i}>{name}</li>)}
+                                        {attendees.map((a, i) => <li key={i}>{a.name}</li>)}
                                     </ul>
                                 ) : <p className="text-xs text-muted-foreground">Noch keine Zusagen.</p>}
                             </div>
@@ -377,7 +399,7 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
                                 <h4 className="font-semibold text-sm mb-2">Unsicher ({uncertains.length})</h4>
                                 {uncertains.length > 0 ? (
                                     <ul className="list-disc list-inside text-sm space-y-1">
-                                        {uncertains.map((name, i) => <li key={i}>{name}</li>)}
+                                        {uncertains.map((u, i) => <li key={i}>{u.name}</li>)}
                                     </ul>
                                 ) : <p className="text-xs text-muted-foreground">Keine unsicheren Antworten.</p>}
                             </div>
@@ -385,7 +407,12 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
                                 <h4 className="font-semibold text-sm mb-2">Absagen ({decliners.length})</h4>
                                 {decliners.length > 0 ? (
                                     <ul className="list-disc list-inside text-sm space-y-1">
-                                        {decliners.map((name, i) => <li key={i}>{name}</li>)}
+                                        {decliners.map((d, i) => (
+                                            <li key={i}>
+                                                {d.name}
+                                                {d.reason && canEdit && <span className="text-muted-foreground text-xs"> - {d.reason}</span>}
+                                            </li>
+                                        ))}
                                     </ul>
                                 ) : <p className="text-xs text-muted-foreground">Noch keine Absagen.</p>}
                             </div>
@@ -412,14 +439,34 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
                         <HelpCircle className="mr-2 h-4 w-4" />
                         Unsicher
                     </Button>
-                    <Button 
-                        size="sm"
-                        variant={userResponse?.status === 'declined' ? 'destructive' : 'outline'}
-                        onClick={() => handleRsvp('declined')}
-                    >
-                        <XIcon className="mr-2 h-4 w-4" />
-                        Absagen
-                    </Button>
+                    <Dialog open={isDeclineDialogOpen} onOpenChange={setIsDeclineDialogOpen}>
+                        <DialogTrigger asChild>
+                            <Button 
+                                size="sm"
+                                variant={userResponse?.status === 'declined' ? 'destructive' : 'outline'}
+                            >
+                                <XIcon className="mr-2 h-4 w-4" />
+                                Absagen
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>Absagegrund</DialogTitle>
+                                <DialogDescription>Bitte gib einen Grund für deine Absage an. Dies hilft den Trainern bei der Planung.</DialogDescription>
+                            </DialogHeader>
+                            <Textarea 
+                                placeholder="z.B. Krank, Urlaub, etc."
+                                value={declineReason}
+                                onChange={(e) => setDeclineReason(e.target.value)}
+                            />
+                            <DialogFooter>
+                                 <DialogClose asChild>
+                                    <Button variant="outline">Abbrechen</Button>
+                                </DialogClose>
+                                <Button variant="destructive" onClick={() => handleRsvp('declined', declineReason)}>Absage bestätigen</Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
                 </div>}
                 </CardFooter>
              )}
@@ -561,7 +608,7 @@ export default function KalenderPage() {
       if (event.recurrence === 'none' || !event.recurrence) {
         if (isWithinInterval(originalStartDate, interval)) {
           const override = overridesData.find(o => o.eventId === event.id && isSameDay(o.originalDate.toDate(), originalStartDate));
-          const finalEvent = override ? { ...event, ...override, displayDate: override.date?.toDate() || originalStartDate, isCancelled: override.isCancelled } : { ...event, displayDate: originalStartDate };
+          const finalEvent = override ? { ...event, ...override, displayDate: override.date?.toDate() || originalStartDate, isCancelled: override.isCancelled, cancellationReason: override.cancellationReason } : { ...event, displayDate: originalStartDate };
           visibleEvents.push(finalEvent);
         }
         continue;
@@ -602,10 +649,11 @@ export default function KalenderPage() {
             if (override) {
                  finalEvent = {
                     ...event,
-                    ...override,
+                    ...(override as Partial<Event>),
                     id: event.id, // Keep original event ID
                     displayDate: override.date?.toDate() || currentDate,
                     isCancelled: override.isCancelled,
+                    cancellationReason: override.cancellationReason
                  };
             } else {
                 finalEvent = { ...event, displayDate: currentDate };
@@ -672,13 +720,14 @@ export default function KalenderPage() {
       .sort((a, b) => a.displayDate.getTime() - b.displayDate.getTime());
   }, [selectedDate, allVisibleEvents]);
 
-  const handleCancelSingleEvent = async (eventToCancel: DisplayEvent) => {
+  const handleCancelSingleEvent = async (eventToCancel: DisplayEvent, reason: string) => {
     if (!firestore || !canEditEvents) return;
 
     const overrideData = {
         eventId: eventToCancel.id,
         originalDate: Timestamp.fromDate(startOfDay(eventToCancel.displayDate)),
         isCancelled: true,
+        cancellationReason: reason,
         updatedAt: serverTimestamp(),
     };
     
@@ -690,7 +739,7 @@ export default function KalenderPage() {
     try {
         if(!querySnapshot.empty) {
             const existingOverrideId = querySnapshot.docs[0].id;
-            await updateDoc(doc(firestore, 'event_overrides', existingOverrideId), { isCancelled: true, updatedAt: serverTimestamp() });
+            await updateDoc(doc(firestore, 'event_overrides', existingOverrideId), { isCancelled: true, cancellationReason: reason, updatedAt: serverTimestamp() });
         } else {
             await addDoc(overridesRef, overrideData);
         }
@@ -715,7 +764,7 @@ export default function KalenderPage() {
     if (!querySnapshot.empty) {
         const existingOverrideId = querySnapshot.docs[0].id;
       try {
-        await updateDoc(doc(firestore, 'event_overrides', existingOverrideId), { isCancelled: false, updatedAt: serverTimestamp() });
+        await updateDoc(doc(firestore, 'event_overrides', existingOverrideId), { isCancelled: false, cancellationReason: '', updatedAt: serverTimestamp() });
         toast({ title: 'Termin reaktiviert' });
       } catch (serverError: any) {
         toast({
@@ -874,3 +923,5 @@ export default function KalenderPage() {
     </div>
   );
 }
+
+    
