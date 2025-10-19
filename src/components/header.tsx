@@ -81,7 +81,7 @@ export function Header() {
                 <Link href="/mitglieder">Mitglieder</Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <Link href="/admin/news">News</Link>
+                <Link href="/admin/news">Newsverwaltung</Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link href="/umfragen">Umfragen</Link>
