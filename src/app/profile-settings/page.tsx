@@ -403,35 +403,26 @@ function AbsenceManager() {
         const { reason, dateRange } = values;
 
         try {
-            const batch = writeBatch(firestore);
-            
-            // 1. Save the absence period
-            const absenceRef = doc(collection(firestore, 'users', user.uid, 'absences'));
-            batch.set(absenceRef, {
-                userId: user.uid,
-                reason: reason,
-                startDate: Timestamp.fromDate(dateRange.from),
-                endDate: Timestamp.fromDate(dateRange.to),
-                createdAt: serverTimestamp(),
-            });
-
-            // 2. Find and decline events
+            // Get user data to find their teams
             const userDocSnap = await getDoc(doc(firestore, 'users', user.uid));
+            if (!userDocSnap.exists()) throw new Error("Benutzerdaten nicht gefunden.");
             const userData = userDocSnap.data() as UserData;
             const userTeamIds = userData.teamIds || [];
-            
+
+            // Find all events that the user needs to decline
             const eventsToDecline = findApplicableEvents(dateRange.from, dateRange.to, userTeamIds);
             
+            // Create a batch to update all event responses
+            const responsesBatch = writeBatch(firestore);
             for (const { eventId, eventDate } of eventsToDecline) {
-                const responseQuery = query(
+                 const responseQuery = query(
                     collection(firestore, 'event_responses'),
                     where('eventId', '==', eventId),
                     where('userId', '==', user.uid),
                     where('eventDate', '==', Timestamp.fromDate(startOfDay(eventDate)))
                 );
-                
                 const existingResponses = await getDocs(responseQuery);
-                
+
                 const responseData = {
                     eventId: eventId,
                     userId: user.uid,
@@ -443,20 +434,40 @@ function AbsenceManager() {
 
                 if (existingResponses.empty) {
                     const responseRef = doc(collection(firestore, 'event_responses'));
-                    batch.set(responseRef, responseData);
+                    responsesBatch.set(responseRef, responseData);
                 } else {
                     const responseRef = existingResponses.docs[0].ref;
-                    batch.update(responseRef, responseData);
+                    responsesBatch.update(responseRef, responseData);
                 }
             }
+            
+            // Commit the event responses batch first
+            await responsesBatch.commit();
+            
+            // If successful, then create the absence document
+            const absenceRef = doc(collection(firestore, 'users', user.uid, 'absences'));
+            await setDoc(absenceRef, {
+                userId: user.uid,
+                reason: reason,
+                startDate: Timestamp.fromDate(dateRange.from),
+                endDate: Timestamp.fromDate(dateRange.to),
+                createdAt: serverTimestamp(),
+            });
 
-            await batch.commit();
             toast({ title: "Abwesenheit gespeichert", description: `${eventsToDecline.length} Termin(e) automatisch abgesagt.` });
             setIsFormOpen(false);
             form.reset();
 
         } catch (error: any) {
-            toast({ variant: 'destructive', title: 'Fehler beim Speichern der Abwesenheit', description: error.message });
+            // This will now properly catch permission errors from the batch commit
+            const permissionError = new FirestorePermissionError({
+                path: 'event_responses', // This is a generalized path for the batch
+                operation: 'write',
+                requestResourceData: { reason, dateRange }, // Include context
+            });
+            errorEmitter.emit('permission-error', permissionError);
+
+            toast({ variant: 'destructive', title: 'Fehler beim Speichern der Abwesenheit', description: "Fehlende Berechtigungen. Die Aktion wurde abgebrochen." });
         } finally {
             setIsSubmitting(false);
         }
@@ -780,3 +791,4 @@ export default function ProfileSettingsPage() {
     </div>
   );
 }
+
