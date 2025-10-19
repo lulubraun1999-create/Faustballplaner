@@ -240,6 +240,132 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
 };
 // END: EventCard Component
 
+// START: NextMatchDay Component
+function NextMatchDay() {
+    const firestore = useFirestore();
+    const { user } = useUser();
+
+    // Data fetching
+    const { data: events, isLoading: eventsLoading } = useCollection<Event>(firestore ? query(collection(firestore, 'events'), where('date', '>=', Timestamp.now())) : null);
+    const { data: overrides, isLoading: overridesLoading } = useCollection<EventOverride>(firestore ? collection(firestore, 'event_overrides') : null);
+    const { data: locations, isLoading: locationsLoading } = useCollection<Location>(firestore ? collection(firestore, 'locations') : null);
+    const { data: eventTitles, isLoading: titlesLoading } = useCollection<EventTitle>(firestore ? collection(firestore, 'event_titles') : null);
+
+    const isLoading = eventsLoading || overridesLoading || locationsLoading || titlesLoading;
+
+    const nextMatchDay = useMemo(() => {
+        if (!events || !overrides || !eventTitles) return null;
+
+        const spieltagTitleId = eventTitles.find(t => t.name.toLowerCase() === 'spieltag')?.id;
+        if (!spieltagTitleId) return null;
+
+        const now = new Date();
+        const futureLimit = add(now, { years: 1 });
+
+        const matchDayEvents = events.filter(event => event.titleId === spieltagTitleId);
+
+        const allOccurrences: DisplayEvent[] = [];
+
+        for (const event of matchDayEvents) {
+            const originalStartDate = event.date.toDate();
+            
+            if (event.recurrence === 'none' || !event.recurrence) {
+                if (isFuture(originalStartDate)) {
+                     const override = overrides.find(o => o.eventId === event.id && isSameDay(o.originalDate.toDate(), originalStartDate));
+                     if (!override || !override.isCancelled) {
+                        allOccurrences.push({ ...event, displayDate: originalStartDate, isCancelled: override?.isCancelled });
+                     }
+                }
+                continue;
+            }
+
+            let currentDate = originalStartDate;
+            const recurrenceEndDate = event.recurrenceEndDate?.toDate();
+            let limit = 100;
+
+            while (currentDate < futureLimit && limit > 0) {
+                 if (recurrenceEndDate && currentDate > recurrenceEndDate) {
+                    break;
+                }
+                
+                if(isFuture(currentDate)) {
+                    const override = overrides.find(o => o.eventId === event.id && isSameDay(o.originalDate.toDate(), currentDate));
+                    if (!override || !override.isCancelled) {
+                       allOccurrences.push({ ...event, displayDate: currentDate, isCancelled: override?.isCancelled });
+                    }
+                }
+
+                switch (event.recurrence) {
+                    case 'weekly': currentDate = addWeeks(currentDate, 1); break;
+                    case 'biweekly': currentDate = addWeeks(currentDate, 2); break;
+                    case 'monthly': currentDate = addMonths(currentDate, 1); break;
+                    default: limit = 0; break;
+                }
+                limit--;
+            }
+        }
+        
+        return allOccurrences
+            .sort((a, b) => a.displayDate.getTime() - b.displayDate.getTime())
+            .slice(0, 1)[0] || null;
+
+    }, [events, overrides, eventTitles]);
+
+    if (isLoading) {
+        return (
+            <div className="flex justify-center items-center py-10">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        );
+    }
+    
+    if (!nextMatchDay) {
+         return null;
+    }
+    
+    const location = locations?.find(l => l.id === nextMatchDay.locationId);
+    
+    const endDate = nextMatchDay.endTime ? new Date(nextMatchDay.displayDate.getTime() + (nextMatchDay.endTime.toDate().getTime() - nextMatchDay.date.toDate().getTime())) : undefined;
+    
+    let timeString;
+    if (nextMatchDay.isAllDay) {
+        timeString = "Ganztägig";
+    } else if (endDate) {
+        timeString = `${format(nextMatchDay.displayDate, 'HH:mm')} - ${format(endDate, 'HH:mm')} Uhr`;
+    } else {
+        timeString = `${format(nextMatchDay.displayDate, 'HH:mm')} Uhr`;
+    }
+
+
+    return (
+        <div className="grid gap-4">
+             <h2 className="text-2xl font-bold tracking-tight">Nächster Spieltag</h2>
+              <Card className="border-primary border-2">
+                <CardHeader>
+                   <CardTitle className="text-lg text-primary">
+                        {eventTitles?.find(t => t.id === nextMatchDay.titleId)?.name || 'Spieltag'}
+                    </CardTitle>
+                     <CardDescription className="text-base font-semibold text-foreground">{format(nextMatchDay.displayDate, 'eeee, dd. MMMM yyyy', { locale: de })}</CardDescription>
+                     <div className="text-sm text-muted-foreground flex items-center gap-x-4 gap-y-1 pt-1">
+                        <div className="flex items-center gap-1.5">
+                            <Clock className="h-4 w-4 flex-shrink-0" />
+                            <span>{timeString}</span>
+                        </div>
+                        {location && (
+                            <div className="flex items-center gap-1.5">
+                                <MapPin className="h-4 w-4 flex-shrink-0" />
+                                <span>{location.name}</span>
+                            </div>
+                        )}
+                    </div>
+                </CardHeader>
+                {nextMatchDay.description && <CardContent><p>{nextMatchDay.description}</p></CardContent>}
+            </Card>
+        </div>
+    );
+}
+// END: NextMatchDay Component
+
 
 // START: UpcomingEvents Component
 function UpcomingEvents() {
@@ -441,6 +567,7 @@ export default function Home() {
             </Card>
           </div>
           
+          <NextMatchDay />
           <UpcomingEvents />
          
         </div>
@@ -448,5 +575,3 @@ export default function Home() {
     </div>
   );
 }
-
-    
