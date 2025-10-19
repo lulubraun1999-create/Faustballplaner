@@ -540,8 +540,7 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
 
 
  const handleFormSubmit = async (values: EventFormValues) => {
-    const isBecomingRecurring = !event?.recurrence || (event.recurrence === 'none' && values.recurrence !== 'none');
-    
+    const isBecomingRecurring = (!event || event.recurrence === 'none') && values.recurrence !== 'none';
     if (event && event.recurrence && event.recurrence !== 'none' && !isBecomingRecurring) {
       setIsEditModeDialog(true);
     } else {
@@ -1031,24 +1030,11 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, onReact
     const endDate = useMemo(() => {
         if (!event.endTime) return undefined;
 
+        const originalStartDate = event.date.toDate();
         const originalEndDate = event.endTime.toDate();
-        const displayStartDate = event.displayDate;
-
-        // Clone the start date to avoid modifying it
-        const newEndDate = new Date(displayStartDate.getTime());
-
-        // Set the time from the original end date
-        newEndDate.setHours(originalEndDate.getHours());
-        newEndDate.setMinutes(originalEndDate.getMinutes());
-        newEndDate.setSeconds(originalEndDate.getSeconds());
-
-        // Handle day overflow if end time is on the next day
-        const daysDifference = differenceInDays(originalEndDate, event.date.toDate());
-        if (daysDifference > 0) {
-          newEndDate.setDate(newEndDate.getDate() + daysDifference);
-        }
-
-        return newEndDate;
+        const duration = originalEndDate.getTime() - originalStartDate.getTime();
+        
+        return new Date(startDate.getTime() + duration);
     }, [event.date, event.endTime, event.displayDate]);
 
     let timeString;
@@ -1453,13 +1439,17 @@ export default function TerminePage() {
         if (isWithinInterval(originalStartDate, interval)) {
           const dayKey = format(originalStartDate, 'yyyy-MM-dd');
           if (!weeklyEventsMap.has(dayKey)) weeklyEventsMap.set(dayKey, []);
+          
+          const override = overridesData.find(o => o.eventId === event.id && isSameDay(o.originalDate.toDate(), originalStartDate));
+          if(override) continue; // Will be handled later
+
           weeklyEventsMap.get(dayKey)?.push({ ...event, displayDate: originalStartDate });
         }
         continue;
       }
       
       let currentDate = originalStartDate;
-      let limit = 200; // Safety break for while loops
+      let limit = 200; 
       
       while (currentDate < interval.start && limit > 0) {
         if (recurrenceEndDate && currentDate > recurrenceEndDate) {
@@ -1488,51 +1478,12 @@ export default function TerminePage() {
 
           const override = overridesData.find(o => o.eventId === event.id && isSameDay(o.originalDate.toDate(), currentDate));
           
-          let finalEvent: DisplayEvent;
-          if (override) {
-            finalEvent = {
-              ...event,
-              ...override,
-              id: event.id, // Keep original event ID for keying
-              displayDate: override.date ? override.date.toDate() : currentDate,
-              isCancelled: override.isCancelled,
-            };
-          } else {
-            finalEvent = { ...event, displayDate: currentDate };
+          if(!override) {
+            let finalEvent: DisplayEvent = { ...event, displayDate: currentDate };
+            weeklyEventsMap.get(dayKey)?.push(finalEvent);
           }
-          
-           if (event.endTime) {
-                const originalEndDate = event.endTime.toDate();
-                const displayStartDate = finalEvent.displayDate;
-                let newEndDate = new Date(displayStartDate.getTime());
-                newEndDate.setHours(originalEndDate.getHours(), originalEndDate.getMinutes(), originalEndDate.getSeconds());
-                const daysDifference = differenceInDays(originalEndDate, event.date.toDate());
-                if(daysDifference > 0) {
-                    newEndDate.setDate(newEndDate.getDate() + daysDifference);
-                }
-                finalEvent.endTime = Timestamp.fromDate(newEndDate);
-            }
-            
-            if (event.rsvpDeadline) {
-                const originalRsvpDate = event.rsvpDeadline.toDate();
-                const displayStartDate = finalEvent.displayDate;
-                let newRsvpDate = new Date(displayStartDate.getTime());
-                newRsvpDate.setHours(originalRsvpDate.getHours(), originalRsvpDate.getMinutes(), originalRsvpDate.getSeconds());
-                 const daysDifference = differenceInDays(originalRsvpDate, event.date.toDate());
-                if(daysDifference !== 0) {
-                   newRsvpDate.setDate(newRsvpDate.getDate() + daysDifference);
-                }
-                finalEvent.rsvpDeadline = Timestamp.fromDate(newRsvpDate);
-            }
-
-          weeklyEventsMap.get(dayKey)?.push(finalEvent);
         }
-
-        if (event.recurrence === 'none') {
-            limit = 0;
-            continue;
-        }
-
+        
         switch (event.recurrence) {
           case 'weekly': currentDate = addWeeks(currentDate, 1); break;
           case 'biweekly': currentDate = addWeeks(currentDate, 2); break;
@@ -1543,8 +1494,37 @@ export default function TerminePage() {
       }
     }
     
+    // Process overrides separately
+    for (const override of overridesData) {
+        const overrideDate = override.date?.toDate() || override.originalDate.toDate();
+        if (isWithinInterval(overrideDate, interval)) {
+            const originalEvent = localEvents.find(e => e.id === override.eventId);
+            if (!originalEvent) continue;
+
+            // Check if override should be displayed based on filters
+            const isTeamFiltered = selectedTeamIds.length > 0 && !originalEvent.targetTeamIds?.some(id => selectedTeamIds.includes(id)) && !(override.targetTeamIds || []).some(id => selectedTeamIds.includes(id));
+            const isTitleFiltered = selectedTitleIds.length > 0 && !(selectedTitleIds.includes(originalEvent.titleId)) && !(override.titleId && selectedTitleIds.includes(override.titleId));
+            if(isTeamFiltered || isTitleFiltered) continue;
+
+            const dayKey = format(overrideDate, 'yyyy-MM-dd');
+            if (!weeklyEventsMap.has(dayKey)) weeklyEventsMap.set(dayKey, []);
+            
+            const finalEvent: DisplayEvent = {
+              ...originalEvent,
+              ...override,
+              id: originalEvent.id, 
+              displayDate: overrideDate,
+            };
+            weeklyEventsMap.get(dayKey)?.push(finalEvent);
+        }
+    }
+
     weeklyEventsMap.forEach((dayEvents) => {
-        dayEvents.sort((a, b) => a.displayDate.getTime() - b.displayDate.getTime());
+        dayEvents.sort((a, b) => {
+            const timeA = a.isAllDay ? 0 : a.displayDate.getTime();
+            const timeB = b.isAllDay ? 0 : b.displayDate.getTime();
+            return timeA - timeB;
+        });
     });
 
     return weeklyEventsMap;
