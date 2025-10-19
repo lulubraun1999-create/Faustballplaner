@@ -1438,18 +1438,15 @@ export default function TerminePage() {
   const { data: overridesData, isLoading: overridesLoading } = useCollection<EventOverride>(eventOverridesQuery);
   
   const responsesQuery = useMemo(() => {
-    // Wait until user data is loaded to prevent unstable queries
     if (isUserLoading || !firestore) {
       return null;
     }
-    // If user has teamIds, filter responses by them
     if (userData?.teamIds && userData.teamIds.length > 0) {
       return query(
         collection(firestore, 'event_responses'),
         where('teamId', 'in', userData.teamIds)
       );
     }
-    // Otherwise, fetch all responses (for admins without specific teams, or public view)
     return collection(firestore, 'event_responses');
   }, [firestore, userData, isUserLoading]);
 
@@ -1852,3 +1849,4 @@ export default function TerminePage() {
     </div>
   );
 }
+
