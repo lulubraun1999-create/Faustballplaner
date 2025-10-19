@@ -115,8 +115,13 @@ interface UserData {
   id: string;
   adminRechte?: boolean;
   teamIds?: string[];
+}
+
+interface GroupMember {
+  id: string;
   vorname: string;
   nachname: string;
+  teamIds?: string[];
 }
 
 // Components
@@ -265,7 +270,7 @@ function PenaltyCatalogManager({ teamId }: { teamId: string }) {
   );
 }
 
-function TreasuryManager({ teamId, members }: { teamId: string, members: UserData[] | null }) {
+function TreasuryManager({ teamId, members }: { teamId: string, members: GroupMember[] | null }) {
     const firestore = useFirestore();
     const { toast } = useToast();
     const { user } = useUser();
@@ -415,7 +420,7 @@ function TreasuryManager({ teamId, members }: { teamId: string, members: UserDat
     );
 }
 
-function AssignPenaltiesManager({ teamId, members }: { teamId: string, members: UserData[] | null }) {
+function AssignPenaltiesManager({ teamId, members }: { teamId: string, members: GroupMember[] | null }) {
     const firestore = useFirestore();
     const { toast } = useToast();
     const { user } = useUser();
@@ -675,11 +680,16 @@ export default function MannschaftskassePage() {
 
   const { data: adminTeams, isLoading: teamsLoading } = useCollection<Team>(adminTeamsQuery);
   
-  const membersQuery = useMemo(() => {
-    if (!firestore || !selectedTeamId) return null;
-    return query(collection(firestore, 'members'), where('teamIds', 'array-contains', selectedTeamId));
-  }, [firestore, selectedTeamId]);
-  const { data: members, isLoading: membersLoading } = useCollection<UserData>(membersQuery);
+  const allMembersQuery = useMemo(() => {
+    if (!firestore) return null;
+    return collection(firestore, 'group_members');
+  }, [firestore]);
+  const { data: allMembers, isLoading: membersLoading } = useCollection<GroupMember>(allMembersQuery);
+
+  const membersForTeam = useMemo(() => {
+    if (!allMembers || !selectedTeamId) return null;
+    return allMembers.filter(m => m.teamIds?.includes(selectedTeamId));
+  }, [allMembers, selectedTeamId]);
 
 
   useEffect(() => {
@@ -744,10 +754,10 @@ export default function MannschaftskassePage() {
                 {membersLoading ? <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin"/></div> : (
                     <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
                         <div className="space-y-8">
-                           <TreasuryManager teamId={selectedTeamId} members={members || null} />
+                           <TreasuryManager teamId={selectedTeamId} members={membersForTeam || null} />
                            <PenaltyCatalogManager teamId={selectedTeamId} />
                         </div>
-                        <AssignPenaltiesManager teamId={selectedTeamId} members={members || null}/>
+                        <AssignPenaltiesManager teamId={selectedTeamId} members={membersForTeam || null}/>
                     </div>
                 )}
                 </>
