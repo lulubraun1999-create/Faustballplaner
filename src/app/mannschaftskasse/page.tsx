@@ -200,7 +200,25 @@ function PenaltyCatalogManager({ teamId }: { teamId: string }) {
                   <TableCell>{new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(p.amount)}</TableCell>
                   <TableCell className="text-right">
                     <Button variant="ghost" size="icon" onClick={() => { setEditingPenalty(p); setIsFormOpen(true); }}><Edit className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDelete(p.id)}><Trash2 className="h-4 w-4" /></Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive"><Trash2 className="h-4 w-4" /></Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                         <AlertDialogHeader>
+                            <AlertDialogTitle>Sind Sie sicher?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                Diese Aktion kann nicht rückgängig gemacht werden. Die Strafe "{p.name}" wird dauerhaft gelöscht.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleDelete(p.id)} className="bg-destructive hover:bg-destructive/90">
+                                Ja, löschen
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </TableCell>
                 </TableRow>
               ))}
@@ -555,6 +573,11 @@ function AssignPenaltiesManager({ teamId }: { teamId: string }) {
                                 )
                              })
                             }
+                             {userPenalties?.filter(up => !up.paid).length === 0 && !isLoading && (
+                                <TableRow>
+                                <TableCell colSpan={5} className="text-center text-muted-foreground">Keine offenen Strafen.</TableCell>
+                                </TableRow>
+                            )}
                         </TableBody>
                     </Table>
                 </ScrollArea>
@@ -733,3 +756,5 @@ export default function MannschaftskassePage() {
     </div>
   );
 }
+
+    
