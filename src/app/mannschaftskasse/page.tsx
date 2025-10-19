@@ -679,7 +679,7 @@ export default function MannschaftskassePage() {
 
   const adminTeamsQuery = useMemo(() => {
     if (!firestore || !userData?.adminRechte || !userData.teamIds) return null;
-    if (userData.teamIds.length === 0) return query(collection(firestore, 'teams'), where('__name__', '==', 'dummy-id')); // No teams, return empty query
+    if (userData.teamIds.length === 0) return null;
     return query(collection(firestore, 'teams'), where('__name__', 'in', userData.teamIds));
   }, [firestore, userData]);
   const { data: adminTeams, isLoading: teamsLoading } = useCollection<Team>(adminTeamsQuery);
@@ -756,5 +756,3 @@ export default function MannschaftskassePage() {
     </div>
   );
 }
-
-    
