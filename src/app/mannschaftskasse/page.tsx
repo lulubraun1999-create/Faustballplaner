@@ -56,6 +56,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { cn } from '@/lib/utils';
 
 // Schemas & Interfaces
 const penaltySchema = z.object({
@@ -723,7 +724,7 @@ export default function MannschaftskassePage() {
            <div className="flex items-center justify-between mb-8">
                 <h1 className="text-3xl font-bold">Mannschaftskasse</h1>
                 {adminTeams.length > 1 && (
-                  <Select value={selectedTeamId} onValueChange={setSelectedTeamId}>
+                  <Select value={selectedTeamId} onValueChange={(value) => setSelectedTeamId(value === '' ? undefined : value)}>
                       <SelectTrigger className="w-[280px]">
                           <SelectValue placeholder="Team auswählen..." />
                       </SelectTrigger>
