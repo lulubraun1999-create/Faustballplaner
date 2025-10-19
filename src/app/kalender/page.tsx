@@ -149,6 +149,7 @@ const eventSchema = z.object({
   locationId: z.string().optional(),
   meetingPoint: z.string().optional(),
   description: z.string().optional(),
+  cancellationReason: z.string().optional(),
 }).superRefine((data, ctx) => {
     // 1. Endzeitpunkt muss nach Startzeitpunkt liegen
     if (data.date && (data.endTime || data.endDate)) {
@@ -1308,6 +1309,7 @@ const EventCard = ({ event, allUsers, teams, responses, onEdit, onDelete, onCanc
                                 <Button 
                                     size="sm"
                                     variant={userResponse?.status === 'declined' ? 'destructive' : 'outline'}
+                                    onClick={() => handleRsvp('declined')}
                                 >
                                     <XIcon className="mr-2 h-4 w-4" />
                                     Absagen
@@ -1347,6 +1349,8 @@ export default function TerminePage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<DisplayEvent | undefined>(undefined);
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [cancellationReason, setCancellationReason] = useState("");
+  const [eventToCancel, setEventToCancel] = useState<DisplayEvent | null>(null);
   
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>(() => {
     if (typeof window !== 'undefined') {
@@ -1433,33 +1437,7 @@ export default function TerminePage() {
   const { data: eventTitles, isLoading: eventTitlesLoading } = useCollection<EventTitle>(eventTitlesQuery);
   const { data: overridesData, isLoading: overridesLoading } = useCollection<EventOverride>(eventOverridesQuery);
   
-  const eventIdsInWeek = useMemo(() => {
-      if (eventsLoading || !eventsData) return [];
-      // This is a simplified version. A more accurate version would calculate recurring events in the week.
-      // For now, we'll just get all event IDs which might over-fetch responses, but is safer.
-      return eventsData.map(e => e.id) || [];
-  }, [eventsData, eventsLoading]);
-
-  const responsesQuery = useMemo(() => {
-      if (!firestore || eventIdsInWeek.length === 0) return null;
-      // Fetch responses for all potential events, as recurring events share the same ID.
-      return query(collection(firestore, 'event_responses'), where('eventId', 'in', eventIdsInWeek));
-  }, [firestore, eventIdsInWeek]);
-
-  const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
-  
-  const isLoading = isUserLoading || eventsLoading || categoriesLoading || teamsLoading || usersLoading || locationsLoading || eventTitlesLoading || overridesLoading || responsesLoading;
-
-  
-  const groupedTeams = useMemo(() => {
-    if (!categories || !teams) return [];
-    return categories.map(category => ({
-      ...category,
-      teams: teams.filter(team => team.categoryId === category.id).sort((a,b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
-    }));
-  }, [categories, teams]);
-  
- const eventsForWeek = useMemo(() => {
+  const eventsForWeek = useMemo(() => {
     const weeklyEventsMap = new Map<string, DisplayEvent[]>();
     if (!eventsData || !overridesData) return weeklyEventsMap;
   
@@ -1564,6 +1542,24 @@ export default function TerminePage() {
   }, [eventsData, overridesData, currentWeekStart, currentWeekEnd, selectedTeamIds, selectedTitleIds]);
 
 
+    const eventIdsInView = useMemo(() => {
+        const ids = new Set<string>();
+        eventsForWeek.forEach(dayEvents => {
+            dayEvents.forEach(event => ids.add(event.id));
+        });
+        return Array.from(ids);
+    }, [eventsForWeek]);
+
+    const responsesQuery = useMemo(() => {
+        if (!firestore || eventIdsInView.length === 0 || !allUsers) return null;
+        return query(collection(firestore, 'event_responses'), where('eventId', 'in', eventIdsInView));
+    }, [firestore, eventIdsInView, allUsers]);
+
+    const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
+    
+    const isLoading = isUserLoading || eventsLoading || categoriesLoading || teamsLoading || usersLoading || locationsLoading || eventTitlesLoading || overridesLoading || responsesLoading;
+
+
   const handleOpenForm = (event?: DisplayEvent) => {
     setSelectedEvent(event);
     setIsFormOpen(true);
@@ -1594,13 +1590,23 @@ export default function TerminePage() {
 };
 
 
-  const handleCancelSingleEvent = async (eventToCancel: DisplayEvent) => {
-    if (!firestore || !canEditEvents) return;
+  const handleCancelSingleEvent = async (reason?: string) => {
+    if (!firestore || !canEditEvents || !eventToCancel) return;
+    
+    if (reason === undefined) {
+      setEventToCancel(eventToCancel);
+      return;
+    }
+     if (!reason) {
+        toast({ variant: 'destructive', title: 'Grund erforderlich', description: 'Bitte geben Sie einen Grund für die Absage an.' });
+        return;
+    }
 
     const overrideData = {
         eventId: eventToCancel.id,
         originalDate: Timestamp.fromDate(startOfDay(eventToCancel.displayDate)),
         isCancelled: true,
+        cancellationReason: reason,
         updatedAt: serverTimestamp(),
     };
     
@@ -1612,12 +1618,14 @@ export default function TerminePage() {
     try {
         if(!querySnapshot.empty) {
             const existingOverrideId = querySnapshot.docs[0].id;
-            await updateDoc(doc(firestore, 'event_overrides', existingOverrideId), { isCancelled: true, updatedAt: serverTimestamp() });
+            await updateDoc(doc(firestore, 'event_overrides', existingOverrideId), { isCancelled: true, cancellationReason: reason, updatedAt: serverTimestamp() });
         } else {
             await addDoc(overridesRef, overrideData);
         }
         
         toast({ title: 'Termin abgesagt' });
+        setEventToCancel(null);
+        setCancellationReason("");
     } catch (serverError: any) {
         toast({
             variant: "destructive",
@@ -1637,7 +1645,7 @@ export default function TerminePage() {
     if (!querySnapshot.empty) {
         const existingOverrideId = querySnapshot.docs[0].id;
       try {
-        await updateDoc(doc(firestore, 'event_overrides', existingOverrideId), { isCancelled: false, updatedAt: serverTimestamp() });
+        await updateDoc(doc(firestore, 'event_overrides', existingOverrideId), { isCancelled: false, cancellationReason: null, updatedAt: serverTimestamp() });
         toast({ title: 'Termin reaktiviert' });
       } catch (serverError: any) {
         toast({
@@ -1690,7 +1698,7 @@ export default function TerminePage() {
                                         responses={responses?.filter(r => r.eventId === event.id) || null}
                                         onEdit={handleOpenForm}
                                         onDelete={handleDelete}
-                                        onCancel={handleCancelSingleEvent}
+                                        onCancel={setEventToCancel}
                                         onReactivate={handleReactivateSingleEvent}
                                         eventTitles={eventTitles || []}
                                         locations={locations || []}
@@ -1809,6 +1817,28 @@ export default function TerminePage() {
           )}
         </DialogContent>
       </Dialog>
+      
+      <AlertDialog open={!!eventToCancel} onOpenChange={(open) => {if(!open) setEventToCancel(null)}}>
+        <AlertDialogContent>
+            <AlertDialogHeader>
+                <AlertDialogTitle>Termin absagen</AlertDialogTitle>
+                <AlertDialogDescription>
+                    Bitte geben Sie einen Grund für die Absage des Termins am {eventToCancel ? format(eventToCancel.displayDate, 'dd.MM.yyyy') : ''} an.
+                </AlertDialogDescription>
+            </AlertDialogHeader>
+            <Textarea
+                placeholder="z.B. Halle gesperrt"
+                value={cancellationReason}
+                onChange={(e) => setCancellationReason(e.target.value)}
+            />
+            <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setCancellationReason("")}>Abbrechen</AlertDialogCancel>
+                <AlertDialogAction onClick={() => handleCancelSingleEvent(cancellationReason)} disabled={!cancellationReason}>
+                    Absage bestätigen
+                </AlertDialogAction>
+            </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
