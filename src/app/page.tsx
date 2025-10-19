@@ -383,7 +383,7 @@ function UpcomingEvents() {
     const isLoading = eventsLoading || overridesLoading || usersLoading || locationsLoading || titlesLoading;
 
     const upcomingEvents = useMemo(() => {
-        if (!events || !overrides || !userData) return [];
+        if (!events || !overrides || !userData || !eventTitles) return [];
 
         const userTeamIds = userData.teamIds || [];
         const now = new Date();
@@ -442,7 +442,7 @@ function UpcomingEvents() {
             .sort((a, b) => a.displayDate.getTime() - b.displayDate.getTime())
             .slice(0, 3);
 
-    }, [events, overrides, userData]);
+    }, [events, overrides, userData, eventTitles]);
 
     if (isLoading) {
         return (
