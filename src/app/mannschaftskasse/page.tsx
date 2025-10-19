@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
@@ -658,12 +657,13 @@ export default function MannschaftskassePage() {
     if (adminTeams && adminTeams.length > 0 && !selectedTeamId) {
       setSelectedTeamId(adminTeams[0].id);
     }
-  }, [adminTeams, selectedTeamId]);
+  }, [adminTeams]);
   
   const allMembersQuery = useMemo(() => {
     if (!firestore) return null;
     return collection(firestore, 'group_members');
   }, [firestore]);
+
   const { data: allMembers, isLoading: membersLoading } = useCollection<GroupMember>(allMembersQuery);
 
   const penaltiesQuery = useMemo(() => {
@@ -686,7 +686,7 @@ export default function MannschaftskassePage() {
   const { data: userPenalties, isLoading: userPenaltiesLoading } = useCollection<UserPenalty>(userPenaltiesQuery);
   
   const membersForTeam = useMemo(() => {
-    if (!allMembers || !selectedTeamId) return null;
+    if (!allMembers || !selectedTeamId) return [];
     return allMembers.filter(m => m.teamIds?.includes(selectedTeamId));
   }, [allMembers, selectedTeamId]);
   
