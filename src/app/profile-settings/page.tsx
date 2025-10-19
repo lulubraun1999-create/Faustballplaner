@@ -727,7 +727,7 @@ export default function ProfileSettingsPage() {
                           )} />
                         </div>
                         <DialogFooter>
-                           <DialogClose asChild><Button type="button" variant="outline">Abbrechen</Button></DialogClose>
+                           <DialogClose asChild><Button type="button" variant="outline" disabled={isChangingEmail}>Abbrechen</Button></DialogClose>
                            <Button type="submit" disabled={isChangingEmail}>
                             {isChangingEmail ? <Loader2 className="animate-spin" /> : 'Änderung anfordern'}
                           </Button>

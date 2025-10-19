@@ -238,11 +238,15 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
 
     const handleRsvp = (status: 'attending' | 'declined' | 'uncertain', reason?: string) => {
         if (!user || !firestore) return;
+        
+        if (status === 'declined' && reason === undefined) {
+            setIsDeclineDialogOpen(true);
+            return;
+        }
 
         const responseCollectionRef = collection(firestore, 'event_responses');
         
         if (userResponse && userResponse.status === status && status !== 'declined') {
-            // User is toggling off their current status (except for decline, which might have a new reason)
             const responseRef = doc(responseCollectionRef, userResponse.id);
             deleteDoc(responseRef)
                 .catch(serverError => {
@@ -255,7 +259,6 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
             return;
         }
 
-        // Set or update the response
         const eventDateAsTimestamp = Timestamp.fromDate(startOfDay(event.displayDate));
         const responseDocId = userResponse?.id || doc(responseCollectionRef).id;
         
@@ -444,6 +447,7 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
                             <Button 
                                 size="sm"
                                 variant={userResponse?.status === 'declined' ? 'destructive' : 'outline'}
+                                onClick={() => handleRsvp('declined')}
                             >
                                 <XIcon className="mr-2 h-4 w-4" />
                                 Absagen
@@ -923,5 +927,3 @@ export default function KalenderPage() {
     </div>
   );
 }
-
-    
