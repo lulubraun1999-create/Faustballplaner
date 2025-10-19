@@ -16,6 +16,8 @@ import { de } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 
 // START: Data Interfaces
 interface Event {
@@ -89,25 +91,18 @@ interface UserData {
 
 
 // START: EventCard Component
-const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds }: { event: DisplayEvent; allUsers: GroupMember[], locations: Location[], eventTitles: EventTitle[], currentUserTeamIds: string[] }) => {
+const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds, responses }: { event: DisplayEvent; allUsers: GroupMember[], locations: Location[], eventTitles: EventTitle[], currentUserTeamIds: string[], responses: EventResponse[] | null }) => {
     const { user } = useUser();
     const firestore = useFirestore();
     const [isDeclineDialogOpen, setIsDeclineDialogOpen] = useState(false);
     const [declineReason, setDeclineReason] = useState('');
 
-    const responsesQuery = useMemo(() => {
-        if (!event.id || !firestore || !allUsers || !locations || !eventTitles) return null;
-        return query(collection(firestore, 'event_responses'), where('eventId', '==', event.id))
-    }, [firestore, event.id, allUsers, locations, eventTitles]);
-
-    const { data: allResponses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
-    
     const responsesForThisInstance = useMemo(() => {
-        if (!allResponses) return [];
-        return allResponses.filter(r => 
+        if (!responses) return [];
+        return responses.filter(r => 
             r.eventDate && isSameDay(r.eventDate.toDate(), event.displayDate)
         );
-    }, [allResponses, event.displayDate]);
+    }, [responses, event.displayDate]);
     
     const userResponse = useMemo(() => {
          return responsesForThisInstance.find(r => r.userId === user?.uid);
@@ -230,7 +225,7 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
                 <CardFooter className="flex-col sm:flex-row items-start sm:items-center sm:justify-between gap-4">
                  <div className="text-sm text-muted-foreground flex items-center gap-1.5">
                     <Users className="h-4 w-4" />
-                    {responsesLoading ? <Loader2 className="h-4 w-4 animate-spin"/> : `${attendingCount} Zusagen`}
+                    {!responses ? <Loader2 className="h-4 w-4 animate-spin"/> : `${attendingCount} Zusagen`}
                  </div>
 
                 {isRsvpVisible && <div className="flex items-center gap-2">
@@ -301,8 +296,9 @@ function NextMatchDay() {
     const { data: locations, isLoading: locationsLoading } = useCollection<Location>(firestore ? collection(firestore, 'locations') : null);
     const { data: eventTitles, isLoading: titlesLoading } = useCollection<EventTitle>(firestore ? collection(firestore, 'event_titles') : null);
     const { data: allUsers, isLoading: usersLoading } = useCollection<GroupMember>(firestore ? collection(firestore, 'group_members') : null);
+    const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(firestore ? query(collection(firestore, 'event_responses')) : null);
 
-    const isLoading = eventsLoading || overridesLoading || locationsLoading || titlesLoading || usersLoading;
+    const isLoading = eventsLoading || overridesLoading || locationsLoading || titlesLoading || usersLoading || responsesLoading;
 
     const nextMatchDay = useMemo(() => {
         if (!events || !overrides || !eventTitles) return null;
@@ -389,6 +385,7 @@ function NextMatchDay() {
                     locations={locations || []}
                     eventTitles={eventTitles || []}
                     currentUserTeamIds={userData?.teamIds || []}
+                    responses={responses?.filter(r => r.eventId === nextMatchDay.id) || null}
                 />
              </div>
         </div>
@@ -409,8 +406,9 @@ function UpcomingEvents() {
     const { data: allUsers, isLoading: usersLoading } = useCollection<GroupMember>(firestore ? collection(firestore, 'group_members') : null);
     const { data: locations, isLoading: locationsLoading } = useCollection<Location>(firestore ? collection(firestore, 'locations') : null);
     const { data: eventTitles, isLoading: titlesLoading } = useCollection<EventTitle>(firestore ? collection(firestore, 'event_titles') : null);
+    const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(firestore ? query(collection(firestore, 'event_responses')) : null);
 
-    const isLoading = eventsLoading || overridesLoading || usersLoading || locationsLoading || titlesLoading;
+    const isLoading = eventsLoading || overridesLoading || usersLoading || locationsLoading || titlesLoading || responsesLoading;
 
     const upcomingEvents = useMemo(() => {
         if (!events || !overrides || !userData || !eventTitles) return [];
@@ -508,6 +506,7 @@ function UpcomingEvents() {
                     locations={locations || []}
                     eventTitles={eventTitles || []}
                     currentUserTeamIds={userData?.teamIds || []}
+                    responses={responses?.filter(r => r.eventId === event.id) || null}
                 />
             ))}
         </div>
