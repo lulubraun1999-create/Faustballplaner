@@ -161,12 +161,12 @@ export default function MitgliederPage() {
     return doc(firestore, 'users', authUser.uid);
   }, [firestore, authUser]);
   const { data: currentUserData, isLoading: isCurrentUserLoading } = useDoc<User>(currentUserDocRef);
-  const isAdmin = currentUserData?.adminRechte;
+  const hasAdminRights = currentUserData?.adminRechte;
 
   const usersCollectionRef = useMemo(() => {
-    if (!firestore || !isAdmin) return null;
+    if (!firestore || !hasAdminRights) return null;
     return collection(firestore, 'users');
-  }, [firestore, isAdmin]);
+  }, [firestore, hasAdminRights]);
 
   const teamsCollectionRef = useMemo(() => {
     if (!firestore) return null;
@@ -302,7 +302,7 @@ export default function MitgliederPage() {
       );
     }
 
-    if (error || !isAdmin) {
+    if (error || !hasAdminRights) {
       return (
         <div className="text-center py-8 text-destructive flex flex-col items-center gap-4">
           <ShieldAlert className="h-12 w-12" />
@@ -344,7 +344,7 @@ export default function MitgliederPage() {
               <TableHead>E-Mail</TableHead>
               <TableHead>Telefonnummer</TableHead>
               <TableHead>Wohnort</TableHead>
-              {isAdmin && <TableHead className="text-right">Aktionen</TableHead>}
+              {hasAdminRights && <TableHead className="text-right">Aktionen</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -365,7 +365,7 @@ export default function MitgliederPage() {
                 <TableCell>{user.email || 'N/A'}</TableCell>
                 <TableCell>{user.telefon || 'N/A'}</TableCell>
                 <TableCell>{user.wohnort || 'N/A'}</TableCell>
-                {isAdmin && (
+                {hasAdminRights && (
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
                         <Button variant="ghost" size="icon" onClick={() => openTeamDialog(user)}><Users className="h-4 w-4" /></Button>
