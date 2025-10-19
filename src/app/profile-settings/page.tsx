@@ -9,7 +9,7 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import { collection, doc, setDoc, deleteDoc, Timestamp, query, where, getDocs, writeBatch, serverTimestamp, addDoc, getDoc } from 'firebase/firestore';
 import { useAuth, useUser, useFirestore, useDoc, useCollection, FirestorePermissionError, errorEmitter } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
-import { format, eachDayOfInterval, startOfDay, endOfDay } from 'date-fns';
+import { format, eachDayOfInterval, startOfDay, endOfDay, isSameDay } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { DateRange } from 'react-day-picker';
 import { sendPasswordResetEmail, deleteUser, verifyBeforeUpdateEmail } from 'firebase/auth';
@@ -42,6 +42,7 @@ import {
   DialogTitle,
   DialogTrigger,
   DialogClose,
+  DialogFooter,
 } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils";
 import { useRouter } from 'next/navigation';
@@ -111,6 +112,7 @@ interface Event {
 interface EventOverride {
     eventId: string;
     originalDate: Timestamp;
+    date?: Timestamp;
 }
 
 function ProfileForm({ defaultValues, userData }: { defaultValues: ProfileFormValues, userData: UserData | null }) {
@@ -777,5 +779,3 @@ export default function ProfileSettingsPage() {
     </div>
   );
 }
-
-    
