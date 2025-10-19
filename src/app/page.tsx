@@ -54,6 +54,7 @@ interface EventResponse {
     userId: string;
     eventDate: Timestamp;
     status: 'attending' | 'declined' | 'uncertain';
+    reason?: string;
     respondedAt: Timestamp;
 }
 
@@ -92,9 +93,9 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
     const firestore = useFirestore();
 
     const responsesQuery = useMemo(() => {
-        if (!event.id || !firestore) return null;
+        if (!event.id || !firestore || !eventTitles || !locations) return null;
         return query(collection(firestore, 'event_responses'), where('eventId', '==', event.id))
-    }, [firestore, event.id]);
+    }, [firestore, event.id, eventTitles, locations]);
 
     const { data: allResponses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
     
@@ -152,9 +153,9 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
 
     const attendingCount = responsesForThisInstance.filter(r => r.status === 'attending').length || 0;
 
-    const handleRsvp = (status: 'attending' | 'declined' | 'uncertain') => {
+    const handleRsvp = (status: 'attending' | 'declined' | 'uncertain', reason?: string) => {
         if (!user || !firestore) return;
-
+        
         const responseCollectionRef = collection(firestore, 'event_responses');
         
         if (userResponse && userResponse.status === status) {
@@ -172,6 +173,7 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
             respondedAt: serverTimestamp(),
             eventDate: eventDateAsTimestamp,
             eventId: event.id,
+            reason: status === 'declined' ? reason : '',
         };
         
         const responseRef = doc(responseCollectionRef, responseDocId);
@@ -201,6 +203,9 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
                         </div>
                     )}
                 </div>
+                 {event.isCancelled && event.cancellationReason && (
+                    <p className="text-destructive text-sm mt-2 font-semibold">Grund: {event.cancellationReason}</p>
+                )}
             </CardHeader>
             {(event.description || event.meetingPoint) && !event.isCancelled && (
                 <CardContent className="space-y-2">
@@ -237,7 +242,7 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
                     <Button 
                         size="sm"
                         variant={userResponse?.status === 'declined' ? 'destructive' : 'outline'}
-                        onClick={() => handleRsvp('declined')}
+                        onClick={() => handleRsvp('declined', 'Ohne Grund abgesagt')}
                     >
                         <XIcon className="mr-2 h-4 w-4" />
                         Absagen
@@ -285,7 +290,7 @@ function NextMatchDay() {
                 if (isFuture(originalStartDate)) {
                      const override = overrides.find(o => o.eventId === event.id && isSameDay(o.originalDate.toDate(), originalStartDate));
                      if (!override || !override.isCancelled) {
-                        allOccurrences.push({ ...event, displayDate: originalStartDate, isCancelled: override?.isCancelled });
+                        allOccurrences.push({ ...event, displayDate: originalStartDate, isCancelled: override?.isCancelled, cancellationReason: override?.cancellationReason });
                      }
                 }
                 continue;
@@ -308,7 +313,7 @@ function NextMatchDay() {
                 if(isFuture(currentDate)) {
                     const override = overrides.find(o => o.eventId === event.id && isSameDay(o.originalDate.toDate(), currentDate));
                     if (!override || !override.isCancelled) {
-                       allOccurrences.push({ ...event, displayDate: currentDate, isCancelled: override?.isCancelled });
+                       allOccurrences.push({ ...event, displayDate: currentDate, isCancelled: override?.isCancelled, cancellationReason: override?.cancellationReason });
                     }
                 }
 
@@ -396,7 +401,7 @@ function UpcomingEvents() {
                 if (isFuture(originalStartDate)) {
                      const override = overrides.find(o => o.eventId === event.id && isSameDay(o.originalDate.toDate(), originalStartDate));
                      if (!override || !override.isCancelled) {
-                        allOccurrences.push({ ...event, displayDate: originalStartDate, isCancelled: override?.isCancelled });
+                        allOccurrences.push({ ...event, displayDate: originalStartDate, isCancelled: override?.isCancelled, cancellationReason: override?.cancellationReason });
                      }
                 }
                 continue;
@@ -420,7 +425,7 @@ function UpcomingEvents() {
                 if(isFuture(currentDate)) {
                     const override = overrides.find(o => o.eventId === event.id && isSameDay(o.originalDate.toDate(), currentDate));
                     if (!override || !override.isCancelled) {
-                       allOccurrences.push({ ...event, displayDate: currentDate, isCancelled: override?.isCancelled });
+                       allOccurrences.push({ ...event, displayDate: currentDate, isCancelled: override?.isCancelled, cancellationReason: override?.cancellationReason });
                     }
                 }
 

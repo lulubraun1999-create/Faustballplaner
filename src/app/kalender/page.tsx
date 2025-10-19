@@ -413,7 +413,7 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
                                         {decliners.map((d, i) => (
                                             <li key={i}>
                                                 {d.name}
-                                                {d.reason && canEdit && <span className="text-muted-foreground text-xs"> - {d.reason}</span>}
+                                                {d.reason && (canEdit || user?.uid === d.userId) && <span className="text-muted-foreground text-xs"> - {d.reason}</span>}
                                             </li>
                                         ))}
                                     </ul>
