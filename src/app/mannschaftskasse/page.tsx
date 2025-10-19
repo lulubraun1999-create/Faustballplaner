@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
@@ -125,18 +126,11 @@ interface UserData {
 }
 
 // Components
-function PenaltyCatalogManager({ teamId }: { teamId: string }) {
+function PenaltyCatalogManager({ teamId, penalties, penaltiesLoading }: { teamId: string, penalties: Penalty[] | null, penaltiesLoading: boolean }) {
   const firestore = useFirestore();
   const { toast } = useToast();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingPenalty, setEditingPenalty] = useState<Penalty | null>(null);
-
-  const penaltiesQuery = useMemo(() => {
-    if (!firestore || !teamId) return null;
-    return query(collection(firestore, 'teams', teamId, 'penalties'), orderBy('name'));
-  }, [firestore, teamId]);
-
-  const { data: penalties, isLoading: penaltiesLoading } = useCollection<Penalty>(penaltiesQuery);
 
   const form = useForm<PenaltyFormValues>({
     resolver: zodResolver(penaltySchema),
@@ -270,18 +264,11 @@ function PenaltyCatalogManager({ teamId }: { teamId: string }) {
   );
 }
 
-function TreasuryManager({ teamId, members }: { teamId: string, members: GroupMember[] | null }) {
+function TreasuryManager({ teamId, members, transactions, transactionsLoading }: { teamId: string, members: GroupMember[] | null, transactions: TreasuryTransaction[] | null, transactionsLoading: boolean }) {
     const firestore = useFirestore();
     const { toast } = useToast();
     const { user } = useUser();
     const [isFormOpen, setIsFormOpen] = useState(false);
-
-    const transactionsQuery = useMemo(() => {
-      if (!firestore || !teamId) return null;
-      return query(collection(firestore, 'teams', teamId, 'transactions'), orderBy('date', 'desc'));
-    }, [firestore, teamId]);
-
-    const { data: transactions, isLoading: transactionsLoading } = useCollection<TreasuryTransaction>(transactionsQuery);
 
     const balance = useMemo(() => {
         return transactions?.reduce((acc, t) => acc + t.amount, 0) ?? 0;
@@ -673,7 +660,7 @@ export default function MannschaftskassePage() {
     if (adminTeams && adminTeams.length > 0 && !selectedTeamId) {
       setSelectedTeamId(adminTeams[0].id);
     }
-  }, [adminTeams]);
+  }, [adminTeams, selectedTeamId]);
   
   const allMembersQuery = useMemo(() => {
     if (!firestore) return null;
@@ -697,8 +684,15 @@ export default function MannschaftskassePage() {
     return query(collection(firestore, 'user_penalties'), where('teamId', '==', selectedTeamId), orderBy('assignedAt', 'desc'))
   }, [firestore, selectedTeamId]);
   const { data: userPenalties, isLoading: userPenaltiesLoading } = useCollection<UserPenalty>(userPenaltiesQuery);
+  
+  const transactionsQuery = useMemo(() => {
+      if (!firestore || !selectedTeamId) return null;
+      return query(collection(firestore, 'teams', selectedTeamId, 'transactions'), orderBy('date', 'desc'));
+  }, [firestore, selectedTeamId]);
+  const { data: transactions, isLoading: transactionsLoading } = useCollection<TreasuryTransaction>(transactionsQuery);
 
-  const isLoadingInitial = isUserLoading || teamsLoading || membersLoading;
+
+  const isLoadingInitial = isUserLoading || teamsLoading;
 
   if (isLoadingInitial) {
     return (
@@ -750,15 +744,19 @@ export default function MannschaftskassePage() {
                 )}
             </div>
           
-            {selectedTeamId && !isLoadingInitial && membersForTeam ? (
+            {selectedTeamId ? (
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
                     <div className="space-y-8">
                         <TreasuryManager 
                           teamId={selectedTeamId} 
                           members={membersForTeam}
+                          transactions={transactions}
+                          transactionsLoading={transactionsLoading}
                         />
                        <PenaltyCatalogManager 
                           teamId={selectedTeamId}
+                          penalties={penalties}
+                          penaltiesLoading={penaltiesLoading}
                         />
                     </div>
                     <AssignPenaltiesManager 
