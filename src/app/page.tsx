@@ -361,12 +361,13 @@ function NextMatchDay() {
     }, [events, overrides, eventTitles]);
 
     const responsesQuery = useMemo(() => {
-        if (isUserLoading || !firestore || !user) return null; // Wait for user data
+        if (isUserLoading || !firestore) return null;
+    
         if (userData?.teamIds && userData.teamIds.length > 0) {
-            return query(collection(firestore, 'event_responses'), where('teamId', 'in', userData.teamIds));
+          return query(collection(firestore, 'event_responses'), where('teamId', 'in', userData.teamIds));
         }
         return collection(firestore, 'event_responses');
-    }, [firestore, user, userData, isUserLoading]);
+    }, [firestore, userData, isUserLoading]);
     const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
 
 
@@ -482,12 +483,13 @@ function UpcomingEvents() {
     }, [events, overrides, userData, eventTitles]);
 
     const responsesQuery = useMemo(() => {
-        if (isUserLoading || !firestore || !user) return null; // Wait for user data
+        if (isUserLoading || !firestore) return null;
+    
         if (userData?.teamIds && userData.teamIds.length > 0) {
-            return query(collection(firestore, 'event_responses'), where('teamId', 'in', userData.teamIds));
+          return query(collection(firestore, 'event_responses'), where('teamId', 'in', userData.teamIds));
         }
         return collection(firestore, 'event_responses');
-    }, [firestore, user, userData, isUserLoading]);
+      }, [firestore, userData, isUserLoading]);
     
     const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
     
