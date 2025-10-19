@@ -47,7 +47,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from '@/components/ui/input';
@@ -265,7 +264,7 @@ function PenaltyCatalogManager({ teamId }: { teamId: string }) {
   );
 }
 
-function TreasuryManager({ teamId }: { teamId: string }) {
+function TreasuryManager({ teamId, members }: { teamId: string, members: UserData[] | null }) {
     const firestore = useFirestore();
     const { toast } = useToast();
     const { user } = useUser();
@@ -276,12 +275,6 @@ function TreasuryManager({ teamId }: { teamId: string }) {
         return query(collection(firestore, 'teams', teamId, 'transactions'), orderBy('date', 'desc'));
     }, [firestore, teamId]);
     const { data: transactions, isLoading } = useCollection<TreasuryTransaction>(transactionsQuery);
-
-    const membersQuery = useMemo(() => {
-        if (!firestore || !teamId) return null;
-        return query(collection(firestore, 'members'), where('teamIds', 'array-contains', teamId));
-    }, [firestore, teamId]);
-    const { data: members } = useCollection<UserData>(membersQuery);
 
     const balance = useMemo(() => {
         return transactions?.reduce((acc, t) => acc + t.amount, 0) ?? 0;
@@ -421,7 +414,7 @@ function TreasuryManager({ teamId }: { teamId: string }) {
     );
 }
 
-function AssignPenaltiesManager({ teamId }: { teamId: string }) {
+function AssignPenaltiesManager({ teamId, members }: { teamId: string, members: UserData[] | null }) {
     const firestore = useFirestore();
     const { toast } = useToast();
     const { user } = useUser();
@@ -432,12 +425,6 @@ function AssignPenaltiesManager({ teamId }: { teamId: string }) {
         return collection(firestore, 'teams', teamId, 'penalties')
     }, [firestore, teamId]);
     const { data: penalties } = useCollection<Penalty>(penaltiesQuery);
-
-    const membersQuery = useMemo(() => {
-        if (!firestore || !teamId) return null;
-        return query(collection(firestore, 'members'), where('teamIds', 'array-contains', teamId))
-    }, [firestore, teamId]);
-    const { data: members } = useCollection<UserData>(membersQuery);
     
     const userPenaltiesQuery = useMemo(() => {
         if (!firestore || !teamId) return null;
@@ -686,6 +673,13 @@ export default function MannschaftskassePage() {
   }, [firestore, userData]);
 
   const { data: adminTeams, isLoading: teamsLoading } = useCollection<Team>(adminTeamsQuery);
+  
+  const membersQuery = useMemo(() => {
+    if (!firestore || !selectedTeamId) return null;
+    return query(collection(firestore, 'members'), where('teamIds', 'array-contains', selectedTeamId));
+  }, [firestore, selectedTeamId]);
+  const { data: members, isLoading: membersLoading } = useCollection<UserData>(membersQuery);
+
 
   useEffect(() => {
     if (adminTeams && adminTeams.length > 0 && !selectedTeamId) {
@@ -729,7 +723,7 @@ export default function MannschaftskassePage() {
            <div className="flex items-center justify-between mb-8">
                 <h1 className="text-3xl font-bold">Mannschaftskasse</h1>
                 {adminTeams.length > 1 && (
-                  <Select value={selectedTeamId} onValueChange={(value) => setSelectedTeamId(value === '' ? undefined : value)}>
+                  <Select value={selectedTeamId} onValueChange={setSelectedTeamId}>
                       <SelectTrigger className="w-[280px]">
                           <SelectValue placeholder="Team auswählen..." />
                       </SelectTrigger>
@@ -745,13 +739,17 @@ export default function MannschaftskassePage() {
             </div>
           
             {selectedTeamId ? (
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-                    <div className="space-y-8">
-                       <TreasuryManager teamId={selectedTeamId} />
-                       <PenaltyCatalogManager teamId={selectedTeamId} />
+                <>
+                {membersLoading ? <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin"/></div> : (
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                        <div className="space-y-8">
+                           <TreasuryManager teamId={selectedTeamId} members={members || null} />
+                           <PenaltyCatalogManager teamId={selectedTeamId} />
+                        </div>
+                        <AssignPenaltiesManager teamId={selectedTeamId} members={members || null}/>
                     </div>
-                    <AssignPenaltiesManager teamId={selectedTeamId} />
-                </div>
+                )}
+                </>
             ) : (
                 <Card><CardContent><p className="p-8 text-center text-muted-foreground">Bitte wählen Sie ein Team aus, um die Mannschaftskasse anzuzeigen.</p></CardContent></Card>
             )}
