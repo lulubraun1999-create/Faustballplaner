@@ -647,22 +647,6 @@ export default function MannschaftskassePage() {
   }, [firestore, user]);
   const { data: userData, isLoading: isUserLoading } = useDoc<UserData>(userDocRef);
 
-  if (!isUserLoading && userData && !userData.adminRechte) {
-    return (
-        <div className="flex min-h-screen w-full flex-col bg-background">
-            <Header />
-            <main className="flex-1 p-4 md:p-8">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Zugriff verweigert</CardTitle>
-                        <CardDescription>Sie haben nicht die erforderlichen Rechte, um auf diese Seite zuzugreifen.</CardDescription>
-                    </CardHeader>
-                </Card>
-            </main>
-        </div>
-    );
-  }
-
   const adminTeamsQuery = useMemo(() => {
     if (!firestore || !userData?.adminRechte || !userData.teamIds || userData.teamIds.length === 0) {
       return null;
@@ -676,7 +660,7 @@ export default function MannschaftskassePage() {
     if (adminTeams && adminTeams.length > 0 && !selectedTeamId) {
       setSelectedTeamId(adminTeams[0].id);
     }
-  }, [adminTeams, selectedTeamId]);
+  }, [adminTeams]);
   
   const allMembersQuery = useMemo(() => {
     if (!firestore) return null;
@@ -707,7 +691,23 @@ export default function MannschaftskassePage() {
   }, [firestore, selectedTeamId]);
   const { data: userPenalties, isLoading: userPenaltiesLoading } = useCollection<UserPenalty>(userPenaltiesQuery);
 
-  const isLoadingInitial = isUserLoading || teamsLoading;
+  const isLoadingInitial = isUserLoading || teamsLoading || membersLoading;
+  
+  if (!isUserLoading && userData && !userData.adminRechte) {
+       return (
+        <div className="flex min-h-screen w-full flex-col bg-background">
+            <Header />
+            <main className="flex-1 p-4 md:p-8">
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Zugriff verweigert</CardTitle>
+                        <CardDescription>Sie haben nicht die erforderlichen Rechte, um auf diese Seite zuzugreifen.</CardDescription>
+                    </CardHeader>
+                </Card>
+            </main>
+        </div>
+    );
+  }
   
   return (
     <div className="flex min-h-screen w-full flex-col bg-background">
@@ -774,3 +774,6 @@ export default function MannschaftskassePage() {
     </div>
   );
 }
+
+
+    
