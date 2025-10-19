@@ -1543,22 +1543,24 @@ export default function TerminePage() {
 
 
     const eventIdsInView = useMemo(() => {
+        if (isLoading) return [];
         const ids = new Set<string>();
-        if(eventsLoading) return [];
         eventsForWeek.forEach(dayEvents => {
             dayEvents.forEach(event => ids.add(event.id));
         });
         return Array.from(ids);
-    }, [eventsForWeek, eventsLoading]);
+    }, [eventsForWeek, isLoading]);
 
     const responsesQuery = useMemo(() => {
-        if (!firestore || eventIdsInView.length === 0) return null;
+        if (!firestore || !user || !userData?.teamIds || eventIdsInView.length === 0 || isLoading) {
+            return null;
+        }
         return query(collection(firestore, 'event_responses'), where('eventId', 'in', eventIdsInView));
-    }, [firestore, eventIdsInView]);
+    }, [firestore, user, userData?.teamIds, eventIdsInView, isLoading]);
 
     const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
     
-    const isLoading = isUserLoading || eventsLoading || categoriesLoading || teamsLoading || usersLoading || locationsLoading || eventTitlesLoading || overridesLoading;
+    const isLoadingCombined = isUserLoading || eventsLoading || categoriesLoading || teamsLoading || usersLoading || locationsLoading || eventTitlesLoading || overridesLoading;
 
 
   const handleOpenForm = (event?: DisplayEvent) => {
@@ -1665,7 +1667,7 @@ export default function TerminePage() {
 
 
   const renderContent = () => {
-    if (isLoading || responsesLoading) {
+    if (isLoadingCombined || responsesLoading) {
       return (
         <div className="flex justify-center items-center py-10">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -1755,7 +1757,7 @@ export default function TerminePage() {
                         <CardTitle>Filter</CardTitle>
                     </CardHeader>
                     <CardContent>
-                       {isLoading ? <Loader2 className="animate-spin" /> : (
+                       {isLoadingCombined ? <Loader2 className="animate-spin" /> : (
                          <Accordion type="multiple" className="w-full" defaultValue={['teams', 'titles']}>
                             <AccordionItem value="teams">
                                 <AccordionTrigger>Mannschaften</AccordionTrigger>
@@ -1819,7 +1821,7 @@ export default function TerminePage() {
 
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-          {isLoading ? (
+          {isLoadingCombined ? (
              <div className="flex items-center justify-center p-8"><Loader2 className="h-8 w-8 animate-spin text-primary"/></div>
           ) : (
              <EventForm onDone={handleFormDone} event={selectedEvent} categories={categories || []} teams={teams || []} canEdit={!!canEditEvents} eventTitles={eventTitles || []} locations={locations || []} />

@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useUser, useAuth, useFirestore, useCollection, useDoc } from '@/firebase';
@@ -288,7 +289,7 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
 function NextMatchDay() {
     const firestore = useFirestore();
     const { user } = useUser();
-    const { data: userData } = useDoc<UserData>(user ? doc(firestore, 'users', user.uid) : null);
+    const { data: userData, isLoading: isUserLoading } = useDoc<UserData>(user ? doc(firestore, 'users', user.uid) : null);
 
     // Data fetching
     const { data: events, isLoading: eventsLoading } = useCollection<Event>(firestore ? query(collection(firestore, 'events')) : null);
@@ -364,14 +365,14 @@ function NextMatchDay() {
     }, [nextMatchDay, eventsLoading]);
 
     const responsesQuery = useMemo(() => {
-        if (!firestore || eventIdForNextMatchDay.length === 0) return null;
+        if (!firestore || eventIdForNextMatchDay.length === 0 || eventsLoading) return null;
         return query(collection(firestore, 'event_responses'), where('eventId', 'in', eventIdForNextMatchDay));
-    }, [firestore, eventIdForNextMatchDay]);
+    }, [firestore, eventIdForNextMatchDay, eventsLoading]);
 
     const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
 
 
-    const isLoading = eventsLoading || overridesLoading || locationsLoading || titlesLoading || usersLoading || responsesLoading;
+    const isLoading = isUserLoading || eventsLoading || overridesLoading || locationsLoading || titlesLoading || usersLoading || responsesLoading;
 
     if (isLoading) {
         return (
@@ -410,7 +411,7 @@ function UpcomingEvents() {
     const { user } = useUser();
 
     // Data fetching
-    const { data: userData } = useDoc<UserData>(user ? doc(firestore, 'users', user.uid) : null);
+    const { data: userData, isLoading: isUserLoading } = useDoc<UserData>(user ? doc(firestore, 'users', user.uid) : null);
     const { data: events, isLoading: eventsLoading } = useCollection<Event>(firestore ? query(collection(firestore, 'events')) : null);
     const { data: overrides, isLoading: overridesLoading } = useCollection<EventOverride>(firestore ? collection(firestore, 'event_overrides') : null);
     const { data: allUsers, isLoading: usersLoading } = useCollection<GroupMember>(firestore ? collection(firestore, 'group_members') : null);
@@ -482,18 +483,18 @@ function UpcomingEvents() {
     }, [events, overrides, userData, eventTitles]);
 
     const eventIdsForUpcoming = useMemo(() => {
-      if (eventsLoading) return [];
+      if (eventsLoading || upcomingEvents.length === 0) return [];
       return upcomingEvents.map(e => e.id);
     }, [upcomingEvents, eventsLoading]);
 
     const responsesQuery = useMemo(() => {
-        if (!firestore || eventIdsForUpcoming.length === 0) return null;
+        if (!firestore || eventIdsForUpcoming.length === 0 || eventsLoading) return null;
         return query(collection(firestore, 'event_responses'), where('eventId', 'in', eventIdsForUpcoming));
-    }, [firestore, eventIdsForUpcoming]);
+    }, [firestore, eventIdsForUpcoming, eventsLoading]);
     
     const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
     
-    const isLoading = eventsLoading || overridesLoading || usersLoading || locationsLoading || titlesLoading || responsesLoading;
+    const isLoading = isUserLoading || eventsLoading || overridesLoading || usersLoading || locationsLoading || titlesLoading || responsesLoading;
 
     if (isLoading) {
         return (
