@@ -402,6 +402,9 @@ function AbsenceManager() {
         setIsSubmitting(true);
         const { reason, dateRange } = values;
 
+        let successfulResponses = 0;
+        let eventsToDecline: { eventId: string; eventDate: Date; }[] = [];
+
         try {
             // Get user data to find their teams
             const userDocSnap = await getDoc(doc(firestore, 'users', user.uid));
@@ -410,12 +413,11 @@ function AbsenceManager() {
             const userTeamIds = userData.teamIds || [];
 
             // Find all events that the user needs to decline
-            const eventsToDecline = findApplicableEvents(dateRange.from, dateRange.to, userTeamIds);
+            eventsToDecline = findApplicableEvents(dateRange.from, dateRange.to, userTeamIds);
             
-            // Create a batch to update all event responses
-            const responsesBatch = writeBatch(firestore);
+            // Create event responses individually
             for (const { eventId, eventDate } of eventsToDecline) {
-                 const responseQuery = query(
+                const responseQuery = query(
                     collection(firestore, 'event_responses'),
                     where('eventId', '==', eventId),
                     where('userId', '==', user.uid),
@@ -431,20 +433,23 @@ function AbsenceManager() {
                     reason: reason,
                     respondedAt: serverTimestamp(),
                 };
+                
+                let responseDocId: string;
+                let responseRef;
 
                 if (existingResponses.empty) {
-                    const responseRef = doc(collection(firestore, 'event_responses'));
-                    responsesBatch.set(responseRef, responseData);
+                    responseRef = doc(collection(firestore, 'event_responses'));
+                    responseDocId = responseRef.id;
+                    await setDoc(responseRef, responseData);
                 } else {
-                    const responseRef = existingResponses.docs[0].ref;
-                    responsesBatch.update(responseRef, responseData);
+                    responseRef = existingResponses.docs[0].ref;
+                    responseDocId = responseRef.id;
+                    await updateDoc(responseRef, responseData);
                 }
+                successfulResponses++;
             }
             
-            // Commit the event responses batch first
-            await responsesBatch.commit();
-            
-            // If successful, then create the absence document
+            // If all responses were successful, then create the absence document
             const absenceRef = doc(collection(firestore, 'users', user.uid, 'absences'));
             await setDoc(absenceRef, {
                 userId: user.uid,
@@ -454,20 +459,27 @@ function AbsenceManager() {
                 createdAt: serverTimestamp(),
             });
 
-            toast({ title: "Abwesenheit gespeichert", description: `${eventsToDecline.length} Termin(e) automatisch abgesagt.` });
+            toast({ title: "Abwesenheit gespeichert", description: `${successfulResponses} Termin(e) automatisch abgesagt.` });
             setIsFormOpen(false);
             form.reset();
 
         } catch (error: any) {
-            // This will now properly catch permission errors from the batch commit
-            const permissionError = new FirestorePermissionError({
-                path: 'event_responses', // This is a generalized path for the batch
-                operation: 'write',
-                requestResourceData: { reason, dateRange }, // Include context
-            });
-            errorEmitter.emit('permission-error', permissionError);
-
-            toast({ variant: 'destructive', title: 'Fehler beim Speichern der Abwesenheit', description: "Fehlende Berechtigungen. Die Aktion wurde abgebrochen." });
+            const failedEvent = eventsToDecline[successfulResponses];
+            if (failedEvent) {
+                const permissionError = new FirestorePermissionError({
+                    path: `event_responses/some-id`, // Placeholder, as we don't have the final ID
+                    operation: 'write',
+                    requestResourceData: { 
+                        eventId: failedEvent.eventId,
+                        userId: user.uid,
+                        eventDate: failedEvent.eventDate,
+                        reason: reason,
+                        status: 'declined'
+                    }, 
+                });
+                errorEmitter.emit('permission-error', permissionError);
+            }
+            toast({ variant: 'destructive', title: 'Fehler beim Speichern der Abwesenheit', description: "Einige oder alle Terminabsagen konnten aufgrund von Berechtigungsfehlern nicht gespeichert werden." });
         } finally {
             setIsSubmitting(false);
         }
