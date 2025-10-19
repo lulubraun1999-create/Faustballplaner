@@ -56,7 +56,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 
-interface User {
+interface Member {
   id: string;
   vorname?: string;
   nachname?: string;
@@ -72,6 +72,10 @@ interface User {
   wohnort?: string;
   teamIds?: string[];
   geschlecht?: string;
+}
+
+interface UserData {
+    adminRechte?: boolean;
 }
 
 interface TeamCategory {
@@ -147,7 +151,7 @@ export default function MitgliederPage() {
   const { user: authUser, isUserLoading: isAuthLoading } = useUser();
   const { toast } = useToast();
   
-  const [actionUser, setActionUser] = useState<User | null>(null);
+  const [actionUser, setActionUser] = useState<Member | null>(null);
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
   const [isRoleDialogOpen, setIsRoleDialogOpen] = useState(false);
   const [isTeamDialogOpen, setIsTeamDialogOpen] = useState(false);
@@ -160,30 +164,30 @@ export default function MitgliederPage() {
     if (!firestore || !authUser) return null;
     return doc(firestore, 'users', authUser.uid);
   }, [firestore, authUser]);
-  const { data: currentUserData, isLoading: isCurrentUserLoading } = useDoc<User>(currentUserDocRef);
+  const { data: currentUserData, isLoading: isCurrentUserLoading } = useDoc<UserData>(currentUserDocRef);
   const hasAdminRights = currentUserData?.adminRechte;
 
-  const usersCollectionRef = useMemo(() => {
+  const membersCollectionRef = useMemo(() => {
     if (!firestore || !hasAdminRights) return null;
-    return collection(firestore, 'users');
+    return collection(firestore, 'members');
   }, [firestore, hasAdminRights]);
 
   const teamsCollectionRef = useMemo(() => {
     if (!firestore) return null;
     return collection(firestore, 'teams');
   }, [firestore]);
+
   const categoriesQuery = useMemo(() => {
     if (!firestore) return null;
     return query(collection(firestore, 'team_categories'), orderBy('order'));
   }, [firestore]);
 
-  const { data: users, isLoading: usersLoading, error: usersError } = useCollection<User>(usersCollectionRef);
+  const { data: members, isLoading: membersLoading, error: membersError } = useCollection<Member>(membersCollectionRef);
   const { data: teams, isLoading: teamsLoading, error: teamsError } = useCollection<Team>(teamsCollectionRef);
   const { data: categories, isLoading: categoriesLoading, error: categoriesError } = useCollection<TeamCategory>(categoriesQuery);
-
   
-  const isLoading = isAuthLoading || isCurrentUserLoading || usersLoading || teamsLoading || categoriesLoading;
-  const dataError = usersError || teamsError || categoriesError;
+  const isLoading = isAuthLoading || isCurrentUserLoading || membersLoading || teamsLoading || categoriesLoading;
+  const dataError = membersError || teamsError || categoriesError;
 
   
   const groupedTeams = useMemo(() => {
@@ -194,25 +198,25 @@ export default function MitgliederPage() {
     }));
   }, [categories, teams]);
   
-  const filteredUsers = useMemo(() => {
-    if (!users) return [];
-    if (selectedFilterTeamId === 'all') return users;
-    return users.filter(user => user.teamIds?.includes(selectedFilterTeamId));
-  }, [users, selectedFilterTeamId]);
+  const filteredMembers = useMemo(() => {
+    if (!members) return [];
+    if (selectedFilterTeamId === 'all') return members;
+    return members.filter(member => member.teamIds?.includes(selectedFilterTeamId));
+  }, [members, selectedFilterTeamId]);
   
   // Action handlers
-  const openDeleteAlert = (user: User) => {
+  const openDeleteAlert = (user: Member) => {
     setActionUser(user);
     setIsDeleteAlertOpen(true);
   };
   
-  const openRoleDialog = (user: User) => {
+  const openRoleDialog = (user: Member) => {
     setActionUser(user);
     setSelectedRole(user.adminRechte || false);
     setIsRoleDialogOpen(true);
   };
   
-  const openTeamDialog = (user: User) => {
+  const openTeamDialog = (user: Member) => {
     setActionUser(user);
     setSelectedTeamIds(user.teamIds || []);
     setIsTeamDialogOpen(true);
@@ -241,7 +245,17 @@ export default function MitgliederPage() {
     setIsSubmitting(true);
     try {
         const userDocRef = doc(firestore, 'users', actionUser.id);
+        const memberDocRef = doc(firestore, 'members', actionUser.id);
+
         await updateDoc(userDocRef, { adminRechte: selectedRole });
+        await updateDoc(memberDocRef, { adminRechte: selectedRole });
+        
+        const groupMemberRef = doc(firestore, 'group_members', actionUser.id);
+        const groupMemberSnap = await getDoc(groupMemberRef);
+        if (groupMemberSnap.exists()) {
+             await updateDoc(groupMemberRef, { adminRechte: selectedRole });
+        }
+
 
         toast({ title: 'Rolle aktualisiert', description: 'Die Rolle des Benutzers wurde erfolgreich geändert.' });
         setIsRoleDialogOpen(false);
@@ -258,28 +272,14 @@ export default function MitgliederPage() {
      setIsSubmitting(true);
     try {
         const userDocRef = doc(firestore, 'users', actionUser.id);
+        const memberDocRef = doc(firestore, 'members', actionUser.id);
         await updateDoc(userDocRef, { teamIds: selectedTeamIds });
+        await updateDoc(memberDocRef, { teamIds: selectedTeamIds });
 
-        const userToSync = users?.find(u => u.id === actionUser.id);
-        
-        if(userToSync) {
-            const memberData = {
-                ...userToSync,
-                id: userToSync.id,
-                teamIds: selectedTeamIds,
-            };
-            
-            const groupMemberData = {
-                id: userToSync.id,
-                vorname: userToSync.vorname,
-                nachname: userToSync.nachname,
-                position: userToSync.position,
-                adminRechte: userToSync.adminRechte,
-                teamIds: selectedTeamIds,
-            };
-
-            await setDoc(doc(firestore, 'members', userToSync.id), memberData, { merge: true });
-            await setDoc(doc(firestore, 'group_members', userToSync.id), groupMemberData, { merge: true });
+        const groupMemberRef = doc(firestore, 'group_members', actionUser.id);
+        const groupMemberSnap = await getDoc(groupMemberRef);
+        if (groupMemberSnap.exists()) {
+            await updateDoc(groupMemberRef, { teamIds: selectedTeamIds });
         }
 
         toast({ title: 'Mannschaften aktualisiert', description: 'Die Mannschaften des Benutzers wurden erfolgreich geändert.' });
@@ -314,7 +314,7 @@ export default function MitgliederPage() {
       );
     }
 
-    if (usersLoading || teamsLoading || categoriesLoading) {
+    if (membersLoading || teamsLoading || categoriesLoading) {
         return (
             <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -335,7 +335,7 @@ export default function MitgliederPage() {
         )
     }
     
-    if (users && teams && categories) {
+    if (members && teams && categories) {
       return (
         <>
           <div className="flex items-center justify-start mb-4">
@@ -369,29 +369,29 @@ export default function MitgliederPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredUsers.map((user) => (
-              <TableRow key={user.id}>
-                <TeamsCell teamIds={user.teamIds} teams={teams} categories={categories} />
-                <TableCell className="font-medium">{`${user.vorname || ''} ${user.nachname || ''}`.trim() || 'N/A'}</TableCell>
-                <TableCell>{user.geschlecht || 'N/A'}</TableCell>
-                <TableCell>{formatPosition(user.position)}</TableCell>
+            {filteredMembers.map((member) => (
+              <TableRow key={member.id}>
+                <TeamsCell teamIds={member.teamIds} teams={teams} categories={categories} />
+                <TableCell className="font-medium">{`${member.vorname || ''} ${member.nachname || ''}`.trim() || 'N/A'}</TableCell>
+                <TableCell>{member.geschlecht || 'N/A'}</TableCell>
+                <TableCell>{formatPosition(member.position)}</TableCell>
                 <TableCell>
-                  {user.adminRechte ? (
+                  {member.adminRechte ? (
                     <Badge>Trainer</Badge>
                   ) : (
                     <Badge variant="secondary">Benutzer</Badge>
                   )}
                 </TableCell>
-                <TableCell>{user.geburtstag ? format(user.geburtstag.toDate(), 'dd.MM.yyyy', { locale: de }) : 'N/A'}</TableCell>
-                <TableCell>{user.email || 'N/A'}</TableCell>
-                <TableCell>{user.telefon || 'N/A'}</TableCell>
-                <TableCell>{user.wohnort || 'N/A'}</TableCell>
+                <TableCell>{member.geburtstag ? format(member.geburtstag.toDate(), 'dd.MM.yyyy', { locale: de }) : 'N/A'}</TableCell>
+                <TableCell>{member.email || 'N/A'}</TableCell>
+                <TableCell>{member.telefon || 'N/A'}</TableCell>
+                <TableCell>{member.wohnort || 'N/A'}</TableCell>
                 {hasAdminRights && (
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                        <Button variant="ghost" size="icon" onClick={() => openTeamDialog(user)}><Users className="h-4 w-4" /></Button>
-                        <Button variant="ghost" size="icon" onClick={() => openRoleDialog(user)}><Shield className="h-4 w-4" /></Button>
-                        <Button variant="ghost" size="icon" className="hover:bg-destructive/10 hover:text-destructive" onClick={() => openDeleteAlert(user)}><Trash2 className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => openTeamDialog(member)}><Users className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => openRoleDialog(member)}><Shield className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="icon" className="hover:bg-destructive/10 hover:text-destructive" onClick={() => openDeleteAlert(member)}><Trash2 className="h-4 w-4" /></Button>
                     </div>
                   </TableCell>
                 )}
@@ -526,3 +526,5 @@ export default function MitgliederPage() {
     </div>
   );
 }
+
+    

@@ -78,6 +78,7 @@ export function SignUpForm() {
         });
 
         const userData = {
+          id: user.uid,
           vorname: values.vorname,
           nachname: values.nachname,
           email: values.email,
@@ -87,8 +88,17 @@ export function SignUpForm() {
         };
 
         const userDocRef = doc(firestore, "users", user.uid);
+        const memberDocRef = doc(firestore, "members", user.uid);
+        const groupMemberDocRef = doc(firestore, "group_members", user.uid);
         
         await setDoc(userDocRef, userData, { merge: true });
+        await setDoc(memberDocRef, userData, { merge: true });
+        await setDoc(groupMemberDocRef, {
+            id: user.uid,
+            vorname: values.vorname,
+            nachname: values.nachname,
+            adminRechte: false,
+        }, { merge: true });
         
         await sendEmailVerification(user);
 

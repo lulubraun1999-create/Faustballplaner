@@ -115,12 +115,16 @@ function ProfileForm({ defaultValues, userData }: { defaultValues: ProfileFormVa
     }
     try {
       const userDocRef = doc(firestore, "users", user.uid);
+      const memberDocRef = doc(firestore, "members", user.uid);
+      
       const dataToSave: any = {
         ...values,
         geburtstag: values.geburtstag ? Timestamp.fromDate(values.geburtstag) : null,
       }
       
       await setDoc(userDocRef, dataToSave, { merge: true });
+      await setDoc(memberDocRef, dataToSave, { merge: true });
+
       toast({ title: 'Erfolg', description: 'Ihre Daten wurden erfolgreich gespeichert.' });
     } catch (error) {
       toast({ variant: 'destructive', title: 'Fehler', description: 'Beim Speichern Ihrer Daten ist ein Fehler aufgetreten.' });
@@ -457,8 +461,9 @@ export default function ProfileSettingsPage() {
     setIsDeleting(true);
 
     try {
-      const userDocRef = doc(firestore, 'users', user.uid);
-      await deleteDoc(userDocRef);
+      await deleteDoc(doc(firestore, 'users', user.uid));
+      await deleteDoc(doc(firestore, 'members', user.uid));
+      await deleteDoc(doc(firestore, 'group_members', user.uid));
 
       if(auth.currentUser) {
         await deleteUser(auth.currentUser);
@@ -608,4 +613,4 @@ export default function ProfileSettingsPage() {
   );
 }
 
-
+    
