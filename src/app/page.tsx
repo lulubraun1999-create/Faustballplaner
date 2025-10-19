@@ -244,14 +244,16 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
 function NextMatchDay() {
     const firestore = useFirestore();
     const { user } = useUser();
+     const { data: userData } = useDoc<UserData>(user ? doc(firestore, 'users', user.uid) : null);
 
     // Data fetching
     const { data: events, isLoading: eventsLoading } = useCollection<Event>(firestore ? query(collection(firestore, 'events'), where('date', '>=', Timestamp.now())) : null);
     const { data: overrides, isLoading: overridesLoading } = useCollection<EventOverride>(firestore ? collection(firestore, 'event_overrides') : null);
     const { data: locations, isLoading: locationsLoading } = useCollection<Location>(firestore ? collection(firestore, 'locations') : null);
     const { data: eventTitles, isLoading: titlesLoading } = useCollection<EventTitle>(firestore ? collection(firestore, 'event_titles') : null);
+    const { data: allUsers, isLoading: usersLoading } = useCollection<GroupMember>(firestore ? collection(firestore, 'group_members') : null);
 
-    const isLoading = eventsLoading || overridesLoading || locationsLoading || titlesLoading;
+    const isLoading = eventsLoading || overridesLoading || locationsLoading || titlesLoading || usersLoading;
 
     const nextMatchDay = useMemo(() => {
         if (!events || !overrides || !eventTitles) return null;
@@ -323,44 +325,18 @@ function NextMatchDay() {
          return null;
     }
     
-    const location = locations?.find(l => l.id === nextMatchDay.locationId);
-    
-    const endDate = nextMatchDay.endTime ? new Date(nextMatchDay.displayDate.getTime() + (nextMatchDay.endTime.toDate().getTime() - nextMatchDay.date.toDate().getTime())) : undefined;
-    
-    let timeString;
-    if (nextMatchDay.isAllDay) {
-        timeString = "Ganztägig";
-    } else if (endDate) {
-        timeString = `${format(nextMatchDay.displayDate, 'HH:mm')} - ${format(endDate, 'HH:mm')} Uhr`;
-    } else {
-        timeString = `${format(nextMatchDay.displayDate, 'HH:mm')} Uhr`;
-    }
-
-
     return (
         <div className="grid gap-4">
              <h2 className="text-2xl font-bold tracking-tight">Nächster Spieltag</h2>
-              <Card className="border-primary border-2">
-                <CardHeader>
-                   <CardTitle className="text-lg text-primary">
-                        {eventTitles?.find(t => t.id === nextMatchDay.titleId)?.name || 'Spieltag'}
-                    </CardTitle>
-                     <CardDescription className="text-base font-semibold text-foreground">{format(nextMatchDay.displayDate, 'eeee, dd. MMMM yyyy', { locale: de })}</CardDescription>
-                     <div className="text-sm text-muted-foreground flex items-center gap-x-4 gap-y-1 pt-1">
-                        <div className="flex items-center gap-1.5">
-                            <Clock className="h-4 w-4 flex-shrink-0" />
-                            <span>{timeString}</span>
-                        </div>
-                        {location && (
-                            <div className="flex items-center gap-1.5">
-                                <MapPin className="h-4 w-4 flex-shrink-0" />
-                                <span>{location.name}</span>
-                            </div>
-                        )}
-                    </div>
-                </CardHeader>
-                {nextMatchDay.description && <CardContent><p>{nextMatchDay.description}</p></CardContent>}
-            </Card>
+              <div className="border-primary border-2 rounded-lg">
+                <EventCard
+                    event={nextMatchDay}
+                    allUsers={allUsers || []}
+                    locations={locations || []}
+                    eventTitles={eventTitles || []}
+                    currentUserTeamIds={userData?.teamIds || []}
+                />
+             </div>
         </div>
     );
 }
