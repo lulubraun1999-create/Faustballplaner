@@ -36,6 +36,8 @@ const formSchema = z.object({
   }),
 });
 
+type FormValues = z.infer<typeof formSchema>;
+
 export function SignUpForm() {
   const auth = useAuth();
   const firestore = useFirestore();
@@ -43,7 +45,7 @@ export function SignUpForm() {
   const { toast } = useToast();
   const [isPending, startTransition] = React.useTransition();
 
-  const form = useForm<z.infer<typeof formSchema>>({
+  const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       vorname: "",
@@ -54,7 +56,7 @@ export function SignUpForm() {
     },
   });
 
-  const onSubmit = (values: z.infer<typeof formSchema>) => {
+  const onSubmit = (values: FormValues) => {
     startTransition(async () => {
        if (!auth || !firestore) {
         toast({
@@ -201,3 +203,5 @@ export function SignUpForm() {
     </Form>
   );
 }
+
+    
