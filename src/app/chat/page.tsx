@@ -114,7 +114,11 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (chatRooms.length > 0 && !activeRoom) {
-      setActiveRoom(chatRooms[0]);
+      // Don't auto-select a room on mobile, show the list first.
+      // On desktop, we can select one.
+      if (window.innerWidth >= 768) { // md breakpoint
+        setActiveRoom(chatRooms[0]);
+      }
     }
   }, [chatRooms, activeRoom]);
 
@@ -267,7 +271,7 @@ export default function ChatPage() {
     <div className="flex min-h-screen w-full flex-col bg-background">
       <Header />
       <main className="flex-1 flex flex-col md:grid md:grid-cols-[280px_1fr] h-[calc(100vh-4rem)]">
-        <aside className={cn("border-r flex-col", activeRoom ? "hidden md:flex" : "flex")}>
+        <aside className={cn("border-r flex-col md:flex", activeRoom ? "hidden" : "flex")}>
            <div className="p-4 border-b">
              <h2 className="text-xl font-bold tracking-tight">Chaträume</h2>
            </div>
@@ -290,13 +294,13 @@ export default function ChatPage() {
            </nav>
         </aside>
 
-        <section className={cn("flex-col h-full", activeRoom ? "flex" : "hidden md:flex")}>
+        <section className={cn("flex-col h-full md:flex", activeRoom ? "flex" : "hidden")}>
             <Card className="flex-1 flex flex-col rounded-none border-0 md:border-l">
                 <CardHeader className="border-b flex-row items-center gap-4">
                     <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setActiveRoom(null)}>
                         <ArrowLeft className="h-5 w-5" />
                     </Button>
-                    <CardTitle>{activeRoom?.name || 'Lade...'}</CardTitle>
+                    <CardTitle>{activeRoom?.name || 'Wähle einen Raum'}</CardTitle>
                 </CardHeader>
                 <CardContent className="flex-1 overflow-y-auto p-4 md:p-6">
                     <div className="space-y-6">
