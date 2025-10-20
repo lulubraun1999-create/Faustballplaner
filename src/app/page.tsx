@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Newspaper, CalendarDays, Users, Loader2, Clock, MapPin, User as UserIcon } from 'lucide-react';
 import { Header } from '@/components/header';
 import Link from 'next/link';
-import { collection, query, where, Timestamp, orderBy, doc, setDoc, serverTimestamp, deleteDoc, FieldValue } from 'firebase/firestore';
+import { collection, query, where, Timestamp, orderBy, doc, setDoc, serverTimestamp, deleteDoc, FieldValue, addDoc } from 'firebase/firestore';
 import { format, isSameDay, add, isFuture, addWeeks, addMonths, differenceInDays, startOfDay } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -93,22 +93,19 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
     const [isDeclineDialogOpen, setIsDeclineDialogOpen] = useState(false);
     const [declineReason, setDeclineReason] = useState('');
 
-    const eventDateIdentifier = format(event.displayDate, 'yyyy-MM-dd');
-    const userResponseRef = useMemo(() => {
-        if (!firestore || !user?.uid) return null;
-        // Construct a predictable ID for the response document
-        const responseId = `${event.id}_${eventDateIdentifier}_${user.uid}`;
-        return doc(firestore, 'event_responses', responseId);
-    }, [firestore, user?.uid, event.id, eventDateIdentifier]);
-
-    const { data: userResponse, isLoading: isUserResponseLoading } = useDoc<EventResponse>(userResponseRef);
-
+    const eventDateAsTimestamp = useMemo(() => Timestamp.fromDate(startOfDay(event.displayDate)), [event.displayDate]);
+    
     const responsesQuery = useMemo(() => {
-        if (!firestore) return null;
-        return query(collection(firestore, 'event_responses'), where('eventId', '==', event.id), where('eventDate', '==', Timestamp.fromDate(startOfDay(event.displayDate))));
-    }, [firestore, event.id, event.displayDate]);
+        if (!firestore || !event.id) return null;
+        return query(collection(firestore, 'event_responses'), where('eventId', '==', event.id), where('eventDate', '==', eventDateAsTimestamp));
+    }, [firestore, event.id, eventDateAsTimestamp]);
     
     const { data: responsesForThisInstance, isLoading: areResponsesLoading } = useCollection<EventResponse>(responsesQuery);
+    
+    const userResponse = useMemo(() => {
+        if (!responsesForThisInstance || !user?.uid) return undefined;
+        return responsesForThisInstance.find(r => r.userId === user.uid);
+    }, [responsesForThisInstance, user?.uid]);
 
 
     const isRsvpVisible = useMemo(() => {
@@ -145,21 +142,14 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
     const attendingCount = responsesForThisInstance?.filter(r => r.status === 'attending').length || 0;
 
     const handleRsvp = (status: 'attending' | 'declined' | 'uncertain', reason?: string) => {
-        if (!user || !firestore || !userResponseRef) return;
+        if (!user || !firestore) return;
 
         if (status === 'declined' && reason === undefined) {
             setIsDeclineDialogOpen(true);
             return;
         }
-        
-        if (userResponse && userResponse.status === status && status !== 'declined') {
-            deleteDoc(userResponseRef).catch(console.error);
-            return;
-        }
-        
-        const eventDateAsTimestamp = Timestamp.fromDate(startOfDay(event.displayDate));
-        
-        const data: Omit<EventResponse, 'id'> & { respondedAt: FieldValue } = {
+
+        const data = {
             userId: user.uid,
             status: status,
             respondedAt: serverTimestamp(),
@@ -168,9 +158,29 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
             reason: status === 'declined' ? reason : '',
             teamId: event.targetTeamIds && event.targetTeamIds.length > 0 ? event.targetTeamIds[0] : 'public'
         };
-        
-        setDoc(userResponseRef, data, { merge: true }).catch(console.error);
 
+        if (userResponse) {
+             if (userResponse.status === status && status !== 'declined') {
+                const responseRef = doc(firestore, 'event_responses', userResponse.id);
+                deleteDoc(responseRef).catch(serverError => {
+                    const permissionError = new FirestorePermissionError({ path: responseRef.path, operation: 'delete' });
+                    errorEmitter.emit('permission-error', permissionError);
+                });
+                return;
+            }
+            const responseRef = doc(firestore, 'event_responses', userResponse.id);
+            updateDoc(responseRef, data).catch(serverError => {
+                const permissionError = new FirestorePermissionError({ path: responseRef.path, operation: 'update', requestResourceData: data });
+                errorEmitter.emit('permission-error', permissionError);
+            });
+        } else {
+            const responseRef = collection(firestore, 'event_responses');
+            addDoc(responseRef, data).catch(serverError => {
+                const permissionError = new FirestorePermissionError({ path: responseRef.path, operation: 'create', requestResourceData: data });
+                errorEmitter.emit('permission-error', permissionError);
+            });
+        }
+        
         if (isDeclineDialogOpen) {
             setIsDeclineDialogOpen(false);
             setDeclineReason('');

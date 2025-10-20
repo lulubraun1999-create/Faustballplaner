@@ -1,12 +1,12 @@
 
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, FC } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useFirestore, useUser, useCollection, useDoc, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { addDoc, collection, serverTimestamp, orderBy, query, Timestamp, doc, updateDoc, deleteDoc, setDoc, where, getDocs } from 'firebase/firestore';
+import { addDoc, collection, serverTimestamp, orderBy, query, Timestamp, doc, updateDoc, deleteDoc, setDoc, where, getDocs, FieldValue } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
@@ -983,23 +983,20 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, onReact
     const [declineReason, setDeclineReason] = useState('');
     const location = locations.find(l => l.id === event.locationId);
 
-    const eventDateIdentifier = format(event.displayDate, 'yyyy-MM-dd');
-    const userResponseRef = useMemo(() => {
-        if (!firestore || !user?.uid) return null;
-        // Construct a predictable ID for the response document
-        const responseId = `${event.id}_${eventDateIdentifier}_${user.uid}`;
-        return doc(firestore, 'event_responses', responseId);
-    }, [firestore, user?.uid, event.id, eventDateIdentifier]);
-    
-    const { data: userResponse, isLoading: isUserResponseLoading } = useDoc<EventResponse>(userResponseRef);
+    const eventDateAsTimestamp = useMemo(() => Timestamp.fromDate(startOfDay(event.displayDate)), [event.displayDate]);
     
     const responsesQuery = useMemo(() => {
-        if (!firestore) return null;
-        return query(collection(firestore, 'event_responses'), where('eventId', '==', event.id), where('eventDate', '==', Timestamp.fromDate(startOfDay(event.displayDate))));
-    }, [firestore, event.id, event.displayDate]);
+        if (!firestore || !event.id) return null;
+        return query(collection(firestore, 'event_responses'), where('eventId', '==', event.id), where('eventDate', '==', eventDateAsTimestamp));
+    }, [firestore, event.id, eventDateAsTimestamp]);
     
     const { data: responsesForThisInstance, isLoading: areResponsesLoading } = useCollection<EventResponse>(responsesQuery);
     
+    const userResponse = useMemo(() => {
+        if (!responsesForThisInstance || !user?.uid) return undefined;
+        return responsesForThisInstance.find(r => r.userId === user.uid);
+    }, [responsesForThisInstance, user?.uid]);
+
 
     const isRsvpVisible = useMemo(() => {
         if (!event.targetTeamIds || event.targetTeamIds.length === 0) {
@@ -1096,28 +1093,14 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, onReact
     }, [responsesForThisInstance, allUsers]);
 
     const handleRsvp = (status: 'attending' | 'declined' | 'uncertain', reason?: string) => {
-        if (!user || !firestore || !userResponseRef || event.isCancelled) return;
+        if (!user || !firestore || event.isCancelled) return;
         
         if (status === 'declined' && reason === undefined) {
             setIsDeclineDialogOpen(true);
             return;
         }
-        
-        if (userResponse && userResponse.status === status && status !== 'declined') {
-            deleteDoc(userResponseRef)
-                .catch(serverError => {
-                    const permissionError = new FirestorePermissionError({
-                        path: userResponseRef.path,
-                        operation: 'delete',
-                    });
-                    errorEmitter.emit('permission-error', permissionError);
-                });
-            return;
-        }
 
-        const eventDateAsTimestamp = Timestamp.fromDate(startOfDay(event.displayDate));
-        
-        const data: Omit<EventResponse, 'id'> & { respondedAt: FieldValue } = {
+        const data = {
             userId: user.uid,
             status: status,
             respondedAt: serverTimestamp(),
@@ -1126,16 +1109,28 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, onReact
             reason: status === 'declined' ? reason : '',
             teamId: event.targetTeamIds && event.targetTeamIds.length > 0 ? event.targetTeamIds[0] : 'public'
         };
-        
-        setDoc(userResponseRef, data, { merge: true })
-            .catch(serverError => {
-                const permissionError = new FirestorePermissionError({
-                    path: userResponseRef.path,
-                    operation: 'write',
-                    requestResourceData: data,
+
+        if (userResponse) {
+             if (userResponse.status === status && status !== 'declined') {
+                const responseRef = doc(firestore, 'event_responses', userResponse.id);
+                deleteDoc(responseRef).catch(serverError => {
+                    const permissionError = new FirestorePermissionError({ path: responseRef.path, operation: 'delete' });
+                    errorEmitter.emit('permission-error', permissionError);
                 });
+                return;
+            }
+            const responseRef = doc(firestore, 'event_responses', userResponse.id);
+            updateDoc(responseRef, data).catch(serverError => {
+                const permissionError = new FirestorePermissionError({ path: responseRef.path, operation: 'update', requestResourceData: data });
                 errorEmitter.emit('permission-error', permissionError);
             });
+        } else {
+            const responseRef = collection(firestore, 'event_responses');
+            addDoc(responseRef, data).catch(serverError => {
+                const permissionError = new FirestorePermissionError({ path: responseRef.path, operation: 'create', requestResourceData: data });
+                errorEmitter.emit('permission-error', permissionError);
+            });
+        }
         
         if (isDeclineDialogOpen) {
             setIsDeclineDialogOpen(false);
@@ -1247,8 +1242,8 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, onReact
                 <CardFooter className="flex-col sm:flex-row items-start sm:items-center sm:justify-between gap-4">
                     <Popover>
                         <PopoverTrigger asChild>
-                            <Button variant="link" className="p-0 h-auto text-muted-foreground" disabled={!responsesForThisInstance || (attendingCount === 0 && declinedCount === 0 && uncertainCount === 0)}>
-                                {!responsesForThisInstance ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Users className="h-4 w-4 mr-2" />}
+                            <Button variant="link" className="p-0 h-auto text-muted-foreground" disabled={areResponsesLoading || (attendingCount === 0 && declinedCount === 0 && uncertainCount === 0)}>
+                                {areResponsesLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Users className="h-4 w-4 mr-2" />}
                                     <span className="flex gap-2">
                                         <span className="text-green-600">{attendingCount} Zusagen</span>
                                         <span className="text-red-600">{declinedCount} Absagen</span>
