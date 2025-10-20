@@ -59,6 +59,7 @@ interface EventResponse {
     status: 'attending' | 'declined' | 'uncertain';
     reason?: string;
     respondedAt: Timestamp;
+    teamId?: string;
 }
 
 interface GroupMember {
@@ -162,6 +163,7 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
             eventDate: eventDateAsTimestamp,
             eventId: event.id,
             reason: status === 'declined' ? reason : '',
+            teamId: event.targetTeamIds && event.targetTeamIds.length > 0 ? event.targetTeamIds[0] : 'public'
         };
         
         const responseRef = doc(responseCollectionRef, responseDocId);
@@ -360,9 +362,17 @@ function NextMatchDay() {
     }, [events, overrides, eventTitles]);
 
     const responsesQuery = useMemo(() => {
-        if (!firestore) return null;
-        return collection(firestore, 'event_responses');
-    }, [firestore]);
+        if (!firestore || isUserLoading || !userData) return null;
+
+        const userTeamIds = userData.teamIds || [];
+
+        if (userTeamIds.length > 0) {
+            return query(collection(firestore, 'event_responses'), where('teamId', 'in', userTeamIds));
+        }
+        // Fallback for users not in any team, might need adjustment based on desired logic
+        return query(collection(firestore, 'event_responses'), where('userId', '==', user?.uid));
+
+    }, [firestore, isUserLoading, userData, user?.uid]);
     
     const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
 
@@ -493,9 +503,17 @@ function UpcomingEvents() {
     }, [events, overrides, userData, eventTitles]);
 
     const responsesQuery = useMemo(() => {
-        if (!firestore) return null;
-        return collection(firestore, 'event_responses');
-    }, [firestore]);
+        if (!firestore || isUserLoading || !userData) return null;
+
+        const userTeamIds = userData.teamIds || [];
+
+        if (userTeamIds.length > 0) {
+            return query(collection(firestore, 'event_responses'), where('teamId', 'in', userTeamIds));
+        }
+        // Fallback for users not in any team
+        return query(collection(firestore, 'event_responses'), where('userId', '==', user?.uid));
+    }, [firestore, isUserLoading, userData, user?.uid]);
+
 
     const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
 
@@ -605,7 +623,7 @@ export default function Home() {
                   Verwalte und sehe alle anstehenden Termine.
                 </p>
                 <Button size="sm" className="mt-4" asChild>
-                  <Link href="/termine">Zum Kalender</Link>
+                  <Link href="/kalender">Zum Kalender</Link>
                 </Button>
               </CardContent>
             </Card>

@@ -88,6 +88,7 @@ interface EventResponse {
     status: 'attending' | 'declined' | 'uncertain';
     reason?: string;
     respondedAt: Timestamp;
+    teamId?: string;
 }
 
 interface GroupMember {
@@ -1121,6 +1122,7 @@ const EventCard = ({ event, allUsers, teams, responses, onEdit, onDelete, onCanc
             eventDate: eventDateAsTimestamp,
             eventId: event.id,
             reason: status === 'declined' ? reason : '',
+            teamId: event.targetTeamIds && event.targetTeamIds.length > 0 ? event.targetTeamIds[0] : 'public'
         };
         
         const responseRef = doc(responseCollectionRef, responseDocId);
@@ -1433,11 +1435,15 @@ export default function KalenderPage() {
   const { data: overridesData, isLoading: overridesLoading } = useCollection<EventOverride>(eventOverridesQuery);
   
   const responsesQuery = useMemo(() => {
-    if (!firestore || isUserLoading || isUserDataLoading) {
+    if (!firestore || isUserLoading || isUserDataLoading || !userData) {
         return null;
     }
-    return collection(firestore, 'event_responses');
-  }, [firestore, isUserLoading, isUserDataLoading]);
+    const teamIds = userData?.teamIds;
+    if (teamIds && teamIds.length > 0) {
+        return query(collection(firestore, 'event_responses'), where('teamId', 'in', teamIds));
+    }
+    return query(collection(firestore, 'event_responses'), where('userId', '==', user?.uid));
+  }, [firestore, userData, isUserLoading, isUserDataLoading, user?.uid]);
 
   const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
     
@@ -1620,7 +1626,7 @@ export default function KalenderPage() {
         const key = `${event.id}_${format(currentDate, 'yyyy-MM-dd')}`;
         if (!overriddenInstanceKeys.has(key)) {
             const dayKey = format(currentDate, 'yyyy-MM-dd');
-            if (!monthlyEventsMap.has(dayKey)) weeklyEventsMap.set(dayKey, []);
+            if (!monthlyEventsMap.has(dayKey)) monthlyEventsMap.set(dayKey, []);
             monthlyEventsMap.get(dayKey)!.push({ ...event, displayDate: currentDate });
         }
   
