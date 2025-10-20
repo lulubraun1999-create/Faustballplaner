@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useFirestore, useUser, useCollection, useDoc, errorEmitter, FirestorePermissionError } from '@/firebase';
@@ -148,7 +148,6 @@ const eventSchema = z.object({
   locationId: z.string().optional(),
   meetingPoint: z.string().optional(),
   description: z.string().optional(),
-  cancellationReason: z.string().optional(),
 }).superRefine((data, ctx) => {
     // 1. Endzeitpunkt muss nach Startzeitpunkt liegen
     if (data.date && (data.endTime || data.endDate)) {
@@ -524,7 +523,7 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
     };
   };
 
-  const form = useForm<z.infer<typeof eventSchema>>({
+  const form = useForm<EventFormValues>({
     resolver: zodResolver(eventSchema),
     defaultValues: getInitialFormValues(),
   });
@@ -1344,7 +1343,7 @@ const EventCard = ({ event, allUsers, teams, responses, onEdit, onDelete, onCanc
 };
 
 
-export default function TerminePage() {
+export default function KalenderPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<DisplayEvent | undefined>(undefined);
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -1368,7 +1367,7 @@ export default function TerminePage() {
   });
 
   const firestore = useFirestore();
-  const { user } = useUser();
+  const { user, isUserLoading } = useUser();
   const { toast } = useToast();
 
   const weekStartsOn = 1; // Monday
@@ -1388,7 +1387,7 @@ export default function TerminePage() {
     if (!firestore || !user?.uid) return null;
     return doc(firestore, 'users', user.uid);
   }, [firestore, user?.uid]);
-  const { data: userData, isLoading: isUserLoading } = useDoc<UserData>(userDocRef);
+  const { data: userData, isLoading: isUserDataLoading } = useDoc<UserData>(userDocRef);
 
   const canEditEvents = userData?.adminRechte;
   
@@ -1437,25 +1436,22 @@ export default function TerminePage() {
   const { data: overridesData, isLoading: overridesLoading } = useCollection<EventOverride>(eventOverridesQuery);
   
   const responsesQuery = useMemo(() => {
-    if (!firestore || isUserLoading) {
+    if (!firestore || isUserLoading || isUserDataLoading) {
         return null;
     }
-    
-    if (userData === undefined) { // Still loading user data
+    if (userData === undefined) { 
         return null;
     }
-    
     const teamIds = userData?.teamIds;
     if (teamIds && teamIds.length > 0) {
         return query(collection(firestore, 'event_responses'), where('teamId', 'in', teamIds));
     }
-    
     return collection(firestore, 'event_responses');
-  }, [firestore, userData, isUserLoading]);
+  }, [firestore, userData, isUserLoading, isUserDataLoading]);
 
   const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
     
-  const isLoadingCombined = isUserLoading || eventsLoading || categoriesLoading || teamsLoading || usersLoading || locationsLoading || eventTitlesLoading || overridesLoading || responsesLoading;
+  const isLoadingCombined = isUserLoading || isUserDataLoading || eventsLoading || categoriesLoading || teamsLoading || usersLoading || locationsLoading || eventTitlesLoading || overridesLoading || responsesLoading;
 
 
   const handleOpenForm = (event?: DisplayEvent) => {
@@ -1852,3 +1848,5 @@ export default function TerminePage() {
     </div>
   );
 }
+
+    

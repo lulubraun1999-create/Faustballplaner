@@ -58,7 +58,7 @@ export function Header() {
     }
   };
   
-  const verwaltungPaths = ["/mannschaften", "/mitglieder", "/admin/news", "/umfragen", "/kalender", "/mannschaftskasse"];
+  const verwaltungPaths = ["/mannschaften", "/mitglieder", "/admin/news", "/umfragen", "/termine", "/mannschaftskasse"];
   const isVerwaltungActive = verwaltungPaths.some(p => pathname.startsWith(p));
 
 
@@ -78,7 +78,7 @@ export function Header() {
                      <Link href="/" className="flex items-center gap-2 mb-4" onClick={() => setIsMobileMenuOpen(false)}>
                         <span className="font-bold text-lg">TSV Bayer Leverkusen</span>
                     </Link>
-                    <NavLink href="/kalender" onNavigate={() => setIsMobileMenuOpen(false)}>Kalender</NavLink>
+                    <NavLink href="/termine" onNavigate={() => setIsMobileMenuOpen(false)}>Kalender</NavLink>
                     <NavLink href="/chat" onNavigate={() => setIsMobileMenuOpen(false)}>Chat</NavLink>
                     <p className="text-muted-foreground">Verwaltung</p>
                     <div className="grid gap-4 pl-4 text-base">
@@ -87,7 +87,7 @@ export function Header() {
                         <NavLink href="/mitglieder" onNavigate={() => setIsMobileMenuOpen(false)}>Mitglieder</NavLink>
                         <NavLink href="/admin/news" onNavigate={() => setIsMobileMenuOpen(false)}>News bearbeiten</NavLink>
                         <NavLink href="/umfragen" onNavigate={() => setIsMobileMenuOpen(false)}>Umfragen</NavLink>
-                        <NavLink href="/kalender" onNavigate={() => setIsMobileMenuOpen(false)}>Termine</NavLink>
+                        <NavLink href="/termine" onNavigate={() => setIsMobileMenuOpen(false)}>Termine</NavLink>
                         <NavLink href="/mannschaftskasse" onNavigate={() => setIsMobileMenuOpen(false)}>Mannschaftskasse</NavLink>
                     </div>
                 </nav>
@@ -100,8 +100,8 @@ export function Header() {
 
         <nav className="hidden md:flex items-center justify-center gap-6 text-sm font-medium flex-1">
           <Link 
-            href="/kalender" 
-            className={cn("transition-colors hover:text-foreground/80", pathname.startsWith('/kalender') ? 'text-foreground' : 'text-muted-foreground')}
+            href="/termine" 
+            className={cn("transition-colors hover:text-foreground/80", pathname.startsWith('/termine') ? 'text-foreground' : 'text-muted-foreground')}
             >
             Kalender
           </Link>
@@ -136,7 +136,7 @@ export function Header() {
                 <Link href="/umfragen">Umfragen</Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <Link href="/kalender">Termine</Link>
+                <Link href="/termine">Termine</Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link href="/mannschaftskasse">Mannschaftskasse</Link>
@@ -176,3 +176,5 @@ export function Header() {
     </header>
   );
 }
+
+    

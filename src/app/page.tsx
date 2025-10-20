@@ -1,23 +1,22 @@
 
 'use client';
 
-import { useUser, useAuth, useFirestore, useCollection, useDoc, FirestorePermissionError, errorEmitter } from '@/firebase';
+import { useUser, useAuth, useFirestore, useCollection, useDoc } from '@/firebase';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Newspaper, CalendarDays, Users, MessageSquare, Loader2, Repeat, Clock, MapPin, Check, XIcon, HelpCircle, Ban, CheckCircle2, Edit, Trash2 } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Newspaper, CalendarDays, Users, Loader2, Clock, MapPin } from 'lucide-react';
 import { Header } from '@/components/header';
 import Link from 'next/link';
-import { collection, query, where, Timestamp, orderBy, doc, setDoc, serverTimestamp, deleteDoc, getDocs, updateDoc, Firestore } from 'firebase/firestore';
-import { format, isSameDay, startOfMonth, endOfMonth, addWeeks, addMonths, isWithinInterval, isSameMonth, startOfDay, add, differenceInDays, isFuture, parseISO } from 'date-fns';
+import { collection, query, where, Timestamp, orderBy, doc, setDoc, serverTimestamp, deleteDoc } from 'firebase/firestore';
+import { format, isSameDay, add, isFuture, addWeeks, addMonths, differenceInDays } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import { Badge } from '@/components/ui/badge';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Check, HelpCircle, XIcon } from 'lucide-react';
 
 // START: Data Interfaces
 interface Event {
@@ -79,11 +78,6 @@ interface EventTitle {
   name: string;
 }
 
-interface Team {
-    id: string;
-    name: string;
-}
-
 interface UserData {
     teamIds?: string[];
 }
@@ -114,16 +108,6 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
         }
         return event.targetTeamIds.some(teamId => currentUserTeamIds.includes(teamId));
     }, [event.targetTeamIds, currentUserTeamIds]);
-
-
-    const recurrenceText = (() => {
-      switch (event.recurrence) {
-        case 'weekly': return 'Wöchentlich';
-        case 'biweekly': return 'Alle 2 Wochen';
-        case 'monthly': return 'Monatlich';
-        default: return null;
-      }
-    })();
     
     const startDate = event.displayDate;
     
@@ -632,7 +616,7 @@ export default function Home() {
                   Verwalte und sehe alle anstehenden Termine.
                 </p>
                 <Button size="sm" className="mt-4" asChild>
-                  <Link href="/kalender">Zum Kalender</Link>
+                  <Link href="/termine">Zum Kalender</Link>
                 </Button>
               </CardContent>
             </Card>
