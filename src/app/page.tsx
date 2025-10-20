@@ -360,11 +360,9 @@ function NextMatchDay() {
     }, [events, overrides, eventTitles]);
 
     const responsesQuery = useMemo(() => {
-        if (!firestore || !user?.uid) { 
-            return null;
-        }
+        if (!firestore) return null;
         return collection(firestore, 'event_responses');
-    }, [firestore, user?.uid]);
+    }, [firestore]);
     
     const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
 
@@ -495,11 +493,9 @@ function UpcomingEvents() {
     }, [events, overrides, userData, eventTitles]);
 
     const responsesQuery = useMemo(() => {
-        if (!firestore || !user?.uid) {
-            return null;
-        }
+        if (!firestore) return null;
         return collection(firestore, 'event_responses');
-    }, [firestore, user?.uid]);
+    }, [firestore]);
 
     const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
 

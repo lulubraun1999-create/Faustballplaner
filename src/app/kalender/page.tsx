@@ -1433,12 +1433,11 @@ export default function KalenderPage() {
   const { data: overridesData, isLoading: overridesLoading } = useCollection<EventOverride>(eventOverridesQuery);
   
   const responsesQuery = useMemo(() => {
-    if (!firestore || isUserLoading || isUserDataLoading || !userData) {
+    if (!firestore || isUserLoading || isUserDataLoading) {
         return null;
     }
-    // Query all responses and filter on the client, as security rules will enforce access.
     return collection(firestore, 'event_responses');
-  }, [firestore, userData, isUserLoading, isUserDataLoading]);
+  }, [firestore, isUserLoading, isUserDataLoading]);
 
   const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
     
@@ -1621,7 +1620,7 @@ export default function KalenderPage() {
         const key = `${event.id}_${format(currentDate, 'yyyy-MM-dd')}`;
         if (!overriddenInstanceKeys.has(key)) {
             const dayKey = format(currentDate, 'yyyy-MM-dd');
-            if (!monthlyEventsMap.has(dayKey)) monthlyEventsMap.set(dayKey, []);
+            if (!monthlyEventsMap.has(dayKey)) weeklyEventsMap.set(dayKey, []);
             monthlyEventsMap.get(dayKey)!.push({ ...event, displayDate: currentDate });
         }
   
@@ -1708,7 +1707,6 @@ export default function KalenderPage() {
             {eventsOnSelectedDay.length > 0 ? (
                 <div className="space-y-4">
                     {eventsOnSelectedDay.map(event => {
-                        const userResponse = responses?.find(r => r.userId === user?.uid && r.eventId === event.id && isSameDay(r.eventDate.toDate(), event.displayDate));
                         return (
                             <EventCard
                                 key={`${event.id}-${event.displayDate.toISOString()}`}
