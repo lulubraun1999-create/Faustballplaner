@@ -1432,15 +1432,9 @@ export default function KalenderPage() {
   const { data: overridesData, isLoading: overridesLoading } = useCollection<EventOverride>(eventOverridesQuery);
   
   const responsesQuery = useMemo(() => {
-    if (!firestore || isUserLoading || isUserDataLoading || !userData) {
-        return null;
-    }
-    const teamIds = userData?.teamIds;
-    if (teamIds && teamIds.length > 0) {
-        return query(collection(firestore, 'event_responses'), where('teamId', 'in', teamIds));
-    }
-    return collection(firestore, 'event_responses');
-  }, [firestore, userData, isUserLoading, isUserDataLoading]);
+    if (!firestore || !userData?.teamIds) return null;
+    return query(collection(firestore, 'event_responses'), where('teamId', 'in', userData.teamIds));
+  }, [firestore, userData?.teamIds]);
 
   const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
     
@@ -1757,9 +1751,6 @@ export default function KalenderPage() {
               </Button>
             )}
           </div>
-           <div className="mb-4 text-center text-xl font-semibold">
-                {format(displayMonth, 'MMMM yyyy', { locale: de })}
-            </div>
             
              <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-8">
                  <Card className="md:sticky md:top-24 self-start">
