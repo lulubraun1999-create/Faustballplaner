@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useMemo, useEffect, FC } from 'react';
@@ -18,9 +19,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { PlusCircle, Trash2, Loader2, CalendarIcon, Edit, Clock, MapPin, Users, Repeat, ChevronLeft, ChevronRight, Check, XIcon, HelpCircle, Ban, CheckCircle2 } from 'lucide-react';
+import { PlusCircle, Trash2, Loader2, CalendarIcon, Edit, Clock, MapPin, Users, Repeat, ChevronLeft, ChevronRight, Check, XIcon, HelpCircle, Ban, CheckCircle2, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { format, add, startOfWeek, eachDayOfInterval, isSameDay, startOfDay, addWeeks, isWithinInterval, getDay, differenceInDays, addMonths, startOfMonth, endOfMonth, isSameMonth } from 'date-fns';
+import { format as formatDate, add, startOfWeek, eachDayOfInterval, isSameDay, startOfDay, addWeeks, isWithinInterval, getDay, differenceInDays, addMonths, startOfMonth, endOfMonth, isSameMonth } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -492,15 +493,15 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
       return {
         titleId: event.titleId,
         date: startDate,
-        startTime: event.isAllDay ? '' : format(startDate, 'HH:mm'),
+        startTime: event.isAllDay ? '' : formatDate(startDate, 'HH:mm'),
         endDate: endDate,
-        endTime: endDate && !event.isAllDay ? format(endDate, 'HH:mm') : '',
+        endTime: endDate && !event.isAllDay ? formatDate(endDate, 'HH:mm') : '',
         isAllDay: event.isAllDay || false,
         recurrence: event.recurrence || 'none',
         recurrenceEndDate: event.recurrenceEndDate?.toDate() || undefined,
         targetTeamIds: event.targetTeamIds || [],
         rsvpDeadlineDate: rsvpDate,
-        rsvpDeadlineTime: rsvpDate ? format(rsvpDate, 'HH:mm') : '',
+        rsvpDeadlineTime: rsvpDate ? formatDate(rsvpDate, 'HH:mm') : '',
         locationId: event.locationId || '',
         meetingPoint: event.meetingPoint || '',
         description: event.description || '',
@@ -716,7 +717,7 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
                           <PopoverTrigger asChild>
                           <FormControl>
                               <Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                              {field.value ? format(field.value, 'dd.MM.yyyy') : <span>Datum</span>}
+                              {field.value ? formatDate(field.value, 'dd.MM.yyyy') : <span>Datum</span>}
                               <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                               </Button>
                           </FormControl>
@@ -745,7 +746,7 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
                           <PopoverTrigger asChild>
                           <FormControl>
                               <Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                              {field.value ? format(field.value, 'dd.MM.yyyy') : <span>Datum (optional)</span>}
+                              {field.value ? formatDate(field.value, 'dd.MM.yyyy') : <span>Datum (optional)</span>}
                               <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                               </Button>
                           </FormControl>
@@ -804,7 +805,7 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
                               <PopoverTrigger asChild>
                               <FormControl>
                                   <Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                                  {field.value ? format(field.value, 'dd.MM.yyyy') : <span>Datum (optional)</span>}
+                                  {field.value ? formatDate(field.value, 'dd.MM.yyyy') : <span>Datum (optional)</span>}
                                   <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                                   </Button>
                               </FormControl>
@@ -864,7 +865,7 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
                           <PopoverTrigger asChild>
                           <FormControl>
                               <Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                              {field.value ? format(field.value, 'dd.MM.yyyy') : <span>Datum (optional)</span>}
+                              {field.value ? formatDate(field.value, 'dd.MM.yyyy') : <span>Datum (optional)</span>}
                               <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                               </Button>
                           </FormControl>
@@ -1016,7 +1017,7 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, onReact
             default: return null;
         }
         if (recurrenceEndDate) {
-            text += ` bis ${format(recurrenceEndDate, 'dd.MM.yyyy')}`;
+            text += ` bis ${formatDate(recurrenceEndDate, 'dd.MM.yyyy')}`;
         }
         return text;
     };
@@ -1047,9 +1048,9 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, onReact
     if (event.isAllDay) {
         timeString = "Ganztägig";
     } else if (endDate) {
-        timeString = `${format(startDate, 'HH:mm')} - ${format(endDate, 'HH:mm')} Uhr`;
+        timeString = `${formatDate(startDate, 'HH:mm')} - ${formatDate(endDate, 'HH:mm')} Uhr`;
     } else {
-        timeString = `${format(startDate, 'HH:mm')} Uhr`;
+        timeString = `${formatDate(startDate, 'HH:mm')} Uhr`;
     }
     
     const attendingCount = responsesForThisInstance?.filter(r => r.status === 'attending').length || 0;
@@ -1100,7 +1101,7 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, onReact
             return;
         }
 
-        const data = {
+        const data: Omit<EventResponse, 'id' | 'respondedAt'> & { respondedAt: FieldValue } = {
             userId: user.uid,
             status: status,
             respondedAt: serverTimestamp(),
@@ -1167,7 +1168,7 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, onReact
                                             <AlertDialogHeader>
                                                 <AlertDialogTitle>Nur diesen Termin absagen?</AlertDialogTitle>
                                                 <AlertDialogDescription>
-                                                    Möchten Sie nur diesen einen Termin am {format(event.displayDate, "dd.MM.yyyy")} absagen? Die Serie bleibt bestehen.
+                                                    Möchten Sie nur diesen einen Termin am {formatDate(event.displayDate, "dd.MM.yyyy")} absagen? Die Serie bleibt bestehen.
                                                 </AlertDialogDescription>
                                             </AlertDialogHeader>
                                             <AlertDialogFooter>
@@ -1540,7 +1541,7 @@ export default function KalenderPage() {
   
     const overriddenInstanceKeys = new Set<string>();
     overridesData.forEach(override => {
-      const key = `${override.eventId}_${format(override.originalDate.toDate(), 'yyyy-MM-dd')}`;
+      const key = `${override.eventId}_${formatDate(override.originalDate.toDate(), 'yyyy-MM-dd')}`;
       overriddenInstanceKeys.add(key);
     });
   
@@ -1556,7 +1557,7 @@ export default function KalenderPage() {
       const displayDate = override.date?.toDate() || override.originalDate.toDate();
   
       if (isWithinInterval(displayDate, interval)) {
-        const dayKey = format(displayDate, 'yyyy-MM-dd');
+        const dayKey = formatDate(displayDate, 'yyyy-MM-dd');
         if (!monthlyEventsMap.has(dayKey)) monthlyEventsMap.set(dayKey, []);
         
         const eventWithOverride: DisplayEvent = {
@@ -1577,9 +1578,9 @@ export default function KalenderPage() {
   
       if (event.recurrence === 'none' || !event.recurrence) {
         const originalDate = event.date.toDate();
-        const key = `${event.id}_${format(originalDate, 'yyyy-MM-dd')}`;
+        const key = `${event.id}_${formatDate(originalDate, 'yyyy-MM-dd')}`;
         if (isWithinInterval(originalDate, interval) && !overriddenInstanceKeys.has(key)) {
-          const dayKey = format(originalDate, 'yyyy-MM-dd');
+          const dayKey = formatDate(originalDate, 'yyyy-MM-dd');
           if (!monthlyEventsMap.has(dayKey)) monthlyEventsMap.set(dayKey, []);
           monthlyEventsMap.get(dayKey)!.push({ ...event, displayDate: originalDate });
         }
@@ -1605,9 +1606,9 @@ export default function KalenderPage() {
       while (currentDate < interval.end && safety > 0) {
         if (recurrenceEndDate && currentDate > recurrenceEndDate) break;
   
-        const key = `${event.id}_${format(currentDate, 'yyyy-MM-dd')}`;
+        const key = `${event.id}_${formatDate(currentDate, 'yyyy-MM-dd')}`;
         if (!overriddenInstanceKeys.has(key)) {
-            const dayKey = format(currentDate, 'yyyy-MM-dd');
+            const dayKey = formatDate(currentDate, 'yyyy-MM-dd');
             if (!monthlyEventsMap.has(dayKey)) monthlyEventsMap.set(dayKey, []);
             monthlyEventsMap.get(dayKey)!.push({ ...event, displayDate: currentDate });
         }
@@ -1635,13 +1636,92 @@ export default function KalenderPage() {
   
   const eventsOnSelectedDay = useMemo(() => {
     if (!selectedDay) return [];
-    const dayKey = format(selectedDay, 'yyyy-MM-dd');
+    const dayKey = formatDate(selectedDay, 'yyyy-MM-dd');
     return allEventsForMonth.get(dayKey) || [];
   }, [selectedDay, allEventsForMonth]);
 
   const daysWithEvents = useMemo(() => {
     return Array.from(allEventsForMonth.keys()).map(dateStr => new Date(dateStr));
   }, [allEventsForMonth]);
+
+   const handleDownload = () => {
+    if (!allEventsForMonth || !eventTitles || !locations) {
+      toast({
+        variant: "destructive",
+        title: "Fehler",
+        description: "Ereignisdaten werden noch geladen.",
+      });
+      return;
+    }
+
+    let icsString = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//Werkself Hub//Termine//DE",
+    ].join("\n");
+
+    allEventsForMonth.forEach(dayEvents => {
+      dayEvents.forEach(event => {
+        if (event.isCancelled) return;
+
+        const startDate = event.displayDate;
+        let endDate: Date;
+
+        if (event.isAllDay) {
+          endDate = add(startDate, { days: 1 });
+        } else {
+           endDate = event.endTime ? event.endTime.toDate() : add(startDate, { hours: 1 });
+           
+            const endHours = event.endTime?.toDate().getHours();
+            const endMinutes = event.endTime?.toDate().getMinutes();
+            endDate = new Date(startDate);
+            endDate.setHours(endHours ?? startDate.getHours() + 1, endMinutes ?? startDate.getMinutes());
+        }
+
+        const formatToICSDate = (date: Date, isAllDay: boolean) => {
+          if (isAllDay) {
+            return formatDate(date, 'yyyyMMdd');
+          }
+          return formatDate(date, "yyyyMMdd'T'HHmmss'Z'").replace('+00:00', 'Z');
+        };
+
+        const dtstart = event.isAllDay ? `DTSTART;VALUE=DATE:${formatToICSDate(startDate, true)}` : `DTSTART:${formatToICSDate(startDate, false)}`;
+        const dtend = event.isAllDay ? `DTEND;VALUE=DATE:${formatToICSDate(endDate, true)}` : `DTEND:${formatToICSDate(endDate, false)}`;
+
+        const title = eventTitles.find(t => t.id === event.titleId)?.name || 'Unbekannter Termin';
+        const locationData = locations.find(l => l.id === event.locationId);
+        const locationString = locationData ? `${locationData.name}, ${locationData.address}, ${locationData.city}` : '';
+        const description = event.description ? event.description.replace(/\n/g, '\\n') : '';
+        const meetingPoint = event.meetingPoint ? `Treffpunkt: ${event.meetingPoint.replace(/\n/g, '\\n')}` : '';
+
+        const fullDescription = [description, meetingPoint].filter(Boolean).join('\\n\\n');
+
+        const icsEvent = [
+          "BEGIN:VEVENT",
+          `UID:${event.id}-${formatDate(event.displayDate, 'yyyyMMdd')}@werkself-hub.com`,
+          `DTSTAMP:${formatToICSDate(new Date(), false)}`,
+          dtstart,
+          dtend,
+          `SUMMARY:${title}`,
+          `DESCRIPTION:${fullDescription}`,
+          `LOCATION:${locationString}`,
+          "END:VEVENT",
+        ].join("\n");
+
+        icsString += "\n" + icsEvent;
+      });
+    });
+
+    icsString += "\nEND:VCALENDAR";
+
+    const blob = new Blob([icsString], { type: "text/calendar;charset=utf-8" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `werkself-termine-${formatDate(displayMonth, 'yyyy-MM')}.ics`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
 
   const renderContent = () => {
@@ -1675,9 +1755,9 @@ export default function KalenderPage() {
                 }}
                 components={{
                 DayContent: ({ date }) => {
-                    const dayKey = format(date, 'yyyy-MM-dd');
+                    const dayKey = formatDate(date, 'yyyy-MM-dd');
                     const hasEvent = allEventsForMonth.has(dayKey);
-                    const dayNumber = format(date, 'd');
+                    const dayNumber = formatDate(date, 'd');
                     return (
                     <div className={cn("relative w-full h-full flex items-center justify-center")}>
                         {dayNumber}
@@ -1690,7 +1770,7 @@ export default function KalenderPage() {
         </div>
         <div className="mt-8">
             <h2 className="text-xl font-bold mb-4">
-                Termine am {selectedDay ? format(selectedDay, 'dd. MMMM yyyy', { locale: de }) : 'ausgewählten Tag'}
+                Termine am {selectedDay ? formatDate(selectedDay, 'dd. MMMM yyyy', { locale: de }) : 'ausgewählten Tag'}
             </h2>
             {eventsOnSelectedDay.length > 0 ? (
                 <div className="space-y-4">
@@ -1734,7 +1814,7 @@ export default function KalenderPage() {
       <Header />
       <main className="flex-1 p-4 md:p-8">
         <div className="mx-auto max-w-7xl">
-          <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
+          <div className="flex items-center justify-between mb-8 flex-wrap gap-4">
             <h1 className="text-3xl font-bold">Kalender</h1>
             {canEditEvents && (
               <Button variant="outline" onClick={() => handleOpenForm()}>
@@ -1802,6 +1882,12 @@ export default function KalenderPage() {
                         </Accordion>
                        )}
                     </CardContent>
+                    <CardFooter>
+                       <Button onClick={handleDownload} className="w-full">
+                           <Download className="mr-2 h-4 w-4" />
+                           Kalender herunterladen
+                       </Button>
+                    </CardFooter>
                 </Card>
                  
                 <div className="row-start-1 md:row-start-auto">
@@ -1827,7 +1913,7 @@ export default function KalenderPage() {
             <AlertDialogHeader>
                 <AlertDialogTitle>Termin absagen</AlertDialogTitle>
                 <AlertDialogDescription>
-                    Bitte geben Sie einen Grund für die Absage des Termins am {eventToCancel ? format(eventToCancel.displayDate, 'dd.MM.yyyy') : ''} an.
+                    Bitte geben Sie einen Grund für die Absage des Termins am {eventToCancel ? formatDate(eventToCancel.displayDate, 'dd.MM.yyyy') : ''} an.
                 </AlertDialogDescription>
             </AlertDialogHeader>
             <Textarea
