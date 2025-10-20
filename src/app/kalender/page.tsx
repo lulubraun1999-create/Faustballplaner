@@ -1544,14 +1544,6 @@ export default function KalenderPage() {
     }
   };
 
-
-  const goToPreviousMonth = () => setDisplayMonth(addMonths(displayMonth, -1));
-  const goToNextMonth = () => setDisplayMonth(addMonths(displayMonth, 1));
-  const goToToday = () => {
-    setDisplayMonth(new Date());
-    setSelectedDay(new Date());
-  }
-
   const allEventsForMonth = useMemo(() => {
     const monthlyEventsMap = new Map<string, DisplayEvent[]>();
     if (!eventsData || !overridesData) return monthlyEventsMap;
@@ -1681,34 +1673,36 @@ export default function KalenderPage() {
     
     return (
       <>
-        <Calendar
-            mode="single"
-            selected={selectedDay}
-            onSelect={setSelectedDay}
-            month={displayMonth}
-            onMonthChange={setDisplayMonth}
-            locale={de}
-            className="rounded-md border"
-            modifiers={{
-                hasEvent: daysWithEvents,
-            }}
-            modifiersClassNames={{
-                hasEvent: "bg-primary/20"
-            }}
-            components={{
-              DayContent: ({ date, ...props }) => {
-                const dayKey = format(date, 'yyyy-MM-dd');
-                const hasEvent = allEventsForMonth.has(dayKey);
-                const dayNumber = format(date, 'd');
-                return (
-                  <div className={cn(hasEvent && "relative")}>
-                    {dayNumber}
-                    {hasEvent && <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-primary" />}
-                  </div>
-                );
-              },
-            }}
-        />
+        <div className="flex justify-center">
+            <Calendar
+                mode="single"
+                selected={selectedDay}
+                onSelect={setSelectedDay}
+                month={displayMonth}
+                onMonthChange={setDisplayMonth}
+                locale={de}
+                className="rounded-md border"
+                modifiers={{
+                    hasEvent: daysWithEvents,
+                }}
+                modifiersClassNames={{
+                    hasEvent: "bg-primary/20"
+                }}
+                components={{
+                DayContent: ({ date }) => {
+                    const dayKey = format(date, 'yyyy-MM-dd');
+                    const hasEvent = allEventsForMonth.has(dayKey);
+                    const dayNumber = format(date, 'd');
+                    return (
+                    <div className={cn("relative w-full h-full flex items-center justify-center")}>
+                        {dayNumber}
+                        {hasEvent && <div className="absolute -bottom-1 h-1 w-1 rounded-full bg-primary" />}
+                    </div>
+                    );
+                },
+                }}
+            />
+        </div>
         <div className="mt-8">
             <h2 className="text-xl font-bold mb-4">
                 Termine am {selectedDay ? format(selectedDay, 'dd. MMMM yyyy', { locale: de }) : 'ausgewählten Tag'}
@@ -1756,11 +1750,6 @@ export default function KalenderPage() {
         <div className="mx-auto max-w-7xl">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
             <h1 className="text-3xl font-bold">Kalender</h1>
-             <div className="flex items-center gap-2 justify-center flex-wrap">
-                <Button variant="outline" size="sm" onClick={goToPreviousMonth}><ChevronLeft className="h-4 w-4"/></Button>
-                <Button variant="outline" onClick={goToToday}>Heute</Button>
-                <Button variant="outline" size="sm" onClick={goToNextMonth}><ChevronRight className="h-4 w-4"/></Button>
-            </div>
             {canEditEvents && (
               <Button variant="outline" onClick={() => handleOpenForm()}>
                 <PlusCircle className="mr-2 h-4 w-4" />
@@ -1874,5 +1863,3 @@ export default function KalenderPage() {
     </div>
   );
 }
-
-    

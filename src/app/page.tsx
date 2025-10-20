@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useUser, useAuth, useFirestore, useCollection, useDoc } from '@/firebase';
+import { useUser, useAuth, useFirestore, useCollection, useDoc, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
