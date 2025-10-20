@@ -116,7 +116,7 @@ export default function ChatPage() {
     if (chatRooms.length > 0 && !activeRoom) {
       // Don't auto-select a room on mobile, show the list first.
       // On desktop, we can select one.
-      if (window.innerWidth >= 768) { // md breakpoint
+      if (typeof window !== 'undefined' && window.innerWidth >= 768) { // md breakpoint
         setActiveRoom(chatRooms[0]);
       }
     }
@@ -376,9 +376,9 @@ export default function ChatPage() {
                             className="flex-1" 
                             value={newMessage}
                             onChange={(e) => setNewMessage(e.target.value)}
-                            disabled={isSending}
+                            disabled={isSending || !activeRoom}
                         />
-                        <Button type="submit" size="icon" disabled={isSending || !newMessage.trim()}>
+                        <Button type="submit" size="icon" disabled={isSending || !newMessage.trim() || !activeRoom}>
                             {isSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                         </Button>
                     </form>
@@ -389,3 +389,5 @@ export default function ChatPage() {
     </div>
   );
 }
+
+    

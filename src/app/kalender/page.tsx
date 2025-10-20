@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -281,7 +280,7 @@ function AddLocationForm({ onDone }: { onDone: () => void }) {
 
 function AddEventTitleForm({ onDone }: { onDone: () => void }) {
     const firestore = useFirestore();
-    const { toast } = useToast();
+    const { toast } } from useToast();
     const form = useForm<z.infer<typeof titleSchema>>({
         resolver: zodResolver(titleSchema),
         defaultValues: { name: '' }
@@ -623,7 +622,7 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
             }
 
         } else {
-            const finalData = {
+             const finalData = {
                 ...dataToSave,
                 createdBy: event?.createdBy || user.uid,
                 createdAt: event?.createdAt || serverTimestamp(),
@@ -993,7 +992,7 @@ const EventCard = ({ event, allUsers, teams, responses, onEdit, onDelete, onCanc
     
     const userResponse = useMemo(() => {
          return responsesForThisInstance?.find(r => r.userId === user?.uid);
-    }, [responsesForThisInstance, user]);
+    }, [responsesForThisInstance, user?.uid]);
 
     const isRsvpVisible = useMemo(() => {
         if (!event.targetTeamIds || event.targetTeamIds.length === 0) {
@@ -1073,21 +1072,21 @@ const EventCard = ({ event, allUsers, teams, responses, onEdit, onDelete, onCanc
             .filter(r => r.status === 'attending')
             .map(r => getResponderName(r.userId))
             .sort();
-    }, [responsesForThisInstance, allUsers]);
+    }, [responsesForThisInstance, allUsers, getResponderName]);
 
     const decliners = useMemo(() => {
         return (responsesForThisInstance || [])
             .filter(r => r.status === 'declined')
             .map(r => ({ name: getResponderName(r.userId), reason: r.reason }))
             .sort((a,b) => a.name.localeCompare(b.name));
-    }, [responsesForThisInstance, allUsers]);
+    }, [responsesForThisInstance, allUsers, getResponderName]);
     
     const uncertains = useMemo(() => {
         return (responsesForThisInstance || [])
             .filter(r => r.status === 'uncertain')
             .map(r => getResponderName(r.userId))
             .sort();
-    }, [responsesForThisInstance, allUsers]);
+    }, [responsesForThisInstance, allUsers, getResponderName]);
 
     const handleRsvp = (status: 'attending' | 'declined' | 'uncertain', reason?: string) => {
         if (!user || !firestore || event.isCancelled) return;
@@ -1386,9 +1385,9 @@ export default function TerminePage() {
   }, [selectedTitleIds]);
 
   const userDocRef = useMemo(() => {
-    if (!firestore || !user) return null;
+    if (!firestore || !user?.uid) return null;
     return doc(firestore, 'users', user.uid);
-  }, [firestore, user]);
+  }, [firestore, user?.uid]);
   const { data: userData, isLoading: isUserLoading } = useDoc<UserData>(userDocRef);
 
   const canEditEvents = userData?.adminRechte;
@@ -1438,7 +1437,7 @@ export default function TerminePage() {
   const { data: overridesData, isLoading: overridesLoading } = useCollection<EventOverride>(eventOverridesQuery);
   
   const responsesQuery = useMemo(() => {
-    if (!firestore || isUserLoading) {
+    if (!firestore || isUserLoading || !userData) {
         return null;
     }
     
@@ -1850,9 +1849,4 @@ export default function TerminePage() {
   );
 }
 
-
-
-
-
-
-
+    

@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useUser, useAuth, useFirestore, useCollection, useDoc } from '@/firebase';
+import { useUser, useAuth, useFirestore, useCollection, useDoc, FirestorePermissionError, errorEmitter } from '@/firebase';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
@@ -106,7 +106,7 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
     
     const userResponse = useMemo(() => {
          return responsesForThisInstance.find(r => r.userId === user?.uid);
-    }, [responsesForThisInstance, user]);
+    }, [responsesForThisInstance, user?.uid]);
 
     const isRsvpVisible = useMemo(() => {
         if (!event.targetTeamIds || event.targetTeamIds.length === 0) {
@@ -375,7 +375,7 @@ function NextMatchDay() {
     }, [events, overrides, eventTitles]);
 
     const responsesQuery = useMemo(() => {
-        if (!firestore || isUserLoading) { 
+        if (!firestore || isUserLoading || !userData) { 
             return null;
         }
         const teamIds = userData?.teamIds;
@@ -514,7 +514,7 @@ function UpcomingEvents() {
     }, [events, overrides, userData, eventTitles]);
 
     const responsesQuery = useMemo(() => {
-        if (!firestore || isUserLoading) {
+        if (!firestore || isUserLoading || !userData) {
             return null;
         }
         const teamIds = userData?.teamIds;
@@ -660,3 +660,5 @@ export default function Home() {
     </div>
   );
 }
+
+    
