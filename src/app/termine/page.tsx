@@ -60,6 +60,7 @@ interface EventOverride {
   eventId: string;
   originalDate: Timestamp;
   isCancelled?: boolean;
+  cancellationReason?: string;
   titleId?: string;
   date?: Timestamp;
   endTime?: Timestamp;
@@ -75,6 +76,7 @@ interface EventOverride {
 interface DisplayEvent extends Event {
   displayDate: Date;
   isCancelled?: boolean;
+  cancellationReason?: string;
 }
 
 
@@ -84,6 +86,7 @@ interface EventResponse {
     userId: string;
     eventDate: Timestamp;
     status: 'attending' | 'declined' | 'uncertain';
+    reason?: string;
     respondedAt: Timestamp;
 }
 
@@ -146,6 +149,7 @@ const eventSchema = z.object({
   locationId: z.string().optional(),
   meetingPoint: z.string().optional(),
   description: z.string().optional(),
+  cancellationReason: z.string().optional(),
 }).superRefine((data, ctx) => {
     // 1. Endzeitpunkt muss nach Startzeitpunkt liegen
     if (data.date && (data.endTime || data.endDate)) {
@@ -619,7 +623,7 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
             }
 
         } else {
-            const finalData = {
+             const finalData = {
                 ...dataToSave,
                 createdBy: event?.createdBy || user.uid,
                 createdAt: event?.createdAt || serverTimestamp(),
@@ -972,29 +976,20 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
   );
 }
 
-const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, onReactivate, eventTitles, locations, canEdit, currentUserTeamIds }: { event: DisplayEvent; allUsers: GroupMember[]; teams: Team[], onEdit: (event: DisplayEvent) => void; onDelete: (event: DisplayEvent) => void; onCancel: (event: DisplayEvent) => void; onReactivate: (event: DisplayEvent) => void; eventTitles: EventTitle[], locations: Location[], canEdit: boolean, currentUserTeamIds: string[] }) => {
+const EventCard = ({ event, allUsers, teams, responses, onEdit, onDelete, onCancel, onReactivate, eventTitles, locations, canEdit, currentUserTeamIds }: { event: DisplayEvent; allUsers: GroupMember[]; teams: Team[]; responses: EventResponse[] | null, onEdit: (event: DisplayEvent) => void; onDelete: (event: DisplayEvent) => void; onCancel: (event: DisplayEvent) => void; onReactivate: (event: DisplayEvent) => void; eventTitles: EventTitle[], locations: Location[], canEdit: boolean, currentUserTeamIds: string[] }) => {
     const { user } = useUser();
     const firestore = useFirestore();
     const {toast} = useToast();
+    const [isDeclineDialogOpen, setIsDeclineDialogOpen] = useState(false);
+    const [declineReason, setDeclineReason] = useState('');
     const location = locations.find(l => l.id === event.locationId);
     
-    const responsesQuery = useMemo(() => {
-        if (!firestore) return null;
-        return query(collection(firestore, 'event_responses'), where('eventId', '==', event.id));
-    }, [firestore, event.id]);
-    
-    const { data: allResponses, isLoading: responsesLoading, error } = useCollection<EventResponse>(responsesQuery);
-    
     const responsesForThisInstance = useMemo(() => {
-        if (!allResponses) return [];
-        return allResponses.filter(r => 
+        if (!responses) return [];
+        return responses.filter(r => 
             r.eventDate && isSameDay(r.eventDate.toDate(), event.displayDate)
         );
-    }, [allResponses, event.displayDate]);
-    
-    if (error) {
-        console.error("Error fetching responses:", error);
-    }
+    }, [responses, event.displayDate]);
     
     const userResponse = useMemo(() => {
          return responsesForThisInstance?.find(r => r.userId === user?.uid);
@@ -1083,8 +1078,8 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, onReact
     const decliners = useMemo(() => {
         return (responsesForThisInstance || [])
             .filter(r => r.status === 'declined')
-            .map(r => getResponderName(r.userId))
-            .sort();
+            .map(r => ({ name: getResponderName(r.userId), reason: r.reason }))
+            .sort((a,b) => a.name.localeCompare(b.name));
     }, [responsesForThisInstance, allUsers]);
     
     const uncertains = useMemo(() => {
@@ -1094,12 +1089,17 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, onReact
             .sort();
     }, [responsesForThisInstance, allUsers]);
 
-    const handleRsvp = (status: 'attending' | 'declined' | 'uncertain') => {
+    const handleRsvp = (status: 'attending' | 'declined' | 'uncertain', reason?: string) => {
         if (!user || !firestore || event.isCancelled) return;
+        
+        if (status === 'declined' && reason === undefined) {
+            setIsDeclineDialogOpen(true);
+            return;
+        }
 
         const responseCollectionRef = collection(firestore, 'event_responses');
         
-        if (userResponse && userResponse.status === status) {
+        if (userResponse && userResponse.status === status && status !== 'declined') {
             const responseRef = doc(responseCollectionRef, userResponse.id);
             deleteDoc(responseRef)
                 .catch(serverError => {
@@ -1121,6 +1121,7 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, onReact
             respondedAt: serverTimestamp(),
             eventDate: eventDateAsTimestamp,
             eventId: event.id,
+            reason: status === 'declined' ? reason : '',
         };
         
         const responseRef = doc(responseCollectionRef, responseDocId);
@@ -1134,6 +1135,11 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, onReact
                 });
                 errorEmitter.emit('permission-error', permissionError);
             });
+        
+        if (isDeclineDialogOpen) {
+            setIsDeclineDialogOpen(false);
+            setDeclineReason('');
+        }
     };
 
     const isRecurring = event.recurrence && event.recurrence !== 'none';
@@ -1165,7 +1171,7 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, onReact
                                             <AlertDialogHeader>
                                                 <AlertDialogTitle>Nur diesen Termin absagen?</AlertDialogTitle>
                                                 <AlertDialogDescription>
-                                                    Diese Aktion kann nicht rückgängig gemacht werden. Dadurch wird nur dieser eine Termin am {format(event.displayDate, "dd.MM.yyyy")} abgesagt. Die Serie bleibt bestehen.
+                                                    Möchten Sie nur diesen einen Termin am {format(event.displayDate, "dd.MM.yyyy")} absagen? Die Serie bleibt bestehen.
                                                 </AlertDialogDescription>
                                             </AlertDialogHeader>
                                             <AlertDialogFooter>
@@ -1226,6 +1232,9 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, onReact
                         </Badge>
                     )}
                 </div>
+                {event.isCancelled && event.cancellationReason && (
+                    <p className="text-destructive text-sm mt-2 font-semibold">Grund: {event.cancellationReason}</p>
+                )}
             </CardHeader>
             {(event.description || event.meetingPoint) && !event.isCancelled && (
                 <CardContent className="space-y-2">
@@ -1237,18 +1246,16 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, onReact
                 <CardFooter className="flex-col sm:flex-row items-start sm:items-center sm:justify-between gap-4">
                     <Popover>
                         <PopoverTrigger asChild>
-                            <Button variant="link" className="p-0 h-auto text-muted-foreground" disabled={responsesLoading || (attendingCount === 0 && declinedCount === 0 && uncertainCount === 0)}>
-                                {responsesLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Users className="h-4 w-4 mr-2" />}
-                                { error ? <span className="text-destructive">Fehler beim Laden</span> : 
+                            <Button variant="link" className="p-0 h-auto text-muted-foreground" disabled={!responses || (attendingCount === 0 && declinedCount === 0 && uncertainCount === 0)}>
+                                {!responses ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Users className="h-4 w-4 mr-2" />}
                                     <span className="flex gap-2">
                                         <span className="text-green-600">{attendingCount} Zusagen</span>
                                         <span className="text-red-600">{declinedCount} Absagen</span>
                                         {uncertainCount > 0 && <span className="text-yellow-600">{uncertainCount} Unsicher</span>}
                                     </span>
-                                }
                             </Button>
                         </PopoverTrigger>
-                        <PopoverContent className="w-64">
+                        <PopoverContent className="w-80">
                             <div className="space-y-4">
                                 <div>
                                     <h4 className="font-semibold text-sm mb-2">Zusagen ({attendees.length})</h4>
@@ -1270,7 +1277,7 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, onReact
                                     <h4 className="font-semibold text-sm mb-2">Absagen ({decliners.length})</h4>
                                     {decliners.length > 0 ? (
                                         <ul className="list-disc list-inside text-sm space-y-1">
-                                            {decliners.map((name, i) => <li key={i}>{name}</li>)}
+                                            {decliners.map((item, i) => <li key={i}>{item.name} {item.reason && `(${item.reason})`}</li>)}
                                         </ul>
                                     ) : <p className="text-xs text-muted-foreground">Noch keine Absagen.</p>}
                                 </div>
@@ -1297,14 +1304,39 @@ const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, onReact
                             <HelpCircle className="mr-2 h-4 w-4" />
                             Unsicher
                         </Button>
-                        <Button 
-                            size="sm"
-                            variant={userResponse?.status === 'declined' ? 'destructive' : 'outline'}
-                            onClick={() => handleRsvp('declined')}
-                        >
-                            <XIcon className="mr-2 h-4 w-4" />
-                            Absagen
-                        </Button>
+                         <Dialog open={isDeclineDialogOpen} onOpenChange={setIsDeclineDialogOpen}>
+                            <DialogTrigger asChild>
+                                <Button 
+                                    size="sm"
+                                    variant={userResponse?.status === 'declined' ? 'destructive' : 'outline'}
+                                    onClick={() => handleRsvp('declined')}
+                                >
+                                    <XIcon className="mr-2 h-4 w-4" />
+                                    Absagen
+                                </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                                <DialogHeader>
+                                    <DialogTitle>Grund für die Absage</DialogTitle>
+                                    <DialogDescription>
+                                        Bitte gib einen Grund für deine Absage an. Dies hilft den Trainern bei der Planung.
+                                    </DialogDescription>
+                                </DialogHeader>
+                                <Textarea
+                                    value={declineReason}
+                                    onChange={(e) => setDeclineReason(e.target.value)}
+                                    placeholder="z.B. Krank, Urlaub, etc."
+                                />
+                                <DialogFooter>
+                                    <DialogClose asChild>
+                                        <Button variant="outline">Abbrechen</Button>
+                                    </DialogClose>
+                                    <Button variant="destructive" onClick={() => handleRsvp('declined', declineReason)}>
+                                        Absage bestätigen
+                                    </Button>
+                                </DialogFooter>
+                            </DialogContent>
+                        </Dialog>
                     </div>}
                 </CardFooter>
              )}
@@ -1317,6 +1349,8 @@ export default function TerminePage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<DisplayEvent | undefined>(undefined);
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [cancellationReason, setCancellationReason] = useState("");
+  const [eventToCancel, setEventToCancel] = useState<DisplayEvent | null>(null);
   
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>(() => {
     if (typeof window !== 'undefined') {
@@ -1352,9 +1386,9 @@ export default function TerminePage() {
   }, [selectedTitleIds]);
 
   const userDocRef = useMemo(() => {
-    if (!firestore || !user) return null;
+    if (!firestore || !user?.uid) return null;
     return doc(firestore, 'users', user.uid);
-  }, [firestore, user]);
+  }, [firestore, user?.uid]);
   const { data: userData, isLoading: isUserLoading } = useDoc<UserData>(userDocRef);
 
   const canEditEvents = userData?.adminRechte;
@@ -1365,13 +1399,6 @@ export default function TerminePage() {
   }, [firestore]);
   
   const { data: eventsData, isLoading: eventsLoading, error } = useCollection<Event>(eventsQuery);
-  const [localEvents, setLocalEvents] = useState<Event[] | null>(null);
-
-  useEffect(() => {
-    if (eventsData) {
-      setLocalEvents(eventsData);
-    }
-  }, [eventsData]);
 
   const eventOverridesQuery = useMemo(() => {
     if (!firestore) return null;
@@ -1409,131 +1436,27 @@ export default function TerminePage() {
   const { data: locations, isLoading: locationsLoading } = useCollection<Location>(locationsQuery);
   const { data: eventTitles, isLoading: eventTitlesLoading } = useCollection<EventTitle>(eventTitlesQuery);
   const { data: overridesData, isLoading: overridesLoading } = useCollection<EventOverride>(eventOverridesQuery);
-
   
-  const isLoading = isUserLoading || eventsLoading || categoriesLoading || teamsLoading || usersLoading || locationsLoading || eventTitlesLoading || overridesLoading;
-
-  
-  const groupedTeams = useMemo(() => {
-    if (!categories || !teams) return [];
-    return categories.map(category => ({
-      ...category,
-      teams: teams.filter(team => team.categoryId === category.id).sort((a,b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
-    }));
-  }, [categories, teams]);
-  
- const eventsForWeek = useMemo(() => {
-    const weeklyEventsMap = new Map<string, DisplayEvent[]>();
-    if (!localEvents || !overridesData) return weeklyEventsMap;
-  
-    const interval = { start: startOfDay(currentWeekStart), end: add(startOfDay(currentWeekEnd), { days: 1 }) };
-  
-    // 1. Create a set of overridden instance keys for quick lookup.
-    // An instance is a specific occurrence of a recurring event on a particular day.
-    const overriddenInstanceKeys = new Set<string>();
-    overridesData.forEach(override => {
-      const key = `${override.eventId}_${format(override.originalDate.toDate(), 'yyyy-MM-dd')}`;
-      overriddenInstanceKeys.add(key);
-    });
-  
-    // 2. Process all overrides. Add them to the map if they fall within the week.
-    for (const override of overridesData) {
-      const originalEvent = localEvents.find(e => e.id === override.eventId);
-      if (!originalEvent) continue;
-  
-      // Apply filters to the override
-      const finalTargetTeams = override.targetTeamIds || originalEvent.targetTeamIds;
-      const finalTitleId = override.titleId || originalEvent.titleId;
-      if (selectedTeamIds.length > 0 && !(finalTargetTeams || []).some(id => selectedTeamIds.includes(id))) continue;
-      if (selectedTitleIds.length > 0 && !selectedTitleIds.includes(finalTitleId)) continue;
-  
-      const displayDate = override.date?.toDate() || override.originalDate.toDate();
-  
-      if (isWithinInterval(displayDate, interval)) {
-        const dayKey = format(displayDate, 'yyyy-MM-dd');
-        if (!weeklyEventsMap.has(dayKey)) weeklyEventsMap.set(dayKey, []);
-        
-        const eventWithOverride: DisplayEvent = {
-          ...originalEvent,
-          ...(override as Partial<Event>),
-          id: originalEvent.id, // Ensure original event ID is preserved
-          displayDate: displayDate,
-        };
-        weeklyEventsMap.get(dayKey)!.push(eventWithOverride);
-      }
+  const responsesQuery = useMemo(() => {
+    if (!firestore || isUserLoading) {
+        return null;
     }
     
-    // 3. Process base events.
-    for (const event of localEvents) {
-      // Apply filters to the base event
-      if (selectedTeamIds.length > 0 && !(event.targetTeamIds || []).some(id => selectedTeamIds.includes(id))) continue;
-      if (selectedTitleIds.length > 0 && !selectedTitleIds.includes(event.titleId)) continue;
-  
-      // Handle non-recurring events
-      if (event.recurrence === 'none' || !event.recurrence) {
-        const originalDate = event.date.toDate();
-        const key = `${event.id}_${format(originalDate, 'yyyy-MM-dd')}`;
-        if (isWithinInterval(originalDate, interval) && !overriddenInstanceKeys.has(key)) {
-          const dayKey = format(originalDate, 'yyyy-MM-dd');
-          if (!weeklyEventsMap.has(dayKey)) weeklyEventsMap.set(dayKey, []);
-          weeklyEventsMap.get(dayKey)!.push({ ...event, displayDate: originalDate });
-        }
-        continue;
-      }
-  
-      // Handle recurring events
-      let currentDate = event.date.toDate();
-      const recurrenceEndDate = event.recurrenceEndDate?.toDate();
-  
-      // Performance optimization: Fast-forward to a point before the current week
-      if (currentDate < interval.start) {
-        if (event.recurrence === 'weekly' || event.recurrence === 'biweekly') {
-          const weeksDiff = Math.floor((interval.start.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24 * 7));
-          const step = event.recurrence === 'weekly' ? 1 : 2;
-          currentDate = addWeeks(currentDate, Math.floor(weeksDiff / step) * step);
-        } else if (event.recurrence === 'monthly') {
-          const monthDiff = (interval.start.getFullYear() - currentDate.getFullYear()) * 12 + (interval.start.getMonth() - currentDate.getMonth());
-          if (monthDiff > 0) {
-            currentDate = add(currentDate, { months: monthDiff - 1 });
-          }
-        }
-      }
-  
-      let safety = 100;
-      while (currentDate < interval.end && safety > 0) {
-        if (recurrenceEndDate && currentDate > recurrenceEndDate) break;
-  
-        if (currentDate >= interval.start) {
-          const key = `${event.id}_${format(currentDate, 'yyyy-MM-dd')}`;
-          // Only add the recurring instance if it hasn't been overridden.
-          if (!overriddenInstanceKeys.has(key)) {
-            const dayKey = format(currentDate, 'yyyy-MM-dd');
-            if (!weeklyEventsMap.has(dayKey)) weeklyEventsMap.set(dayKey, []);
-            weeklyEventsMap.get(dayKey)!.push({ ...event, displayDate: currentDate });
-          }
-        }
-  
-        switch (event.recurrence) {
-          case 'weekly': currentDate = addWeeks(currentDate, 1); break;
-          case 'biweekly': currentDate = addWeeks(currentDate, 2); break;
-          case 'monthly': currentDate = add(currentDate, { months: 1 }); break;
-          default: safety = 0; break;
-        }
-        safety--;
-      }
+    if (userData === undefined) { // Still loading user data
+        return null;
     }
-  
-    // 4. Sort events within each day
-    weeklyEventsMap.forEach((dayEvents) => {
-      dayEvents.sort((a, b) => {
-        const timeA = a.isAllDay ? 0 : a.displayDate.getTime();
-        const timeB = b.isAllDay ? 0 : b.displayDate.getTime();
-        return timeA - timeB;
-      });
-    });
-  
-    return weeklyEventsMap;
-  }, [localEvents, overridesData, currentWeekStart, currentWeekEnd, selectedTeamIds, selectedTitleIds]);
+    
+    const teamIds = userData?.teamIds;
+    if (teamIds && teamIds.length > 0) {
+        return query(collection(firestore, 'event_responses'), where('teamId', 'in', teamIds));
+    }
+    
+    return collection(firestore, 'event_responses');
+  }, [firestore, userData, isUserLoading]);
+
+  const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
+    
+  const isLoadingCombined = isUserLoading || eventsLoading || categoriesLoading || teamsLoading || usersLoading || locationsLoading || eventTitlesLoading || overridesLoading || responsesLoading;
 
 
   const handleOpenForm = (event?: DisplayEvent) => {
@@ -1551,14 +1474,12 @@ export default function TerminePage() {
     if (!canEditEvents) return;
     const eventDocRef = doc(firestore, 'events', eventToDelete.id);
     
-    setLocalEvents(prev => prev ? prev.filter(e => e.id !== eventToDelete.id) : null);
 
     deleteDoc(eventDocRef)
       .then(() => {
         toast({ title: 'Terminserie gelöscht' });
       })
       .catch((err) => {
-        setLocalEvents(eventsData); 
         const permissionError = new FirestorePermissionError({
             path: eventDocRef.path,
             operation: 'delete',
@@ -1568,13 +1489,23 @@ export default function TerminePage() {
 };
 
 
-  const handleCancelSingleEvent = async (eventToCancel: DisplayEvent) => {
-    if (!firestore || !canEditEvents) return;
+  const handleCancelSingleEvent = async (reason?: string) => {
+    if (!firestore || !canEditEvents || !eventToCancel) return;
+    
+    if (reason === undefined) {
+      setEventToCancel(eventToCancel);
+      return;
+    }
+     if (!reason) {
+        toast({ variant: 'destructive', title: 'Grund erforderlich', description: 'Bitte geben Sie einen Grund für die Absage an.' });
+        return;
+    }
 
     const overrideData = {
         eventId: eventToCancel.id,
         originalDate: Timestamp.fromDate(startOfDay(eventToCancel.displayDate)),
         isCancelled: true,
+        cancellationReason: reason,
         updatedAt: serverTimestamp(),
     };
     
@@ -1586,12 +1517,14 @@ export default function TerminePage() {
     try {
         if(!querySnapshot.empty) {
             const existingOverrideId = querySnapshot.docs[0].id;
-            await updateDoc(doc(firestore, 'event_overrides', existingOverrideId), { isCancelled: true, updatedAt: serverTimestamp() });
+            await updateDoc(doc(firestore, 'event_overrides', existingOverrideId), { isCancelled: true, cancellationReason: reason, updatedAt: serverTimestamp() });
         } else {
             await addDoc(overridesRef, overrideData);
         }
         
         toast({ title: 'Termin abgesagt' });
+        setEventToCancel(null);
+        setCancellationReason("");
     } catch (serverError: any) {
         toast({
             variant: "destructive",
@@ -1611,7 +1544,7 @@ export default function TerminePage() {
     if (!querySnapshot.empty) {
         const existingOverrideId = querySnapshot.docs[0].id;
       try {
-        await updateDoc(doc(firestore, 'event_overrides', existingOverrideId), { isCancelled: false, updatedAt: serverTimestamp() });
+        await updateDoc(doc(firestore, 'event_overrides', existingOverrideId), { isCancelled: false, cancellationReason: null, updatedAt: serverTimestamp() });
         toast({ title: 'Termin reaktiviert' });
       } catch (serverError: any) {
         toast({
@@ -1628,9 +1561,113 @@ export default function TerminePage() {
   const goToNextWeek = () => setCurrentDate(add(currentDate, { weeks: 1 }));
   const goToToday = () => setCurrentDate(new Date());
 
+  const eventsForWeek = useMemo(() => {
+    const weeklyEventsMap = new Map<string, DisplayEvent[]>();
+    if (!eventsData || !overridesData) return weeklyEventsMap;
+  
+    const interval = { start: startOfDay(currentWeekStart), end: add(startOfDay(currentWeekEnd), { days: 1 }) };
+  
+    const overriddenInstanceKeys = new Set<string>();
+    overridesData.forEach(override => {
+      const key = `${override.eventId}_${format(override.originalDate.toDate(), 'yyyy-MM-dd')}`;
+      overriddenInstanceKeys.add(key);
+    });
+  
+    for (const override of overridesData) {
+      const originalEvent = eventsData.find(e => e.id === override.eventId);
+      if (!originalEvent) continue;
+  
+      const finalTargetTeams = override.targetTeamIds || originalEvent.targetTeamIds;
+      const finalTitleId = override.titleId || originalEvent.titleId;
+      if (selectedTeamIds.length > 0 && !(finalTargetTeams || []).some(id => selectedTeamIds.includes(id))) continue;
+      if (selectedTitleIds.length > 0 && !selectedTitleIds.includes(finalTitleId)) continue;
+  
+      const displayDate = override.date?.toDate() || override.originalDate.toDate();
+  
+      if (isWithinInterval(displayDate, interval)) {
+        const dayKey = format(displayDate, 'yyyy-MM-dd');
+        if (!weeklyEventsMap.has(dayKey)) weeklyEventsMap.set(dayKey, []);
+        
+        const eventWithOverride: DisplayEvent = {
+          ...originalEvent,
+          ...(override as Partial<Event>),
+          id: originalEvent.id, 
+          displayDate: displayDate,
+          isCancelled: override.isCancelled,
+          cancellationReason: override.cancellationReason,
+        };
+        weeklyEventsMap.get(dayKey)!.push(eventWithOverride);
+      }
+    }
+    
+    for (const event of eventsData) {
+      if (selectedTeamIds.length > 0 && !(event.targetTeamIds || []).some(id => selectedTeamIds.includes(id))) continue;
+      if (selectedTitleIds.length > 0 && !selectedTitleIds.includes(event.titleId)) continue;
+  
+      if (event.recurrence === 'none' || !event.recurrence) {
+        const originalDate = event.date.toDate();
+        const key = `${event.id}_${format(originalDate, 'yyyy-MM-dd')}`;
+        if (isWithinInterval(originalDate, interval) && !overriddenInstanceKeys.has(key)) {
+          const dayKey = format(originalDate, 'yyyy-MM-dd');
+          if (!weeklyEventsMap.has(dayKey)) weeklyEventsMap.set(dayKey, []);
+          weeklyEventsMap.get(dayKey)!.push({ ...event, displayDate: originalDate });
+        }
+        continue;
+      }
+  
+      let currentDate = event.date.toDate();
+      const recurrenceEndDate = event.recurrenceEndDate?.toDate();
+  
+      if (currentDate < interval.start) {
+        if (event.recurrence === 'weekly' || event.recurrence === 'biweekly') {
+          const weeksDiff = Math.floor((interval.start.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24 * 7));
+          const step = event.recurrence === 'weekly' ? 1 : 2;
+          currentDate = addWeeks(currentDate, Math.floor(weeksDiff / step) * step);
+        } else if (event.recurrence === 'monthly') {
+          const monthDiff = (interval.start.getFullYear() - currentDate.getFullYear()) * 12 + (interval.start.getMonth() - currentDate.getMonth());
+          if (monthDiff > 0) {
+            currentDate = add(currentDate, { months: monthDiff - 1 });
+          }
+        }
+      }
+  
+      let safety = 100;
+      while (currentDate < interval.end && safety > 0) {
+        if (recurrenceEndDate && currentDate > recurrenceEndDate) break;
+  
+        if (currentDate >= interval.start) {
+          const key = `${event.id}_${format(currentDate, 'yyyy-MM-dd')}`;
+          if (!overriddenInstanceKeys.has(key)) {
+            const dayKey = format(currentDate, 'yyyy-MM-dd');
+            if (!weeklyEventsMap.has(dayKey)) weeklyEventsMap.set(dayKey, []);
+            weeklyEventsMap.get(dayKey)!.push({ ...event, displayDate: currentDate });
+          }
+        }
+  
+        switch (event.recurrence) {
+          case 'weekly': currentDate = addWeeks(currentDate, 1); break;
+          case 'biweekly': currentDate = addWeeks(currentDate, 2); break;
+          case 'monthly': currentDate = add(currentDate, { months: 1 }); break;
+          default: safety = 0; break;
+        }
+        safety--;
+      }
+    }
+  
+    weeklyEventsMap.forEach((dayEvents) => {
+      dayEvents.sort((a, b) => {
+        const timeA = a.isAllDay ? 0 : a.displayDate.getTime();
+        const timeB = b.isAllDay ? 0 : b.displayDate.getTime();
+        return timeA - timeB;
+      });
+    });
+  
+    return weeklyEventsMap;
+  }, [eventsData, overridesData, currentWeekStart, currentWeekEnd, selectedTeamIds, selectedTitleIds]);
+
 
   const renderContent = () => {
-    if (isLoading) {
+    if (isLoadingCombined) {
       return (
         <div className="flex justify-center items-center py-10">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -1661,9 +1698,10 @@ export default function TerminePage() {
                                         event={event}
                                         allUsers={allUsers || []}
                                         teams={teams || []}
+                                        responses={responses?.filter(r => r.eventId === event.id) || null}
                                         onEdit={handleOpenForm}
                                         onDelete={handleDelete}
-                                        onCancel={handleCancelSingleEvent}
+                                        onCancel={() => setEventToCancel(event)}
                                         onReactivate={handleReactivateSingleEvent}
                                         eventTitles={eventTitles || []}
                                         locations={locations || []}
@@ -1681,6 +1719,14 @@ export default function TerminePage() {
         </div>
     );
   };
+
+  const groupedTeams = useMemo(() => {
+    if (!categories || !teams) return [];
+    return categories.map(category => ({
+      ...category,
+      teams: teams.filter(team => team.categoryId === category.id).sort((a,b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
+    }));
+  }, [categories, teams]);
 
   return (
     <div className="flex min-h-screen w-full flex-col bg-background">
@@ -1711,7 +1757,7 @@ export default function TerminePage() {
                         <CardTitle>Filter</CardTitle>
                     </CardHeader>
                     <CardContent>
-                       {isLoading ? <Loader2 className="animate-spin" /> : (
+                       {isLoadingCombined ? <Loader2 className="animate-spin" /> : (
                          <Accordion type="multiple" className="w-full" defaultValue={['teams', 'titles']}>
                             <AccordionItem value="teams">
                                 <AccordionTrigger>Mannschaften</AccordionTrigger>
@@ -1775,13 +1821,43 @@ export default function TerminePage() {
 
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-          {isLoading ? (
+          {isLoadingCombined ? (
              <div className="flex items-center justify-center p-8"><Loader2 className="h-8 w-8 animate-spin text-primary"/></div>
           ) : (
              <EventForm onDone={handleFormDone} event={selectedEvent} categories={categories || []} teams={teams || []} canEdit={!!canEditEvents} eventTitles={eventTitles || []} locations={locations || []} />
           )}
         </DialogContent>
       </Dialog>
+      
+      <AlertDialog open={!!eventToCancel} onOpenChange={(open) => {if(!open) setEventToCancel(null)}}>
+        <AlertDialogContent>
+            <AlertDialogHeader>
+                <AlertDialogTitle>Termin absagen</AlertDialogTitle>
+                <AlertDialogDescription>
+                    Bitte geben Sie einen Grund für die Absage des Termins am {eventToCancel ? format(eventToCancel.displayDate, 'dd.MM.yyyy') : ''} an.
+                </AlertDialogDescription>
+            </AlertDialogHeader>
+            <Textarea
+                placeholder="z.B. Halle gesperrt"
+                value={cancellationReason}
+                onChange={(e) => setCancellationReason(e.target.value)}
+            />
+            <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setCancellationReason("")}>Abbrechen</AlertDialogCancel>
+                <AlertDialogAction onClick={() => handleCancelSingleEvent(cancellationReason)} disabled={!cancellationReason}>
+                    Absage bestätigen
+                </AlertDialogAction>
+            </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
+
+
+
+
+
+
+
+
