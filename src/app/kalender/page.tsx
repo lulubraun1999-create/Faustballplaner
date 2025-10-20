@@ -11,7 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -524,7 +524,7 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
     };
   };
 
-  const form = useForm<EventFormValues>({
+  const form = useForm<z.infer<typeof eventSchema>>({
     resolver: zodResolver(eventSchema),
     defaultValues: getInitialFormValues(),
   });
@@ -537,7 +537,7 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
     if (!categories || !teams) return [];
     return categories.map(category => ({
       ...category,
-      teams: teams.filter(team => team.categoryId === category.id).sort((a,b) => a.name.localeCompare(b.name))
+      teams: teams.filter(team => team.categoryId === category.id).sort((a,b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
     }));
   }, [categories, teams]);
 
@@ -1852,14 +1852,3 @@ export default function TerminePage() {
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
-    
