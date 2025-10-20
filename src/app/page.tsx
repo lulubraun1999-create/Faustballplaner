@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Newspaper, CalendarDays, Users, Loader2, Clock, MapPin, User as UserIcon } from 'lucide-react';
 import { Header } from '@/components/header';
 import Link from 'next/link';
-import { collection, query, where, Timestamp, orderBy, doc, setDoc, serverTimestamp, deleteDoc, FieldValue, addDoc } from 'firebase/firestore';
+import { collection, query, where, Timestamp, orderBy, doc, setDoc, serverTimestamp, deleteDoc, FieldValue, addDoc, updateDoc } from 'firebase/firestore';
 import { format, isSameDay, add, isFuture, addWeeks, addMonths, differenceInDays, startOfDay } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -149,7 +149,7 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
             return;
         }
 
-        const data = {
+        const data: Omit<EventResponse, 'id'| 'respondedAt' > & { respondedAt: any, teamId: string } = {
             userId: user.uid,
             status: status,
             respondedAt: serverTimestamp(),
