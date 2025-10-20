@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -976,24 +975,31 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
   );
 }
 
-const EventCard = ({ event, allUsers, teams, responses, onEdit, onDelete, onCancel, onReactivate, eventTitles, locations, canEdit, currentUserTeamIds }: { event: DisplayEvent; allUsers: GroupMember[]; teams: Team[]; responses: EventResponse[] | null, onEdit: (event: DisplayEvent) => void; onDelete: (event: DisplayEvent) => void; onCancel: (event: DisplayEvent) => void; onReactivate: (event: DisplayEvent) => void; eventTitles: EventTitle[], locations: Location[], canEdit: boolean, currentUserTeamIds: string[] }) => {
+const EventCard = ({ event, allUsers, teams, onEdit, onDelete, onCancel, onReactivate, eventTitles, locations, canEdit, currentUserTeamIds }: { event: DisplayEvent; allUsers: GroupMember[]; teams: Team[]; onEdit: (event: DisplayEvent) => void; onDelete: (event: DisplayEvent) => void; onCancel: (event: DisplayEvent) => void; onReactivate: (event: DisplayEvent) => void; eventTitles: EventTitle[], locations: Location[], canEdit: boolean, currentUserTeamIds: string[] }) => {
     const { user } = useUser();
     const firestore = useFirestore();
     const {toast} = useToast();
     const [isDeclineDialogOpen, setIsDeclineDialogOpen] = useState(false);
     const [declineReason, setDeclineReason] = useState('');
     const location = locations.find(l => l.id === event.locationId);
+
+    const eventDateIdentifier = format(event.displayDate, 'yyyy-MM-dd');
+    const userResponseRef = useMemo(() => {
+        if (!firestore || !user?.uid) return null;
+        // Construct a predictable ID for the response document
+        const responseId = `${event.id}_${eventDateIdentifier}_${user.uid}`;
+        return doc(firestore, 'event_responses', responseId);
+    }, [firestore, user?.uid, event.id, eventDateIdentifier]);
     
-    const responsesForThisInstance = useMemo(() => {
-        if (!responses) return [];
-        return responses.filter(r => 
-            r.eventDate && isSameDay(r.eventDate.toDate(), event.displayDate)
-        );
-    }, [responses, event.displayDate]);
+    const { data: userResponse, isLoading: isUserResponseLoading } = useDoc<EventResponse>(userResponseRef);
     
-    const userResponse = useMemo(() => {
-         return responsesForThisInstance?.find(r => r.userId === user?.uid);
-    }, [responsesForThisInstance, user]);
+    const responsesQuery = useMemo(() => {
+        if (!firestore) return null;
+        return query(collection(firestore, 'event_responses'), where('eventId', '==', event.id), where('eventDate', '==', Timestamp.fromDate(startOfDay(event.displayDate))));
+    }, [firestore, event.id, event.displayDate]);
+    
+    const { data: responsesForThisInstance, isLoading: areResponsesLoading } = useCollection<EventResponse>(responsesQuery);
+    
 
     const isRsvpVisible = useMemo(() => {
         if (!event.targetTeamIds || event.targetTeamIds.length === 0) {
@@ -1090,21 +1096,18 @@ const EventCard = ({ event, allUsers, teams, responses, onEdit, onDelete, onCanc
     }, [responsesForThisInstance, allUsers]);
 
     const handleRsvp = (status: 'attending' | 'declined' | 'uncertain', reason?: string) => {
-        if (!user || !firestore || event.isCancelled) return;
+        if (!user || !firestore || !userResponseRef || event.isCancelled) return;
         
         if (status === 'declined' && reason === undefined) {
             setIsDeclineDialogOpen(true);
             return;
         }
-
-        const responseCollectionRef = collection(firestore, 'event_responses');
         
         if (userResponse && userResponse.status === status && status !== 'declined') {
-            const responseRef = doc(responseCollectionRef, userResponse.id);
-            deleteDoc(responseRef)
+            deleteDoc(userResponseRef)
                 .catch(serverError => {
                     const permissionError = new FirestorePermissionError({
-                        path: responseRef.path,
+                        path: userResponseRef.path,
                         operation: 'delete',
                     });
                     errorEmitter.emit('permission-error', permissionError);
@@ -1113,9 +1116,8 @@ const EventCard = ({ event, allUsers, teams, responses, onEdit, onDelete, onCanc
         }
 
         const eventDateAsTimestamp = Timestamp.fromDate(startOfDay(event.displayDate));
-        const responseDocId = userResponse?.id || doc(responseCollectionRef).id;
         
-        const data: Omit<EventResponse, 'id'| 'respondedAt' > & { respondedAt: any } = {
+        const data: Omit<EventResponse, 'id'> & { respondedAt: FieldValue } = {
             userId: user.uid,
             status: status,
             respondedAt: serverTimestamp(),
@@ -1125,12 +1127,10 @@ const EventCard = ({ event, allUsers, teams, responses, onEdit, onDelete, onCanc
             teamId: event.targetTeamIds && event.targetTeamIds.length > 0 ? event.targetTeamIds[0] : 'public'
         };
         
-        const responseRef = doc(responseCollectionRef, responseDocId);
-
-        setDoc(responseRef, data, { merge: true })
+        setDoc(userResponseRef, data, { merge: true })
             .catch(serverError => {
                 const permissionError = new FirestorePermissionError({
-                    path: `event_responses/${responseDocId}`,
+                    path: userResponseRef.path,
                     operation: 'write',
                     requestResourceData: data,
                 });
@@ -1247,8 +1247,8 @@ const EventCard = ({ event, allUsers, teams, responses, onEdit, onDelete, onCanc
                 <CardFooter className="flex-col sm:flex-row items-start sm:items-center sm:justify-between gap-4">
                     <Popover>
                         <PopoverTrigger asChild>
-                            <Button variant="link" className="p-0 h-auto text-muted-foreground" disabled={!responses || (attendingCount === 0 && declinedCount === 0 && uncertainCount === 0)}>
-                                {!responses ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Users className="h-4 w-4 mr-2" />}
+                            <Button variant="link" className="p-0 h-auto text-muted-foreground" disabled={!responsesForThisInstance || (attendingCount === 0 && declinedCount === 0 && uncertainCount === 0)}>
+                                {!responsesForThisInstance ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Users className="h-4 w-4 mr-2" />}
                                     <span className="flex gap-2">
                                         <span className="text-green-600">{attendingCount} Zusagen</span>
                                         <span className="text-red-600">{declinedCount} Absagen</span>
@@ -1433,21 +1433,8 @@ export default function KalenderPage() {
   const { data: locations, isLoading: locationsLoading } = useCollection<Location>(locationsQuery);
   const { data: eventTitles, isLoading: eventTitlesLoading } = useCollection<EventTitle>(eventTitlesQuery);
   const { data: overridesData, isLoading: overridesLoading } = useCollection<EventOverride>(eventOverridesQuery);
-  
-  const responsesQuery = useMemo(() => {
-    if (!firestore || isUserLoading || isUserDataLoading || !userData) {
-        return null;
-    }
-    const teamIds = userData?.teamIds;
-    if (teamIds && teamIds.length > 0) {
-        return query(collection(firestore, 'event_responses'), where('teamId', 'in', teamIds));
-    }
-    return query(collection(firestore, 'event_responses'), where('userId', '==', user?.uid));
-  }, [firestore, userData, isUserLoading, isUserDataLoading, user?.uid]);
-
-  const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
     
-  const isLoadingCombined = isUserLoading || isUserDataLoading || eventsLoading || categoriesLoading || teamsLoading || usersLoading || locationsLoading || eventTitlesLoading || overridesLoading || responsesLoading;
+  const isLoadingCombined = isUserLoading || isUserDataLoading || eventsLoading || categoriesLoading || teamsLoading || usersLoading || locationsLoading || eventTitlesLoading || overridesLoading;
 
 
   const handleOpenForm = (event?: DisplayEvent) => {
@@ -1719,7 +1706,6 @@ export default function KalenderPage() {
                                 event={event}
                                 allUsers={allUsers || []}
                                 teams={teams || []}
-                                responses={responses?.filter(r => r.eventId === event.id) || null}
                                 onEdit={handleOpenForm}
                                 onDelete={handleDelete}
                                 onCancel={() => setEventToCancel(event)}
@@ -1865,6 +1851,3 @@ export default function KalenderPage() {
     </div>
   );
 }
-
-
-    

@@ -1,23 +1,23 @@
 
-
 'use client';
 
-import { useUser, useAuth, useFirestore, useCollection, useDoc, errorEmitter, FirestorePermissionError } from '@/firebase';
+import { useUser, useAuth, useFirestore, useCollection, useDoc, errorEmitter } from '@/firebase';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Newspaper, CalendarDays, Users, Loader2, Clock, MapPin } from 'lucide-react';
+import { Newspaper, CalendarDays, Users, Loader2, Clock, MapPin, User as UserIcon } from 'lucide-react';
 import { Header } from '@/components/header';
 import Link from 'next/link';
-import { collection, query, where, Timestamp, orderBy, doc, setDoc, serverTimestamp, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, Timestamp, orderBy, doc, setDoc, serverTimestamp, deleteDoc, FieldValue } from 'firebase/firestore';
 import { format, isSameDay, add, isFuture, addWeeks, addMonths, differenceInDays, startOfDay } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Check, HelpCircle, XIcon } from 'lucide-react';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 // START: Data Interfaces
 interface Event {
@@ -87,22 +87,29 @@ interface UserData {
 
 
 // START: EventCard Component
-const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds, responses }: { event: DisplayEvent; allUsers: GroupMember[], locations: Location[], eventTitles: EventTitle[], currentUserTeamIds: string[], responses: EventResponse[] | null }) => {
+const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds }: { event: DisplayEvent; allUsers: GroupMember[], locations: Location[], eventTitles: EventTitle[], currentUserTeamIds: string[] }) => {
     const { user } = useUser();
     const firestore = useFirestore();
     const [isDeclineDialogOpen, setIsDeclineDialogOpen] = useState(false);
     const [declineReason, setDeclineReason] = useState('');
 
-    const responsesForThisInstance = useMemo(() => {
-        if (!responses) return [];
-        return responses.filter(r => 
-            r.eventDate && isSameDay(r.eventDate.toDate(), event.displayDate) && r.eventId === event.id
-        );
-    }, [responses, event.displayDate, event.id]);
+    const eventDateIdentifier = format(event.displayDate, 'yyyy-MM-dd');
+    const userResponseRef = useMemo(() => {
+        if (!firestore || !user?.uid) return null;
+        // Construct a predictable ID for the response document
+        const responseId = `${event.id}_${eventDateIdentifier}_${user.uid}`;
+        return doc(firestore, 'event_responses', responseId);
+    }, [firestore, user?.uid, event.id, eventDateIdentifier]);
+
+    const { data: userResponse, isLoading: isUserResponseLoading } = useDoc<EventResponse>(userResponseRef);
+
+    const responsesQuery = useMemo(() => {
+        if (!firestore) return null;
+        return query(collection(firestore, 'event_responses'), where('eventId', '==', event.id), where('eventDate', '==', Timestamp.fromDate(startOfDay(event.displayDate))));
+    }, [firestore, event.id, event.displayDate]);
     
-    const userResponse = useMemo(() => {
-         return responsesForThisInstance.find(r => r.userId === user?.uid);
-    }, [responsesForThisInstance, user?.uid]);
+    const { data: responsesForThisInstance, isLoading: areResponsesLoading } = useCollection<EventResponse>(responsesQuery);
+
 
     const isRsvpVisible = useMemo(() => {
         if (!event.targetTeamIds || event.targetTeamIds.length === 0) {
@@ -135,28 +142,24 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
         timeString = `${format(startDate, 'HH:mm')} Uhr`;
     }
 
-    const attendingCount = responsesForThisInstance.filter(r => r.status === 'attending').length || 0;
+    const attendingCount = responsesForThisInstance?.filter(r => r.status === 'attending').length || 0;
 
     const handleRsvp = (status: 'attending' | 'declined' | 'uncertain', reason?: string) => {
-        if (!user || !firestore) return;
+        if (!user || !firestore || !userResponseRef) return;
 
         if (status === 'declined' && reason === undefined) {
             setIsDeclineDialogOpen(true);
             return;
         }
         
-        const responseCollectionRef = collection(firestore, 'event_responses');
-        
         if (userResponse && userResponse.status === status && status !== 'declined') {
-            const responseRef = doc(responseCollectionRef, userResponse.id);
-            deleteDoc(responseRef).catch(console.error);
+            deleteDoc(userResponseRef).catch(console.error);
             return;
         }
         
         const eventDateAsTimestamp = Timestamp.fromDate(startOfDay(event.displayDate));
-        const responseDocId = userResponse?.id || doc(responseCollectionRef).id;
         
-        const data: Omit<EventResponse, 'id'| 'respondedAt'> & { respondedAt: any } = {
+        const data: Omit<EventResponse, 'id'> & { respondedAt: FieldValue } = {
             userId: user.uid,
             status: status,
             respondedAt: serverTimestamp(),
@@ -166,8 +169,7 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
             teamId: event.targetTeamIds && event.targetTeamIds.length > 0 ? event.targetTeamIds[0] : 'public'
         };
         
-        const responseRef = doc(responseCollectionRef, responseDocId);
-        setDoc(responseRef, data, { merge: true }).catch(console.error);
+        setDoc(userResponseRef, data, { merge: true }).catch(console.error);
 
         if (isDeclineDialogOpen) {
             setIsDeclineDialogOpen(false);
@@ -212,7 +214,7 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
                 <CardFooter className="flex-col sm:flex-row items-start sm:items-center sm:justify-between gap-4">
                  <div className="text-sm text-muted-foreground flex items-center gap-1.5">
                     <Users className="h-4 w-4" />
-                    {!responses ? <Loader2 className="h-4 w-4 animate-spin"/> : `${attendingCount} Zusagen`}
+                    {areResponsesLoading ? <Loader2 className="h-4 w-4 animate-spin"/> : `${attendingCount} Zusagen`}
                  </div>
 
                 {isRsvpVisible && <div className="flex items-center gap-2">
@@ -327,10 +329,22 @@ function NextMatchDay() {
 
             let currentDate = originalStartDate;
             const recurrenceEndDate = event.recurrenceEndDate?.toDate();
-            let limit = 100;
+            let limit = 100; 
             
             if(currentDate < now) {
-                currentDate = now;
+                 switch (event.recurrence) {
+                    case 'weekly':
+                         currentDate = addWeeks(currentDate, Math.ceil(differenceInDays(now, currentDate) / 7));
+                         break;
+                    case 'biweekly':
+                         currentDate = addWeeks(currentDate, Math.ceil(differenceInDays(now, currentDate) / 14) * 2);
+                         break;
+                    case 'monthly':
+                        let monthDiff = (now.getFullYear() - currentDate.getFullYear()) * 12 + now.getMonth() - currentDate.getMonth();
+                        if (now.getDate() > currentDate.getDate()) monthDiff++;
+                        currentDate = addMonths(currentDate, monthDiff);
+                         break;
+                }
             }
 
             while (currentDate < futureLimit && limit > 0) {
@@ -361,22 +375,7 @@ function NextMatchDay() {
 
     }, [events, overrides, eventTitles]);
 
-    const responsesQuery = useMemo(() => {
-        if (!firestore || isUserLoading || !userData) return null;
-
-        const userTeamIds = userData.teamIds || [];
-
-        if (userTeamIds.length > 0) {
-            return query(collection(firestore, 'event_responses'), where('teamId', 'in', userTeamIds));
-        }
-        // Fallback for users not in any team, might need adjustment based on desired logic
-        return query(collection(firestore, 'event_responses'), where('userId', '==', user?.uid));
-
-    }, [firestore, isUserLoading, userData, user?.uid]);
-    
-    const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
-
-    const isLoading = isUserLoading || eventsLoading || overridesLoading || locationsLoading || titlesLoading || usersLoading || responsesLoading;
+    const isLoading = isUserLoading || eventsLoading || overridesLoading || locationsLoading || titlesLoading || usersLoading;
 
     if (isLoading) {
         return (
@@ -400,7 +399,6 @@ function NextMatchDay() {
                     locations={locations || []}
                     eventTitles={eventTitles || []}
                     currentUserTeamIds={userData?.teamIds || []}
-                    responses={responses || null}
                 />
              </div>
         </div>
@@ -467,8 +465,20 @@ function UpcomingEvents() {
             }
 
             let currentDate = originalStartDate;
-            if(currentDate < now) {
-                currentDate = now;
+             if(currentDate < now) {
+                 switch (event.recurrence) {
+                    case 'weekly':
+                         currentDate = addWeeks(currentDate, Math.ceil(differenceInDays(now, currentDate) / 7));
+                         break;
+                    case 'biweekly':
+                         currentDate = addWeeks(currentDate, Math.ceil(differenceInDays(now, currentDate) / 14) * 2);
+                         break;
+                    case 'monthly':
+                        let monthDiff = (now.getFullYear() - currentDate.getFullYear()) * 12 + now.getMonth() - currentDate.getMonth();
+                        if (now.getDate() > currentDate.getDate()) monthDiff++;
+                        currentDate = addMonths(currentDate, monthDiff);
+                         break;
+                }
             }
             
             const recurrenceEndDate = event.recurrenceEndDate?.toDate();
@@ -502,22 +512,7 @@ function UpcomingEvents() {
 
     }, [events, overrides, userData, eventTitles]);
 
-    const responsesQuery = useMemo(() => {
-        if (!firestore || isUserLoading || !userData) return null;
-
-        const userTeamIds = userData.teamIds || [];
-
-        if (userTeamIds.length > 0) {
-            return query(collection(firestore, 'event_responses'), where('teamId', 'in', userTeamIds));
-        }
-        // Fallback for users not in any team
-        return query(collection(firestore, 'event_responses'), where('userId', '==', user?.uid));
-    }, [firestore, isUserLoading, userData, user?.uid]);
-
-
-    const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
-
-    const isLoading = isUserLoading || eventsLoading || overridesLoading || usersLoading || locationsLoading || titlesLoading || responsesLoading;
+    const isLoading = isUserLoading || eventsLoading || overridesLoading || usersLoading || locationsLoading || titlesLoading;
 
     if (isLoading) {
         return (
@@ -548,7 +543,6 @@ function UpcomingEvents() {
                     locations={locations || []}
                     eventTitles={eventTitles || []}
                     currentUserTeamIds={userData?.teamIds || []}
-                    responses={responses || null}
                 />
             ))}
         </div>
