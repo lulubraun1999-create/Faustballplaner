@@ -11,7 +11,7 @@ import { Newspaper, CalendarDays, Users, Loader2, Clock, MapPin } from 'lucide-r
 import { Header } from '@/components/header';
 import Link from 'next/link';
 import { collection, query, where, Timestamp, orderBy, doc, setDoc, serverTimestamp, deleteDoc } from 'firebase/firestore';
-import { format, isSameDay, add, isFuture, addWeeks, addMonths, differenceInDays } from 'date-fns';
+import { format, isSameDay, add, isFuture, addWeeks, addMonths, differenceInDays, startOfDay } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Textarea } from '@/components/ui/textarea';
@@ -644,3 +644,5 @@ export default function Home() {
     </div>
   );
 }
+
+    
