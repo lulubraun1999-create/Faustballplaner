@@ -1617,8 +1617,8 @@ export default function KalenderPage() {
         const key = `${event.id}_${format(currentDate, 'yyyy-MM-dd')}`;
         if (!overriddenInstanceKeys.has(key)) {
             const dayKey = format(currentDate, 'yyyy-MM-dd');
-            if (!monthlyEventsMap.has(dayKey)) monthlyEventsMap.set(dayKey, []);
-            monthlyEventsMap.get(dayKey)!.push({ ...event, displayDate: currentDate });
+            if (!monthlyEventsMap.has(dayKey)) weeklyEventsMap.set(dayKey, []);
+            weeklyEventsMap.get(dayKey)!.push({ ...event, displayDate: currentDate });
         }
   
         switch (event.recurrence) {
@@ -1703,23 +1703,26 @@ export default function KalenderPage() {
             </h2>
             {eventsOnSelectedDay.length > 0 ? (
                 <div className="space-y-4">
-                    {eventsOnSelectedDay.map(event => (
-                        <EventCard
-                            key={`${event.id}-${event.displayDate.toISOString()}`}
-                            event={event}
-                            allUsers={allUsers || []}
-                            teams={teams || []}
-                            responses={responses?.filter(r => r.eventId === event.id) || null}
-                            onEdit={handleOpenForm}
-                            onDelete={handleDelete}
-                            onCancel={() => setEventToCancel(event)}
-                            onReactivate={handleReactivateSingleEvent}
-                            eventTitles={eventTitles || []}
-                            locations={locations || []}
-                            canEdit={!!canEditEvents}
-                            currentUserTeamIds={userData?.teamIds || []}
-                        />
-                    ))}
+                    {eventsOnSelectedDay.map(event => {
+                        const userResponse = responses?.find(r => r.userId === user?.uid && r.eventId === event.id && isSameDay(r.eventDate.toDate(), event.displayDate));
+                        return (
+                            <EventCard
+                                key={`${event.id}-${event.displayDate.toISOString()}`}
+                                event={event}
+                                allUsers={allUsers || []}
+                                teams={teams || []}
+                                responses={responses?.filter(r => r.eventId === event.id) || null}
+                                onEdit={handleOpenForm}
+                                onDelete={handleDelete}
+                                onCancel={() => setEventToCancel(event)}
+                                onReactivate={handleReactivateSingleEvent}
+                                eventTitles={eventTitles || []}
+                                locations={locations || []}
+                                canEdit={!!canEditEvents}
+                                currentUserTeamIds={userData?.teamIds || []}
+                            />
+                        )
+                    })}
                 </div>
             ) : (
                 <p className="text-muted-foreground">Keine Termine für diesen Tag.</p>
