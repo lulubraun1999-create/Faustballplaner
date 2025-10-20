@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useUser, useAuth, useFirestore, useCollection, useDoc, errorEmitter, FirestorePermissionError } from '@/firebase';
@@ -359,11 +360,11 @@ function NextMatchDay() {
     }, [events, overrides, eventTitles]);
 
     const responsesQuery = useMemo(() => {
-        if (!firestore || isUserLoading || !userData?.teamIds) { 
+        if (!firestore || !user?.uid) { 
             return null;
         }
-        return query(collection(firestore, 'event_responses'), where('teamId', 'in', userData.teamIds));
-    }, [firestore, userData, isUserLoading]);
+        return collection(firestore, 'event_responses');
+    }, [firestore, user?.uid]);
     
     const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
 
@@ -494,12 +495,11 @@ function UpcomingEvents() {
     }, [events, overrides, userData, eventTitles]);
 
     const responsesQuery = useMemo(() => {
-        if (!firestore || isUserLoading || !userData) {
+        if (!firestore || !user?.uid) {
             return null;
         }
-        if(!userData.teamIds) return collection(firestore, 'event_responses');
-        return query(collection(firestore, 'event_responses'), where('teamId', 'in', userData.teamIds));
-    }, [firestore, userData, isUserLoading]);
+        return collection(firestore, 'event_responses');
+    }, [firestore, user?.uid]);
 
     const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
 

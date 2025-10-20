@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -1432,9 +1433,12 @@ export default function KalenderPage() {
   const { data: overridesData, isLoading: overridesLoading } = useCollection<EventOverride>(eventOverridesQuery);
   
   const responsesQuery = useMemo(() => {
-    if (!firestore || !userData?.teamIds) return null;
-    return query(collection(firestore, 'event_responses'), where('teamId', 'in', userData.teamIds));
-  }, [firestore, userData?.teamIds]);
+    if (!firestore || isUserLoading || isUserDataLoading || !userData) {
+        return null;
+    }
+    // Query all responses and filter on the client, as security rules will enforce access.
+    return collection(firestore, 'event_responses');
+  }, [firestore, userData, isUserLoading, isUserDataLoading]);
 
   const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
     
@@ -1617,8 +1621,8 @@ export default function KalenderPage() {
         const key = `${event.id}_${format(currentDate, 'yyyy-MM-dd')}`;
         if (!overriddenInstanceKeys.has(key)) {
             const dayKey = format(currentDate, 'yyyy-MM-dd');
-            if (!monthlyEventsMap.has(dayKey)) weeklyEventsMap.set(dayKey, []);
-            weeklyEventsMap.get(dayKey)!.push({ ...event, displayDate: currentDate });
+            if (!monthlyEventsMap.has(dayKey)) monthlyEventsMap.set(dayKey, []);
+            monthlyEventsMap.get(dayKey)!.push({ ...event, displayDate: currentDate });
         }
   
         switch (event.recurrence) {
