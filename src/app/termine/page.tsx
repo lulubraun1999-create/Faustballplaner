@@ -1,12 +1,12 @@
 
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, FC } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useFirestore, useUser, useCollection, useDoc, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { addDoc, collection, serverTimestamp, orderBy, query, Timestamp, doc, updateDoc, deleteDoc, setDoc, where, getDocs } from 'firebase/firestore';
+import { addDoc, collection, serverTimestamp, orderBy, query, Timestamp, doc, updateDoc, deleteDoc, setDoc, where, getDocs, FieldValue } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
@@ -621,7 +621,7 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
             }
 
         } else {
-            const finalData = {
+            let finalData: { [key: string]: any } = {
                 ...dataToSave,
                 createdBy: event?.createdBy || user.uid,
                 createdAt: event?.createdAt || serverTimestamp(),
@@ -635,7 +635,7 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
                     await updateDoc(oldEventRef, { recurrenceEndDate: Timestamp.fromDate(newRecurrenceEndDate) });
                     
                     const newSeriesStartDate = combineDateAndTime(event.displayDate, values.isAllDay ? undefined : values.startTime);
-                    finalData.date = Timestamp.fromDate(newSeriesStartDate);
+                    finalData = { ...finalData, date: Timestamp.fromDate(newSeriesStartDate) };
 
                     promise = addDoc(collection(firestore, 'events'), finalData);
                 } else { 
@@ -974,7 +974,21 @@ function EventForm({ onDone, event, categories, teams, canEdit, eventTitles, loc
   );
 }
 
-const EventCard = ({ event, allUsers, teams, responses, onEdit, onDelete, onCancel, onReactivate, eventTitles, locations, canEdit, currentUserTeamIds }: { event: DisplayEvent; allUsers: GroupMember[]; teams: Team[]; responses: EventResponse[] | null, onEdit: (event: DisplayEvent) => void; onDelete: (event: DisplayEvent) => void; onCancel: (event: DisplayEvent) => void; onReactivate: (event: DisplayEvent) => void; eventTitles: EventTitle[], locations: Location[], canEdit: boolean, currentUserTeamIds: string[] }) => {
+const EventCard: FC<{
+    event: DisplayEvent;
+    allUsers: GroupMember[];
+    teams: Team[];
+    responses: EventResponse[] | null;
+    onEdit: (event: DisplayEvent) => void;
+    onDelete: (event: DisplayEvent) => void;
+    onCancel: (event: DisplayEvent) => void;
+    onReactivate: (event: DisplayEvent) => void;
+    eventTitles: EventTitle[];
+    locations: Location[];
+    canEdit: boolean;
+    currentUserTeamIds: string[];
+    userResponse: EventResponse | undefined;
+}> = ({ event, allUsers, teams, responses, onEdit, onDelete, onCancel, onReactivate, eventTitles, locations, canEdit, currentUserTeamIds, userResponse }) => {
     const { user } = useUser();
     const firestore = useFirestore();
     const {toast} = useToast();
@@ -988,17 +1002,12 @@ const EventCard = ({ event, allUsers, teams, responses, onEdit, onDelete, onCanc
             r.eventDate && isSameDay(r.eventDate.toDate(), event.displayDate)
         );
     }, [responses, event.displayDate]);
-    
-    const userResponse = useMemo(() => {
-         return responsesForThisInstance?.find(r => r.userId === user?.uid);
-    }, [responsesForThisInstance, user]);
 
     const isRsvpVisible = useMemo(() => {
-        if (!event.targetTeamIds || event.targetTeamIds.length === 0) {
-            return true; // Event is for everyone
-        }
-        return event.targetTeamIds.some(teamId => currentUserTeamIds.includes(teamId));
+      if (!event.targetTeamIds || event.targetTeamIds.length === 0) return true;
+      return currentUserTeamIds.some(id => event.targetTeamIds?.includes(id));
     }, [event.targetTeamIds, currentUserTeamIds]);
+
 
     const getRecurrenceText = (event: Event) => {
         const recurrence = event.recurrence;
@@ -1127,7 +1136,7 @@ const EventCard = ({ event, allUsers, teams, responses, onEdit, onDelete, onCanc
         setDoc(responseRef, data, { merge: true })
             .catch(serverError => {
                 const permissionError = new FirestorePermissionError({
-                    path: responseRef.path,
+                    path: `event_responses/${responseDocId}`,
                     operation: 'write',
                     requestResourceData: data,
                 });
@@ -1436,10 +1445,7 @@ export default function TerminePage() {
   const { data: overridesData, isLoading: overridesLoading } = useCollection<EventOverride>(eventOverridesQuery);
   
   const responsesQuery = useMemo(() => {
-    if (!firestore || isUserLoading || isUserDataLoading) {
-        return null;
-    }
-    if (userData === undefined) { 
+    if (!firestore || isUserLoading || isUserDataLoading || !userData) {
         return null;
     }
     const teamIds = userData?.teamIds;
@@ -1488,7 +1494,7 @@ export default function TerminePage() {
     if (!firestore || !canEditEvents || !eventToCancel) return;
     
     if (reason === undefined) {
-      setEventToCancel(eventToCancel);
+      // This case is now handled by the AlertDialog trigger directly
       return;
     }
      if (!reason) {
@@ -1702,6 +1708,7 @@ export default function TerminePage() {
                                         locations={locations || []}
                                         canEdit={!!canEditEvents}
                                         currentUserTeamIds={userData?.teamIds || []}
+                                        userResponse={responses?.find(r => r.userId === user?.uid && r.eventId === event.id && isSameDay(r.eventDate.toDate(), event.displayDate))}
                                     />
                                 ))}
                             </div>
@@ -1848,5 +1855,3 @@ export default function TerminePage() {
     </div>
   );
 }
-
-    

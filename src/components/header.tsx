@@ -5,7 +5,7 @@ import { useAuth, useUser } from '@/firebase';
 import { useRouter, usePathname } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
-import { LogOut, ChevronDown, User as UserIcon, Instagram, Menu } from 'lucide-react';
+import { LogOut, ChevronDown, User as UserIcon, Instagram, Menu, Calendar } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -58,7 +58,7 @@ export function Header() {
     }
   };
   
-  const verwaltungPaths = ["/mannschaften", "/mitglieder", "/admin/news", "/umfragen", "/termine", "/mannschaftskasse"];
+  const verwaltungPaths = ["/mannschaften", "/mitglieder", "/admin/news", "/umfragen", "/mannschaftskasse"];
   const isVerwaltungActive = verwaltungPaths.some(p => pathname.startsWith(p));
 
 
@@ -78,7 +78,7 @@ export function Header() {
                      <Link href="/" className="flex items-center gap-2 mb-4" onClick={() => setIsMobileMenuOpen(false)}>
                         <span className="font-bold text-lg">TSV Bayer Leverkusen</span>
                     </Link>
-                    <NavLink href="/termine" onNavigate={() => setIsMobileMenuOpen(false)}>Kalender</NavLink>
+                    <NavLink href="/kalender" onNavigate={() => setIsMobileMenuOpen(false)}>Kalender</NavLink>
                     <NavLink href="/chat" onNavigate={() => setIsMobileMenuOpen(false)}>Chat</NavLink>
                     <p className="text-muted-foreground">Verwaltung</p>
                     <div className="grid gap-4 pl-4 text-base">
@@ -100,8 +100,8 @@ export function Header() {
 
         <nav className="hidden md:flex items-center justify-center gap-6 text-sm font-medium flex-1">
           <Link 
-            href="/termine" 
-            className={cn("transition-colors hover:text-foreground/80", pathname.startsWith('/termine') ? 'text-foreground' : 'text-muted-foreground')}
+            href="/kalender" 
+            className={cn("transition-colors hover:text-foreground/80", pathname.startsWith('/kalender') ? 'text-foreground' : 'text-muted-foreground')}
             >
             Kalender
           </Link>
@@ -176,5 +176,3 @@ export function Header() {
     </header>
   );
 }
-
-    

@@ -31,10 +31,12 @@ const formSchema = z.object({
   nachname: z.string().min(2, { message: "Nachname muss mindestens 2 Zeichen lang sein." }),
   email: z.string().email({ message: "Ungültige E-Mail-Adresse." }),
   password: z.string().min(6, { message: "Das Passwort muss mindestens 6 Zeichen lang sein." }),
-  registrationCode: z.literal("Ellaisttoll", {
-    errorMap: () => ({ message: "Ungültiger Registrierungscode." }),
+  registrationCode: z.string().refine(val => val === "Ellaisttoll", {
+    message: "Ungültiger Registrierungscode.",
   }),
 });
+
+type FormValues = z.infer<typeof formSchema>;
 
 export function SignUpForm() {
   const auth = useAuth();
@@ -43,7 +45,7 @@ export function SignUpForm() {
   const { toast } = useToast();
   const [isPending, startTransition] = React.useTransition();
 
-  const form = useForm({
+  const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       vorname: "",
@@ -54,7 +56,7 @@ export function SignUpForm() {
     },
   });
 
-  const onSubmit = (values: z.infer<typeof formSchema>) => {
+  const onSubmit = (values: FormValues) => {
     startTransition(async () => {
        if (!auth || !firestore) {
         toast({
@@ -201,5 +203,3 @@ export function SignUpForm() {
     </Form>
   );
 }
-
-    

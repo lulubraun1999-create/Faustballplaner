@@ -282,7 +282,7 @@ export default function ProfileSettingsPage() {
 
   const { data: userData, isLoading: isUserDataLoading } = useDoc<UserData>(userDocRef);
 
-  const emailForm = useForm({
+  const emailForm = useForm<z.infer<typeof emailSchema>>({
     resolver: zodResolver(emailSchema),
     defaultValues: { newEmail: "" },
   });

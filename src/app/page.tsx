@@ -200,7 +200,7 @@ const EventCard = ({ event, allUsers, locations, eventTitles, currentUserTeamIds
                 )}
             </CardHeader>
             {(event.description || event.meetingPoint) && !event.isCancelled && (
-                <CardContent className="space-y-2">
+                <CardContent>
                     {event.meetingPoint && <p className="text-sm"><span className="font-semibold">Treffpunkt:</span> {event.meetingPoint}</p>}
                     {event.description && <p className="text-sm whitespace-pre-wrap">{event.description}</p>}
                 </CardContent>
@@ -359,14 +359,10 @@ function NextMatchDay() {
     }, [events, overrides, eventTitles]);
 
     const responsesQuery = useMemo(() => {
-        if (!firestore || isUserLoading || !userData) { 
+        if (!firestore || isUserLoading || !userData?.teamIds) { 
             return null;
         }
-        const teamIds = userData?.teamIds;
-        if (teamIds && teamIds.length > 0) {
-            return query(collection(firestore, 'event_responses'), where('teamId', 'in', teamIds));
-        }
-        return collection(firestore, 'event_responses');
+        return query(collection(firestore, 'event_responses'), where('teamId', 'in', userData.teamIds));
     }, [firestore, userData, isUserLoading]);
     
     const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
@@ -501,11 +497,8 @@ function UpcomingEvents() {
         if (!firestore || isUserLoading || !userData) {
             return null;
         }
-        const teamIds = userData?.teamIds;
-        if (teamIds && teamIds.length > 0) {
-            return query(collection(firestore, 'event_responses'), where('teamId', 'in', teamIds));
-        }
-        return collection(firestore, 'event_responses');
+        if(!userData.teamIds) return collection(firestore, 'event_responses');
+        return query(collection(firestore, 'event_responses'), where('teamId', 'in', userData.teamIds));
     }, [firestore, userData, isUserLoading]);
 
     const { data: responses, isLoading: responsesLoading } = useCollection<EventResponse>(responsesQuery);
@@ -644,5 +637,3 @@ export default function Home() {
     </div>
   );
 }
-
-    
