@@ -9,9 +9,8 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import { collection, doc, setDoc, deleteDoc, Timestamp, query, where, getDocs, writeBatch, serverTimestamp, addDoc, getDoc, orderBy } from 'firebase/firestore';
 import { useAuth, useUser, useFirestore, useDoc, useCollection, FirestorePermissionError, errorEmitter } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
-import { format, eachDayOfInterval, startOfDay, endOfDay, isSameDay } from 'date-fns';
+import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
-import { DateRange } from 'react-day-picker';
 import { sendPasswordResetEmail, deleteUser, verifyBeforeUpdateEmail } from 'firebase/auth';
 
 import { Header } from '@/components/header';
