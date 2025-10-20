@@ -1626,7 +1626,7 @@ export default function KalenderPage() {
         const key = `${event.id}_${format(currentDate, 'yyyy-MM-dd')}`;
         if (!overriddenInstanceKeys.has(key)) {
             const dayKey = format(currentDate, 'yyyy-MM-dd');
-            if (!monthlyEventsMap.has(dayKey)) weeklyEventsMap.set(dayKey, []);
+            if (!monthlyEventsMap.has(dayKey)) monthlyEventsMap.set(dayKey, []);
             monthlyEventsMap.get(dayKey)!.push({ ...event, displayDate: currentDate });
         }
   
@@ -1866,3 +1866,5 @@ export default function KalenderPage() {
   );
 }
 
+
+    
