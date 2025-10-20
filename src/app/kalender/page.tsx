@@ -1699,12 +1699,11 @@ export default function KalenderPage() {
               DayContent: ({ date, ...props }) => {
                 const dayKey = format(date, 'yyyy-MM-dd');
                 const hasEvent = allEventsForMonth.has(dayKey);
+                const dayNumber = format(date, 'd');
                 return (
-                  <div {...props}>
-                    <div className={cn(hasEvent && "relative")}>
-                      {props.children}
-                      {hasEvent && <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-primary" />}
-                    </div>
+                  <div className={cn(hasEvent && "relative")}>
+                    {dayNumber}
+                    {hasEvent && <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-primary" />}
                   </div>
                 );
               },
@@ -1756,7 +1755,7 @@ export default function KalenderPage() {
       <main className="flex-1 p-4 md:p-8">
         <div className="mx-auto max-w-7xl">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
-            <h1 className="text-3xl font-bold">Termine</h1>
+            <h1 className="text-3xl font-bold">Kalender</h1>
              <div className="flex items-center gap-2 justify-center flex-wrap">
                 <Button variant="outline" size="sm" onClick={goToPreviousMonth}><ChevronLeft className="h-4 w-4"/></Button>
                 <Button variant="outline" onClick={goToToday}>Heute</Button>
@@ -1875,3 +1874,5 @@ export default function KalenderPage() {
     </div>
   );
 }
+
+    
