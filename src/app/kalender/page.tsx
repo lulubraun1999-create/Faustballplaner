@@ -20,7 +20,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { PlusCircle, Trash2, Loader2, CalendarIcon, Edit, Clock, MapPin, Users, Repeat, ChevronLeft, ChevronRight, Check, XIcon, HelpCircle, Ban, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { format, add, startOfWeek, eachDayOfInterval, isSameDay, startOfDay, addWeeks, isWithinInterval, getDay, differenceInDays } from 'date-fns';
+import { format, add, startOfWeek, eachDayOfInterval, isSameDay, startOfDay, addWeeks, isWithinInterval, getDay, differenceInDays, addMonths, startOfMonth, endOfMonth, isSameMonth } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -1127,7 +1127,7 @@ const EventCard = ({ event, allUsers, teams, responses, onEdit, onDelete, onCanc
         setDoc(responseRef, data, { merge: true })
             .catch(serverError => {
                 const permissionError = new FirestorePermissionError({
-                    path: responseRef.path,
+                    path: `event_responses/${responseDocId}`,
                     operation: 'write',
                     requestResourceData: data,
                 });
@@ -1346,7 +1346,8 @@ const EventCard = ({ event, allUsers, teams, responses, onEdit, onDelete, onCanc
 export default function KalenderPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<DisplayEvent | undefined>(undefined);
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const [displayMonth, setDisplayMonth] = useState(new Date());
+  const [selectedDay, setSelectedDay] = useState<Date | undefined>(new Date());
   const [cancellationReason, setCancellationReason] = useState("");
   const [eventToCancel, setEventToCancel] = useState<DisplayEvent | null>(null);
   
@@ -1369,11 +1370,6 @@ export default function KalenderPage() {
   const firestore = useFirestore();
   const { user, isUserLoading } = useUser();
   const { toast } = useToast();
-
-  const weekStartsOn = 1; // Monday
-  const currentWeekStart = startOfWeek(currentDate, { weekStartsOn });
-  const currentWeekEnd = add(currentWeekStart, { days: 6 });
-  const weekDays = eachDayOfInterval({ start: currentWeekStart, end: currentWeekEnd });
 
   useEffect(() => {
     localStorage.setItem('termineTeamFilter', JSON.stringify(selectedTeamIds));
@@ -1436,10 +1432,7 @@ export default function KalenderPage() {
   const { data: overridesData, isLoading: overridesLoading } = useCollection<EventOverride>(eventOverridesQuery);
   
   const responsesQuery = useMemo(() => {
-    if (!firestore || isUserLoading || isUserDataLoading) {
-        return null;
-    }
-    if (userData === undefined) { 
+    if (!firestore || isUserLoading || isUserDataLoading || !userData) {
         return null;
     }
     const teamIds = userData?.teamIds;
@@ -1552,15 +1545,21 @@ export default function KalenderPage() {
   };
 
 
-  const goToPreviousWeek = () => setCurrentDate(add(currentDate, { weeks: -1 }));
-  const goToNextWeek = () => setCurrentDate(add(currentDate, { weeks: 1 }));
-  const goToToday = () => setCurrentDate(new Date());
+  const goToPreviousMonth = () => setDisplayMonth(addMonths(displayMonth, -1));
+  const goToNextMonth = () => setDisplayMonth(addMonths(displayMonth, 1));
+  const goToToday = () => {
+    setDisplayMonth(new Date());
+    setSelectedDay(new Date());
+  }
 
-  const eventsForWeek = useMemo(() => {
-    const weeklyEventsMap = new Map<string, DisplayEvent[]>();
-    if (!eventsData || !overridesData) return weeklyEventsMap;
+  const allEventsForMonth = useMemo(() => {
+    const monthlyEventsMap = new Map<string, DisplayEvent[]>();
+    if (!eventsData || !overridesData) return monthlyEventsMap;
   
-    const interval = { start: startOfDay(currentWeekStart), end: add(startOfDay(currentWeekEnd), { days: 1 }) };
+    const start = startOfMonth(displayMonth);
+    const end = endOfMonth(displayMonth);
+  
+    const interval = { start, end };
   
     const overriddenInstanceKeys = new Set<string>();
     overridesData.forEach(override => {
@@ -1581,7 +1580,7 @@ export default function KalenderPage() {
   
       if (isWithinInterval(displayDate, interval)) {
         const dayKey = format(displayDate, 'yyyy-MM-dd');
-        if (!weeklyEventsMap.has(dayKey)) weeklyEventsMap.set(dayKey, []);
+        if (!monthlyEventsMap.has(dayKey)) monthlyEventsMap.set(dayKey, []);
         
         const eventWithOverride: DisplayEvent = {
           ...originalEvent,
@@ -1591,7 +1590,7 @@ export default function KalenderPage() {
           isCancelled: override.isCancelled,
           cancellationReason: override.cancellationReason,
         };
-        weeklyEventsMap.get(dayKey)!.push(eventWithOverride);
+        monthlyEventsMap.get(dayKey)!.push(eventWithOverride);
       }
     }
     
@@ -1604,8 +1603,8 @@ export default function KalenderPage() {
         const key = `${event.id}_${format(originalDate, 'yyyy-MM-dd')}`;
         if (isWithinInterval(originalDate, interval) && !overriddenInstanceKeys.has(key)) {
           const dayKey = format(originalDate, 'yyyy-MM-dd');
-          if (!weeklyEventsMap.has(dayKey)) weeklyEventsMap.set(dayKey, []);
-          weeklyEventsMap.get(dayKey)!.push({ ...event, displayDate: originalDate });
+          if (!monthlyEventsMap.has(dayKey)) monthlyEventsMap.set(dayKey, []);
+          monthlyEventsMap.get(dayKey)!.push({ ...event, displayDate: originalDate });
         }
         continue;
       }
@@ -1613,16 +1612,15 @@ export default function KalenderPage() {
       let currentDate = event.date.toDate();
       const recurrenceEndDate = event.recurrenceEndDate?.toDate();
   
-      if (currentDate < interval.start) {
-        if (event.recurrence === 'weekly' || event.recurrence === 'biweekly') {
-          const weeksDiff = Math.floor((interval.start.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24 * 7));
-          const step = event.recurrence === 'weekly' ? 1 : 2;
-          currentDate = addWeeks(currentDate, Math.floor(weeksDiff / step) * step);
-        } else if (event.recurrence === 'monthly') {
-          const monthDiff = (interval.start.getFullYear() - currentDate.getFullYear()) * 12 + (interval.start.getMonth() - currentDate.getMonth());
-          if (monthDiff > 0) {
-            currentDate = add(currentDate, { months: monthDiff - 1 });
-          }
+      // Start calculation from a point relevant to the current view
+      while (currentDate < interval.start) {
+        if (recurrenceEndDate && currentDate > recurrenceEndDate) break;
+        
+        switch (event.recurrence) {
+          case 'weekly': currentDate = addWeeks(currentDate, 1); break;
+          case 'biweekly': currentDate = addWeeks(currentDate, 2); break;
+          case 'monthly': currentDate = addMonths(currentDate, 1); break;
+          default: break;
         }
       }
   
@@ -1630,26 +1628,24 @@ export default function KalenderPage() {
       while (currentDate < interval.end && safety > 0) {
         if (recurrenceEndDate && currentDate > recurrenceEndDate) break;
   
-        if (currentDate >= interval.start) {
-          const key = `${event.id}_${format(currentDate, 'yyyy-MM-dd')}`;
-          if (!overriddenInstanceKeys.has(key)) {
+        const key = `${event.id}_${format(currentDate, 'yyyy-MM-dd')}`;
+        if (!overriddenInstanceKeys.has(key)) {
             const dayKey = format(currentDate, 'yyyy-MM-dd');
-            if (!weeklyEventsMap.has(dayKey)) weeklyEventsMap.set(dayKey, []);
-            weeklyEventsMap.get(dayKey)!.push({ ...event, displayDate: currentDate });
-          }
+            if (!monthlyEventsMap.has(dayKey)) monthlyEventsMap.set(dayKey, []);
+            monthlyEventsMap.get(dayKey)!.push({ ...event, displayDate: currentDate });
         }
   
         switch (event.recurrence) {
           case 'weekly': currentDate = addWeeks(currentDate, 1); break;
           case 'biweekly': currentDate = addWeeks(currentDate, 2); break;
-          case 'monthly': currentDate = add(currentDate, { months: 1 }); break;
+          case 'monthly': currentDate = addMonths(currentDate, 1); break;
           default: safety = 0; break;
         }
         safety--;
       }
     }
   
-    weeklyEventsMap.forEach((dayEvents) => {
+    monthlyEventsMap.forEach((dayEvents) => {
       dayEvents.sort((a, b) => {
         const timeA = a.isAllDay ? 0 : a.displayDate.getTime();
         const timeB = b.isAllDay ? 0 : b.displayDate.getTime();
@@ -1657,8 +1653,18 @@ export default function KalenderPage() {
       });
     });
   
-    return weeklyEventsMap;
-  }, [eventsData, overridesData, currentWeekStart, currentWeekEnd, selectedTeamIds, selectedTitleIds]);
+    return monthlyEventsMap;
+  }, [eventsData, overridesData, displayMonth, selectedTeamIds, selectedTitleIds]);
+  
+  const eventsOnSelectedDay = useMemo(() => {
+    if (!selectedDay) return [];
+    const dayKey = format(selectedDay, 'yyyy-MM-dd');
+    return allEventsForMonth.get(dayKey) || [];
+  }, [selectedDay, allEventsForMonth]);
+
+  const daysWithEvents = useMemo(() => {
+    return Array.from(allEventsForMonth.keys()).map(dateStr => new Date(dateStr));
+  }, [allEventsForMonth]);
 
 
   const renderContent = () => {
@@ -1674,44 +1680,65 @@ export default function KalenderPage() {
     }
     
     return (
-        <div className="space-y-8">
-            {weekDays.map(day => {
-                const dayKey = format(day, 'yyyy-MM-dd');
-                const dayEvents = eventsForWeek.get(dayKey) || [];
-                const isToday = isSameDay(day, new Date());
-                
+      <>
+        <Calendar
+            mode="single"
+            selected={selectedDay}
+            onSelect={setSelectedDay}
+            month={displayMonth}
+            onMonthChange={setDisplayMonth}
+            locale={de}
+            className="rounded-md border"
+            modifiers={{
+                hasEvent: daysWithEvents,
+            }}
+            modifiersClassNames={{
+                hasEvent: "bg-primary/20"
+            }}
+            components={{
+              DayContent: ({ date, ...props }) => {
+                const dayKey = format(date, 'yyyy-MM-dd');
+                const hasEvent = allEventsForMonth.has(dayKey);
                 return (
-                    <div key={dayKey}>
-                        <h2 className={cn("font-bold text-lg mb-2 sticky top-16 bg-background py-2 border-b", isToday && "text-primary")}>
-                            {format(day, 'eeee, dd. MMMM', {locale: de})}
-                        </h2>
-                        {dayEvents.length > 0 ? (
-                             <div className="space-y-4">
-                                {dayEvents.map(event => (
-                                    <EventCard
-                                        key={`${event.id}-${event.displayDate.toISOString()}`}
-                                        event={event}
-                                        allUsers={allUsers || []}
-                                        teams={teams || []}
-                                        responses={responses?.filter(r => r.eventId === event.id) || null}
-                                        onEdit={handleOpenForm}
-                                        onDelete={handleDelete}
-                                        onCancel={() => setEventToCancel(event)}
-                                        onReactivate={handleReactivateSingleEvent}
-                                        eventTitles={eventTitles || []}
-                                        locations={locations || []}
-                                        canEdit={!!canEditEvents}
-                                        currentUserTeamIds={userData?.teamIds || []}
-                                    />
-                                ))}
-                            </div>
-                        ) : (
-                            <p className="text-sm text-muted-foreground">Keine Termine für diesen Tag.</p>
-                        )}
+                  <div {...props}>
+                    <div className={cn(hasEvent && "relative")}>
+                      {props.children}
+                      {hasEvent && <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-primary" />}
                     </div>
-                )
-            })}
+                  </div>
+                );
+              },
+            }}
+        />
+        <div className="mt-8">
+            <h2 className="text-xl font-bold mb-4">
+                Termine am {selectedDay ? format(selectedDay, 'dd. MMMM yyyy', { locale: de }) : 'ausgewählten Tag'}
+            </h2>
+            {eventsOnSelectedDay.length > 0 ? (
+                <div className="space-y-4">
+                    {eventsOnSelectedDay.map(event => (
+                        <EventCard
+                            key={`${event.id}-${event.displayDate.toISOString()}`}
+                            event={event}
+                            allUsers={allUsers || []}
+                            teams={teams || []}
+                            responses={responses?.filter(r => r.eventId === event.id) || null}
+                            onEdit={handleOpenForm}
+                            onDelete={handleDelete}
+                            onCancel={() => setEventToCancel(event)}
+                            onReactivate={handleReactivateSingleEvent}
+                            eventTitles={eventTitles || []}
+                            locations={locations || []}
+                            canEdit={!!canEditEvents}
+                            currentUserTeamIds={userData?.teamIds || []}
+                        />
+                    ))}
+                </div>
+            ) : (
+                <p className="text-muted-foreground">Keine Termine für diesen Tag.</p>
+            )}
         </div>
+      </>
     );
   };
 
@@ -1730,10 +1757,10 @@ export default function KalenderPage() {
         <div className="mx-auto max-w-7xl">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
             <h1 className="text-3xl font-bold">Termine</h1>
-            <div className="flex items-center gap-2 justify-center flex-wrap">
-                <Button variant="outline" size="sm" onClick={goToPreviousWeek}><ChevronLeft className="h-4 w-4"/></Button>
+             <div className="flex items-center gap-2 justify-center flex-wrap">
+                <Button variant="outline" size="sm" onClick={goToPreviousMonth}><ChevronLeft className="h-4 w-4"/></Button>
                 <Button variant="outline" onClick={goToToday}>Heute</Button>
-                <Button variant="outline" size="sm" onClick={goToNextWeek}><ChevronRight className="h-4 w-4"/></Button>
+                <Button variant="outline" size="sm" onClick={goToNextMonth}><ChevronRight className="h-4 w-4"/></Button>
             </div>
             {canEditEvents && (
               <Button variant="outline" onClick={() => handleOpenForm()}>
@@ -1743,7 +1770,7 @@ export default function KalenderPage() {
             )}
           </div>
            <div className="mb-4 text-center text-xl font-semibold">
-                {format(currentWeekStart, 'dd. MMM', { locale: de })} - {format(currentWeekEnd, 'dd. MMM yyyy', { locale: de })}
+                {format(displayMonth, 'MMMM yyyy', { locale: de })}
             </div>
             
              <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-8">
@@ -1848,5 +1875,3 @@ export default function KalenderPage() {
     </div>
   );
 }
-
-    
