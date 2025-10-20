@@ -58,7 +58,7 @@ export function Header() {
     }
   };
   
-  const verwaltungPaths = ["/mannschaften", "/mitglieder", "/admin/news", "/umfragen", "/termine", "/mannschaftskasse"];
+  const verwaltungPaths = ["/mannschaften", "/mitglieder", "/admin/news", "/umfragen", "/kalender", "/mannschaftskasse"];
   const isVerwaltungActive = verwaltungPaths.some(p => pathname.startsWith(p));
 
 
@@ -87,7 +87,7 @@ export function Header() {
                         <NavLink href="/mitglieder" onNavigate={() => setIsMobileMenuOpen(false)}>Mitglieder</NavLink>
                         <NavLink href="/admin/news" onNavigate={() => setIsMobileMenuOpen(false)}>News bearbeiten</NavLink>
                         <NavLink href="/umfragen" onNavigate={() => setIsMobileMenuOpen(false)}>Umfragen</NavLink>
-                        <NavLink href="/termine" onNavigate={() => setIsMobileMenuOpen(false)}>Termine</NavLink>
+                        <NavLink href="/kalender" onNavigate={() => setIsMobileMenuOpen(false)}>Termine</NavLink>
                         <NavLink href="/mannschaftskasse" onNavigate={() => setIsMobileMenuOpen(false)}>Mannschaftskasse</NavLink>
                     </div>
                 </nav>
@@ -136,7 +136,7 @@ export function Header() {
                 <Link href="/umfragen">Umfragen</Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <Link href="/termine">Termine</Link>
+                <Link href="/kalender">Termine</Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link href="/mannschaftskasse">Mannschaftskasse</Link>
